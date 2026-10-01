@@ -345,6 +345,37 @@ Describe every command's options, the --json result and exit codes (for agents).
 - argument `command` (str, repeatable) Limit to one command, e.g. `export` or `metadata strip`.
 - `--markdown` (boolean) Print the command reference as Markdown instead of JSON.
 
+## `mysuite transform`
+
+Quick edits: trim, crop, rotate, flip, resize, pad, round corners, background (fixed, predictable order).
+
+- argument `inputs` (path, required, repeatable) Files and/or folders to edit.
+- `--trim` (boolean) Cut away a uniform border (transparent, else the top-left colour).
+- `--trim-fuzz` (float range) How much a pixel may differ from the border colour, in percent.
+- `--crop` (str) Crop box WIDTHxHEIGHT+X+Y in pixels, e.g. 800x600+100+50.
+- `--crop-aspect` (str) Crop to an aspect ratio like 16:9 or 1:1, keeping as much as possible (see --gravity).
+- `--gravity` (str, default `center`) Which part to keep/anchor: center, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right.
+- `--rotate` (float) Rotate clockwise by this many degrees (90/180/270 are exact).
+- `--flip` (str) Mirror: horizontal, vertical or both.
+- `--resize` (str) 512 (width), x512 (height), 512x512 (box) or 50%. See --resize-mode.
+- `--resize-mode` (str, default `fit`) fit = inside the box keeping aspect; fill = cover the box and crop; exact = stretch.
+- `--shrink-only` (boolean) Never enlarge: leave images already smaller than the target alone.
+- `--pad` (str) Extend the canvas to an aspect (1:1) or size (1200x630) without cropping.
+- `--pad-color` (str) Padding colour (default transparent; white for JPEG).
+- `--round` (str) Round the corners: radius in px (24) or percent (50% on a square = circle).
+- `--background` (str) Flatten transparency onto this colour.
+- `--format` (str) png, jpeg, webp or tiff (default: same as the source; vectors become PNG).
+- `--quality` (int range) JPEG/WebP quality.
+- `--suffix` (str, default `_transformed`) Added to the file name; the original is never modified.
+- `--no-auto-orient` (boolean) Do not apply the EXIF rotation first.
+- `--dpi` (float, default `300.0`) Rasterisation density for SVG/PDF/EPS sources.
+- `--recursive / -r` (boolean) Recurse into subdirectories.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) List input -> output pairs, write nothing.
+- `--config / -c` (path) Explicit path to mysuite.toml.
+- `--quiet / -q` (boolean) Print only the summary.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite tui`
 
 Launch the interactive terminal dashboard.

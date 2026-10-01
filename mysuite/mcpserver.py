@@ -143,6 +143,17 @@ class MysuiteServer:
                     "warnings": [w for r in results for w in (r.doc or {}).get("warnings", [])],
                     "errors": [e for r in results for e in (r.doc or {}).get("errors", [])]}
 
+        @mcp.tool(description="Quick edits, applied in a fixed order (trim, crop, rotate, flip, resize, pad, round, background): trim=true cuts a uniform border; crop='WxH+X+Y' or crop_aspect='16:9'; rotate=degrees clockwise; flip=horizontal|vertical|both; resize='512' | 'x512' | '512x512' | '50%' with resize_mode fit|fill|exact; pad='1:1' or '1200x630' with pad_color; round_corners='24' or '50%'; background=colour; format png|jpeg|webp|tiff. Output goes beside the source as <name>_transformed.<ext>.")
+        def mysuite_transform(inputs: list[str], trim: bool = False, crop: str | None = None, crop_aspect: str | None = None,
+                              rotate: float | None = None, flip: str | None = None, resize: str | None = None,
+                              resize_mode: str | None = None, pad: str | None = None, pad_color: str | None = None,
+                              round_corners: str | None = None, background: str | None = None, format: str | None = None,
+                              gravity: str | None = None, dry_run: bool = False, overwrite: bool = False) -> dict[str, Any]:
+            opts = {"trim": trim or None, "crop": crop, "crop_aspect": crop_aspect, "rotate": rotate, "flip": flip,
+                    "resize": resize, "resize_mode": resize_mode, "pad": pad, "pad_color": pad_color, "round": round_corners,
+                    "background": background, "format": format, "gravity": gravity}
+            return self._call(["transform"], inputs, opts, dry_run=dry_run, overwrite=overwrite)
+
         @mcp.tool(description="Which external tools are installed (and how to install the missing ones).")
         def mysuite_doctor() -> dict[str, Any]:
             return self._run(["doctor", "--json"])

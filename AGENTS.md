@@ -36,6 +36,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | a watermark | `mysuite watermark FILE --logo logo.svg --position bottom-right --json` |
 | a transparent background (subject cut-out, macOS) | `mysuite cutout FILE --json` |
 | smaller files | `mysuite compress FILE --codec mozjpeg\|webp\|avif\|oxipng\|pngquant\|gifsicle --json` |
+| to crop, trim borders, rotate, flip, resize, pad to a size/aspect, round corners | `mysuite transform FILE --crop-aspect 1:1 --resize 512 --round 50% --json` |
 | a bigger/cleaner photo | `mysuite enhance run FILE --preset gentle --json` |
 | no hidden data (GPS, serials) | `mysuite metadata strip FILE --json` |
 | a plausible different camera identity | `mysuite metadata randomize FILE --json` |
@@ -53,6 +54,7 @@ mysuite export logo.svg --formats png --sizes 64,128 --out out --dry-run --json
 mysuite export logo.svg --formats png,pdf --sizes 64 --out out --json
 mysuite export logo.svg --formats pdf --profiles cmyk --cmyk-mode clean --sizes 100 --out out_cmyk --json
 mysuite convert pic.png --to webp --json
+mysuite transform pic.png --resize 20 --pad 1:1 --round 50% --json
 mysuite metadata strip photo.jpg --json
 mysuite --allow . convert pic.png --to jpeg --overwrite --json
 mysuite pipeline run release.toml --json
@@ -63,6 +65,14 @@ A refusal looks like this (exit code 3, nothing written):
 ```bash
 mysuite --allow ./work export logo.svg --out /somewhere/else --json
 ```
+
+## Edits: `transform`
+
+Operations always run in this order, whatever the flag order: auto-orient → trim → crop → rotate → flip → resize →
+pad → round → background. Output is `<name>_transformed.<ext>` beside the source (change with `--suffix`), has no
+metadata, and the original is never modified. `--resize 512` is the *width* (aspect kept); `--resize-mode fill`
+covers a box and crops (`--gravity` picks the part kept); `--shrink-only` never enlarges; `--pad 1:1` extends the
+canvas instead of cropping; `--round 50%` on a square makes a circle (needs PNG/WebP for the transparency).
 
 ## Several tools in one go: pipelines
 
@@ -117,7 +127,7 @@ Claude Desktop / Cursor (`mcpServers` in their config JSON):
 ```
 
 Tools: `mysuite_inspect`, `mysuite_export`, `mysuite_convert`, `mysuite_cutout`, `mysuite_watermark`,
-`mysuite_compress`, `mysuite_enhance`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
+`mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
 `mysuite_schema`; resources `mysuite://guide`, `mysuite://schema`, `mysuite://allowed-folders`. They run the same
 commands as the CLI and return the same JSON, always sandboxed, never overwriting unless `overwrite=true`.
 Without `--allow` the server only sees the folder it was started in. With a local model (Ollama, LM Studio, …)

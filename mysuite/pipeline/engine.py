@@ -23,7 +23,7 @@ from mysuite.convert._parsing import SOURCE_EXTENSIONS
 
 MAX_STEPS = 20
 RESERVED = {"tool", "action", "id", "from", "inputs", "only"}
-SINGLE = {"export", "convert", "cutout", "watermark", "compress", "inspect"}
+SINGLE = {"export", "convert", "cutout", "watermark", "compress", "inspect", "transform"}
 METADATA_ACTIONS = {"strip", "randomize", "credit"}
 
 

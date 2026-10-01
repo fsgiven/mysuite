@@ -51,7 +51,7 @@ async def test_lists_every_tool_with_descriptions(work):
     async with server(work) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert {"mysuite_inspect", "mysuite_export", "mysuite_convert", "mysuite_cutout", "mysuite_watermark",
-            "mysuite_compress", "mysuite_enhance", "mysuite_metadata", "mysuite_pipeline_run", "mysuite_doctor",
+            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_metadata", "mysuite_pipeline_run", "mysuite_doctor",
             "mysuite_schema"} <= set(tools)
     assert all(t.description for t in tools.values())
     assert "dry_run" in tools["mysuite_export"].input_schema["properties"]
@@ -177,3 +177,16 @@ async def test_default_root_is_the_start_folder_not_the_whole_disk(work, tmp_pat
     async with Client(params) as c:
         doc = await call(c, "mysuite_convert", inputs=[str(other)], to=["jpeg"])
     assert doc["exit_code"] == 3
+
+
+@pytest.mark.asyncio
+async def test_transform_through_mcp(work):
+    from PIL import Image
+
+    async with server(work) as c:
+        doc = await call(c, "mysuite_transform", inputs=[str(work / "pic.png")], resize="20", pad="1:1", round_corners="50%")
+        assert doc["ok"], doc
+        with Image.open(doc["items"][0]["output"]) as im:
+            assert im.size == (20, 20) and im.getpixel((0, 0))[3] == 0
+        bad = await call(c, "mysuite_transform", inputs=[str(work / "pic.png")], resize="abc", overwrite=True)
+        assert bad["ok"] is False
