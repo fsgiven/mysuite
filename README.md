@@ -4,6 +4,14 @@ A free, local toolkit for repetitive image and design-asset work — a command-l
 interactive terminal dashboard. Everything runs on your own machine: no uploads, no accounts, no
 telemetry.
 
+> **Early release.** mysuite works on the machine it was built on, but not everything is tested, and
+> only macOS has been tried. See [Status](#status-what-is-and-isnt-tested) for exactly what is and isn't.
+
+<p align="center">
+  <img src="docs/images/demo.gif" alt="Animated tour of the mysuite terminal dashboard: Enhance restoring a scratched photo, Metadata randomize, Compress, Export, and the file picker" width="860">
+</p>
+<p align="center"><sub>A real session in the terminal dashboard (<code>mysuite tui</code>), on synthetic demo images.</sub></p>
+
 | Tool | What it does |
 | --- | --- |
 | `export` | One SVG → many sizes, formats (PNG/PDF/EPS/SVG/JPEG/WebP/TIFF/ICO/ICNS) and color profiles, with presets, recoloring and naming templates |
@@ -19,6 +27,47 @@ Outputs are always written **beside the source** with a suffix (`_cutout`, `_str
 
 Developed and tested on macOS (Apple Silicon, Homebrew). `cutout` and `icns` export are macOS-only (`enhance` is plain Python and has no such limit).
 The rest wraps standard command-line tools, so it should work elsewhere, but that's untested.
+
+## Status: what is and isn't tested
+
+mysuite is a young personal project, released as-is. Please read this before relying on it.
+
+| Tool | Automated tests | What else was checked | Known gaps |
+| --- | --- | --- | --- |
+| `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | Scratch detector measured on 8 real camera photos (0 false positives) | The optional AI backend has **never been run with real model weights**; face enhancement therefore only exists on paper |
+| `metadata` strip / randomize | Yes, against JPEG, PNG, WebP and TIFF seeded with EXIF, GPS, IPTC, XMP | Raw-byte search of the outputs for leftovers | `credit` (C2PA) has **no automated tests**: embedded and read back by hand with c2patool's built-in *test* certificate |
+| `compress` | Yes: all six codecs, presets, CLI, TUI | | |
+| `export` | **None** (an earlier suite was removed) | Exercised by hand while building it: SVG to PNG/PDF/EPS/SVG/ICO/ICNS, CMYK, presets, recoloring | Behaviour on unusual SVGs is untested |
+| `convert` | **None** | Exercised by hand | |
+| `watermark` | **None** | Exercised by hand | |
+| `cutout` | **None** | Checked by hand on a few photos | Needs macOS 14+ and a locally built helper; verified on one Mac only |
+| Terminal dashboard | Yes for Compress, Metadata, Enhance and the file picker | The other screens were opened and used by hand | Drag-and-drop depends on your terminal emulator |
+
+**What was run on:** one machine, macOS 26 (Apple Silicon), Homebrew, Python 3.11, with ImageMagick
+7.1.2, exiftool 13.55, c2patool 0.27.15, Ghostscript 10.07, librsvg 2.62, mozjpeg 4.1.5, libwebp 1.6,
+libavif 1.4, oxipng 10.2, pngquant 3.0, gifsicle 1.96.
+
+**Not tested at all:** Linux, Windows, Intel Macs, macOS older than 14 (`cutout`), other Python
+versions, other terminal emulators, very large or unusual inputs (CMYK or 16-bit sources into
+`enhance`, animated GIFs, HEIC, which isn't supported), and any tool version other than those listed.
+Treat the CLI as more reliable than the dashboard, and run anything important on a copy first. mysuite
+never changes your originals, but it can still produce a wrong *output*.
+
+Found a problem? Please open an issue with the exact command, the file type and your tool versions
+(`mysuite doctor` prints them).
+
+## Screens
+
+Real screenshots of the dashboard, run on synthetic images (a generated sunset harbour, a generated
+damaged "old scan" and a generated logo). File paths are shown as `~/…`.
+
+| | |
+| --- | --- |
+| ![Home screen listing the seven tools](docs/images/screen-home.png)<br>**Home** — pick a tool with a number key | ![Enhance screen after restoring a scratched photo](docs/images/screen-enhance.png)<br>**Enhance** — preset applied, scratches filled, and it says face enhancement was skipped |
+| ![Metadata screen in randomize mode](docs/images/screen-metadata.png)<br>**Metadata** — strip, randomize or credit | ![Compress screen using the modern-web-webp preset](docs/images/screen-compress.png)<br>**Compress** — preset, codec options, result |
+| ![Export screen with SVG thumbnail and 14 written files](docs/images/screen-export.png)<br>**Export** — one SVG to many sizes and formats | ![File picker with Home, Desktop, Downloads and Root jumps](docs/images/screen-picker.png)<br>**File picker** — jumps, paste-a-path, hidden files off |
+| ![Convert screen](docs/images/screen-convert.png)<br>**Convert** | ![Watermark screen](docs/images/screen-watermark.png)<br>**Watermark** |
+| ![Cutout screen](docs/images/screen-cutout.png)<br>**Cutout** (macOS) | |
 
 ## Setup
 
@@ -399,6 +448,11 @@ mysuite enhance run photo.jpg --preset prime --scale 3 --format jpg --quality 92
 mysuite enhance presets                                # list presets + whether the AI backend is installed
 ```
 
+![Before and after: a synthetic damaged scan with five scratches, restored by the old-photo preset, with a zoom on one scratch and notes on what it got wrong](docs/images/enhance-before-after.png)
+
+The figure is made from a **synthetic** image and shows the misses as well as the fix: one faint scratch
+was left alone and part of the sun glitter was filled in by mistake.
+
 Writes `photo_enhanced.<ext>` beside the source (never touches the original); `--overwrite`,
 `--recursive`, `--dry-run`, `--config` and `--quiet` work like the other tools. Presets (`prime`,
 `gentle`, `old-photo`, `ai-art`, `portrait`) are starting points: any flag you also pass overrides that
@@ -478,16 +532,15 @@ for scripting — the TUI is additive, not a replacement.
 ## Tests
 
 ```bash
-pytest -m "not slow"   # fast unit tests, no external binaries required
-pytest                 # full suite, requires rsvg-convert/gs/magick
+pip install ".[dev]"
+pytest                 # everything that can run on this machine
+pytest -m "not slow"   # skips the tests that call real external tools (exiftool, ImageMagick, codecs)
 ```
 
-A handful of tests skip individually rather than needing a marker override: icns-bundle tests need
-macOS's `iconutil` (always present on a Mac, so effectively always run there); `cutout`'s real-run
-tests need the separately-built `mysuite-cutout` helper (see Setup above); `metadata credit`'s tests
-need `c2patool`; each `compress` codec's tests need that codec's own tool (mozjpeg/webp/libavif/
-oxipng/pngquant/gifsicle) and skip independently, so a partial install still runs everything it can.
-All skip cleanly with a clear reason if their tool isn't found, rather than failing.
+The suite covers `enhance`, `compress`, `metadata` (strip and randomize), the file picker, path
+handling and the Compress/Metadata/Enhance screens. **`export`, `convert`, `watermark`, `cutout` and
+`metadata credit` have no automated tests**; see [Status](#status-what-is-and-isnt-tested). Tests that
+need an external tool skip with a reason when it isn't installed, rather than failing.
 
 ## License
 
