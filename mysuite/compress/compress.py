@@ -16,7 +16,7 @@ _DEFAULT_DPI = 300.0
 # encoder: it only accepts uncompressed PPM, never JPEG/PNG/etc. directly.
 _NATIVE_INPUT_EXTENSIONS: dict[str, set[str]] = {
     "mozjpeg": set(),
-    "webp": {".png", ".jpg", ".jpeg", ".tif", ".tiff"},
+    "webp": {".png", ".jpg", ".jpeg"},  # TIFF goes via magick: cwebp chokes on CMYK (Q2)
     "avif": {".png", ".jpg", ".jpeg"},
     "oxipng": {".png"},
     "pngquant": {".png"},
@@ -130,7 +130,7 @@ def _prepare_for_codec(
         return tmp_out, True
 
     tmp_out = _tmp_sibling(input_path, prepare_ext)
-    run([tools.magick, str(input_path), str(tmp_out)])
+    run([tools.magick, f"{input_path}[0]", "-colorspace", "sRGB", str(tmp_out)])  # CMYK etc. -> RGB (Q2)
     return tmp_out, True
 
 

@@ -64,7 +64,6 @@ def test_compress_handles_cmyk_and_16bit_and_alpha_sources(tmp_path, codec, ext)
 
 
 @need
-@pytest.mark.xfail(strict=True, reason="FINDING Q2: compress --codec webp fails on a CMYK TIFF (handed to cwebp as-is) instead of converting to RGB first")
 def test_compress_webp_accepts_a_cmyk_tiff(tmp_path):
     src = mk(tmp_path / "c.tiff", "xc:#dd0000", "-colorspace", "CMYK")
     assert cli("compress", src, "--codec", "webp", "-q").exit_code == 0
