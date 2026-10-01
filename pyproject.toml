@@ -5,7 +5,9 @@ build-backend = "hatchling.build"
 [project]
 name = "mysuite"
 version = "0.1.0"
-description = "A CLI suite of tools for repetitive design/asset work — starting with batch logo/asset export."
+description = "A free, local CLI + terminal-dashboard toolkit for image and design-asset work: export, convert, cutout, watermark, metadata privacy, compression."
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
     "typer>=0.12",

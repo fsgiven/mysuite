@@ -5,3 +5,7 @@ __pycache__/
 .pytest_cache/
 exports/
 .DS_Store
+
+# local, user-specific files — never committed
+/mysuite.toml
+/Google_Favicon_2025.svg
