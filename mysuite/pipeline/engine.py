@@ -25,6 +25,7 @@ MAX_STEPS = 20
 RESERVED = {"tool", "action", "id", "from", "inputs", "only"}
 SINGLE = {"export", "convert", "cutout", "watermark", "compress", "inspect", "transform", "relight"}
 METADATA_ACTIONS = {"strip", "randomize", "credit"}
+PDF_ACTIONS = {"info", "merge", "split", "extract", "rotate", "resize", "strip", "number", "stamp", "images", "render", "from-images", "compress"}
 
 
 class PipelineError(ValueError):
@@ -112,12 +113,19 @@ def _parse_step(index: int, raw: dict[str, Any], commands: dict[str, Any]) -> St
         command = ["metadata", action]
     elif tool == "enhance":
         command = ["enhance", "run"]
+    elif tool == "kit":
+        command = ["kit", "make"]
+    elif tool == "pdf":
+        action = raw.get("action")
+        if action not in PDF_ACTIONS:
+            raise PipelineError(f"step {index}: pdf needs action = one of {', '.join(sorted(PDF_ACTIONS))}")
+        command = ["pdf", action]
     elif tool in SINGLE:
         command = [tool]
     else:
         raise PipelineError(
             f"step {index}: unknown tool {tool!r} - expected one of "
-            f"{', '.join(sorted(SINGLE | {'metadata', 'enhance'}))}"
+            f"{', '.join(sorted(SINGLE | {'metadata', 'enhance', 'kit', 'pdf'}))}"
         )
     spec = commands[" ".join(command)]
     valid = {}

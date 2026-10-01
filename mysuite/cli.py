@@ -18,6 +18,8 @@ from mysuite.export.cli import export as export_command
 from mysuite.inspect.cli import inspect_command
 from mysuite.metadata.cli import app as metadata_app
 from mysuite.pipeline.cli import app as pipeline_app
+from mysuite.kits.cli import app as kit_app
+from mysuite.pdf.cli import app as pdf_app
 from mysuite.preset_cli import app as preset_app
 from mysuite.relight.cli import relight as relight_command
 from mysuite.transform.cli import transform as transform_command
@@ -73,6 +75,8 @@ app.command("transform", help="Quick edits: trim, crop, rotate, flip, resize, pa
 app.command("relight", help="Experimental: re-shade a picture as if lit from another direction (classical, no AI model).")(
     relight_command
 )
+app.add_typer(kit_app, name="kit")
+app.add_typer(pdf_app, name="pdf")
 app.add_typer(pipeline_app, name="pipeline")
 app.add_typer(preset_app, name="preset")
 app.add_typer(metadata_app, name="metadata")
