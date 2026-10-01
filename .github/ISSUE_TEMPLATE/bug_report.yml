@@ -1,0 +1,42 @@
+name: Bug report
+description: Something broke or produced a wrong result
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. mysuite is an early release and not everything is tested (see the README's
+        Status section), so reports are genuinely useful. **Security problems: don't file them here.**
+  - type: input
+    id: tool
+    attributes:
+      label: Which tool?
+      placeholder: enhance, metadata, compress, export, convert, cutout, watermark, or the dashboard
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command (or the steps you took in the dashboard)
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: filetype
+    attributes:
+      label: Input file type and rough size
+      placeholder: "JPEG, 4000x3000, from an iPhone"
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected vs what happened
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `mysuite doctor`
+      description: Prints the version of every external tool. Please also say which OS and terminal you use.
+      render: text
+    validations:
+      required: true
