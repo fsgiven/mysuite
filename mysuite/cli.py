@@ -49,7 +49,7 @@ def doctor() -> None:
 def tui() -> None:
     from mysuite.tui.app import MysuiteApp  # lazy import — keeps `export`/`doctor` startup fast
 
-    MysuiteApp().run()
+    MysuiteApp(show_welcome=True).run()
 
 
 def main() -> None:

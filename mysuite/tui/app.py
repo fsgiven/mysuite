@@ -14,5 +14,13 @@ class MysuiteApp(App):
     TITLE = "mysuite"
     BINDINGS = [("q", "quit", "Quit")]
 
+    def __init__(self, *, show_welcome: bool = False) -> None:
+        super().__init__()
+        self._show_welcome = show_welcome
+
     def on_mount(self) -> None:
         self.push_screen(HomeScreen())
+        if self._show_welcome:
+            from mysuite.tui.screens.welcome import WelcomeScreen
+
+            self.push_screen(WelcomeScreen())

@@ -30,6 +30,8 @@ Outputs are always written **beside the source** with a suffix (`_cutout`, `_str
 Developed and tested on macOS (Apple Silicon, Homebrew). `cutout` and `icns` export are macOS-only (`enhance` is plain Python and has no such limit).
 The rest wraps standard command-line tools, so it should work elsewhere, but that's untested.
 
+Running `mysuite` with no arguments opens a front page (a suitcase mascot with tips), then the tool overview; press any key to continue.
+
 ## Status: what is and isn't tested
 
 mysuite is a young personal project, released as-is. Please read this before relying on it.
