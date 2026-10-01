@@ -19,6 +19,7 @@ from mysuite.inspect.cli import inspect_command
 from mysuite.metadata.cli import app as metadata_app
 from mysuite.pipeline.cli import app as pipeline_app
 from mysuite.preset_cli import app as preset_app
+from mysuite.relight.cli import relight as relight_command
 from mysuite.transform.cli import transform as transform_command
 from mysuite.watermark.cli import watermark as watermark_command
 
@@ -68,6 +69,9 @@ app.command("inspect", help="Report facts about image/vector files (size, colour
 )
 app.command("transform", help="Quick edits: trim, crop, rotate, flip, resize, pad, round corners, background (fixed, predictable order).")(
     transform_command
+)
+app.command("relight", help="Experimental: re-shade a picture as if lit from another direction (classical, no AI model).")(
+    relight_command
 )
 app.add_typer(pipeline_app, name="pipeline")
 app.add_typer(preset_app, name="preset")

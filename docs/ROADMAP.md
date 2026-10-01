@@ -13,7 +13,7 @@ offline, file-in/file-out, no preview needed, each step reports JSON, each step 
 | 3 | **Pipelines** (milestone 5) | declarative multi-tool runs, one dry-run plan |
 | 4 | **MCP server** (milestone 6) | `mysuite mcp` for Claude Desktop/Cursor/local-model clients |
 | 5 | **`transform`** (milestone 7) | crop/trim/pad/resize/rotate/round/background |
-| 6 | **More tools** (below) and `relight` | ranked list, each opt-in and doctor-checked |
+| 6 | **More tools** (below) and `relight` | ✅ `relight` tier A shipped (experimental); depth-model tier B needs a spike; the ranked tool list is still open |
 | 7 | Tokens/variants, presets/profiles, `.ai` import | from the earlier plan, slotted around 2–6 as needed |
 
 ### 1. Colour engine, concretely
@@ -32,7 +32,7 @@ orientation from one photo with a neural network and re-shade it (some also gene
 
 | Tier | How | Quality | Cost | Verdict |
 | --- | --- | --- | --- | --- |
-| A classical | subject mask (existing Vision cutout) → pseudo-depth (distance transform + luminance) → normals → Lambert + soft specular from a chosen light (direction, height, colour, intensity, softness), ambient kept; presets (key-left, rim, top, golden-hour) | believable "studio light" nudge on products/portraits; not a true relight | no model, ~100 lines + NumPy | **build** |
+| A classical ✅ shipped as `mysuite relight` (experimental) | subject mask (existing Vision cutout) → pseudo-depth (distance transform + luminance) → normals → Lambert + soft specular from a chosen light (direction, height, colour, intensity, softness), ambient kept; presets (key-left, rim, top, golden-hour) | believable "studio light" nudge on products/portraits; not a true relight | no model, ~100 lines + NumPy | **build** |
 | B local depth model | monocular depth (Depth Anything V2 small, ~25 MB, via ONNX Runtime/Core ML) → real normals → same shader | clearly better 3-D feel, closer to Clipdrop on faces/products | optional extra `mysuite[ai]`, weights fetched on explicit command, licence checked first | **build after A, behind an extra** |
 | C neural relight (IC-Light style, diffusion) | generative | best | multi-GB, slow, licence unverified | **out of scope**; maybe a separate plugin |
 

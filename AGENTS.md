@@ -37,6 +37,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | a transparent background (subject cut-out, macOS) | `mysuite cutout FILE --json` |
 | smaller files | `mysuite compress FILE --codec mozjpeg\|webp\|avif\|oxipng\|pngquant\|gifsicle --json` |
 | to crop, trim borders, rotate, flip, resize, pad to a size/aspect, round corners | `mysuite transform FILE --crop-aspect 1:1 --resize 512 --round 50% --json` |
+| to change the lighting direction/tint of a cut-out, product or logo (experimental) | `mysuite relight FILE --preset golden-hour --json` or `--direction left --height 30` |
 | a bigger/cleaner photo | `mysuite enhance run FILE --preset gentle --json` |
 | no hidden data (GPS, serials) | `mysuite metadata strip FILE --json` |
 | a plausible different camera identity | `mysuite metadata randomize FILE --json` |
@@ -73,6 +74,14 @@ pad → round → background. Output is `<name>_transformed.<ext>` beside the so
 metadata, and the original is never modified. `--resize 512` is the *width* (aspect kept); `--resize-mode fill`
 covers a box and crops (`--gravity` picks the part kept); `--shrink-only` never enlarges; `--pad 1:1` extends the
 canvas instead of cropping; `--round 50%` on a square makes a circle (needs PNG/WebP for the transparency).
+
+## Relighting (experimental)
+
+`mysuite relight FILE --preset side` re-shades a picture as if lit from another direction. It is **classical image
+math, not an AI model**: a pseudo-depth (the picture's own brightness blurred, plus a rounded dome from any
+transparency) is lit with a directional light. Good for cut-outs, products and logos (try `--preset key-left`,
+`dramatic`, `golden-hour`, `cool-fill`); it cannot invent light on faces or complex scenes. Output
+`<name>_relit.png`. Say so when you offer it to a user.
 
 ## Several tools in one go: pipelines
 
@@ -127,7 +136,7 @@ Claude Desktop / Cursor (`mcpServers` in their config JSON):
 ```
 
 Tools: `mysuite_inspect`, `mysuite_export`, `mysuite_convert`, `mysuite_cutout`, `mysuite_watermark`,
-`mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
+`mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_relight`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
 `mysuite_schema`; resources `mysuite://guide`, `mysuite://schema`, `mysuite://allowed-folders`. They run the same
 commands as the CLI and return the same JSON, always sandboxed, never overwriting unless `overwrite=true`.
 Without `--allow` the server only sees the folder it was started in. With a local model (Ollama, LM Studio, …)

@@ -154,6 +154,15 @@ class MysuiteServer:
                     "background": background, "format": format, "gravity": gravity}
             return self._call(["transform"], inputs, opts, dry_run=dry_run, overwrite=overwrite)
 
+        @mcp.tool(description="EXPERIMENTAL relighting (classical, no AI model): re-shade a picture as if lit from another direction. preset: key-left | key-right | top | side | dramatic | golden-hour | cool-fill. direction: top, top-right, right, bottom-right, bottom, bottom-left, left, top-left (or angle in compass degrees the light comes FROM). A lighting nudge for products/cut-outs/logos, not a true 3-D relight. Output <name>_relit.png.")
+        def mysuite_relight(inputs: list[str], preset: str | None = None, direction: str | None = None, angle: float | None = None,
+                            height: float | None = None, intensity: float | None = None, ambient: float | None = None,
+                            softness: float | None = None, depth: float | None = None, specular: float | None = None,
+                            color: str | None = None, dry_run: bool = False, overwrite: bool = False) -> dict[str, Any]:
+            opts = {"preset": preset, "direction": direction, "angle": angle, "height": height, "intensity": intensity,
+                    "ambient": ambient, "softness": softness, "depth": depth, "specular": specular, "color": color}
+            return self._call(["relight"], inputs, opts, dry_run=dry_run, overwrite=overwrite)
+
         @mcp.tool(description="Which external tools are installed (and how to install the missing ones).")
         def mysuite_doctor() -> dict[str, Any]:
             return self._run(["doctor", "--json"])

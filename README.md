@@ -24,6 +24,7 @@ telemetry.
 | `enhance` | Upscale and restore photos locally: denoise, sharpen, scratch removal, color, optional AI backend |
 | `compress` | Re-encode with the same best-in-class codecs Squoosh uses (mozjpeg, WebP, AVIF, oxipng, pngquant, gifsicle), plus sharpening |
 | `transform` | Quick edits: trim, crop (box or aspect), rotate, flip, resize, pad, round corners, background — in a fixed, predictable order |
+| `relight` | *Experimental, classical (no AI model):* re-shade a cut-out/product/logo as if lit from another direction, with presets (key-left, dramatic, golden-hour…) |
 | `inspect` | Facts about a file (size, colour mode, transparency, palette, sharpness, GPS…) as numbers — for agents and humans |
 | `pipeline` | Several tools in one declarative file (export → metadata → compress…) |
 | `mcp` | An MCP server so Claude Desktop, Cursor, Claude Code or a local-model client can drive all of this |
@@ -52,6 +53,7 @@ mysuite is a young personal project, released as-is. Please read this before rel
 | `compress` | Yes: all six codecs, presets, odd colour modes | none known |
 | `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | the optional AI backend has **never been run with real model weights**; 16-bit sources become 8-bit (now reported) |
 | `transform` | Yes: every operation checked on pixels (resize modes, crop, trim, rotate, flip, pad, round, flatten), fixed order, EXIF handling, safety | no preview exists in a terminal, so judge the result by opening the file; animated sources keep only the first frame (and say so) |
+| `relight` | Yes: the lit side is brighter for every direction, flat areas unchanged, alpha kept, tint, presets, bad values, safety | **experimental**: it fakes depth from the picture's own brightness and an alpha-mask dome, so it is a lighting nudge, not a true relight; faces and busy photos will not look right. A depth-model backend is planned |
 | `inspect` | Yes: CMYK/alpha/gray, EXIF orientation/GPS/serial, blank/blurry, multipage, SVG facts, thumbnails | the "blurry" flag is a heuristic (variance of the Laplacian), not a verdict |
 | `--json`, sandbox, `pipeline`, `mcp` | Yes: one JSON document on stdout, exit codes 0–4, escape attempts (`..`, absolute paths, symlinks), pipelines end to end, the MCP server through a real MCP client | the sandbox is off unless you ask for it (the MCP server always uses it); pipelines are unproven beyond the examples; MCP tested with the Python SDK, **not yet with Claude Desktop or Cursor** |
 | Terminal dashboard | Yes for all screens except the file-picker edge cases | Drag-and-drop depends on your terminal emulator |

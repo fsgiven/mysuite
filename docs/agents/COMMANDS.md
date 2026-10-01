@@ -338,6 +338,27 @@ Save export settings as a new (or replacement) preset in mysuite.toml.
 - `--normalize-png / --no-normalize-png` (boolean) 
 - `--config / -c` (path) TOML file to save into (default: ./mysuite.toml).
 
+## `mysuite relight`
+
+Experimental: re-shade a picture as if lit from another direction (classical, no AI model).
+
+- argument `inputs` (path, required, repeatable) Photos/images to relight (raster formats).
+- `--preset` (str) Lighting preset: key-left, key-right, top, side, dramatic, golden-hour, cool-fill. Other flags override it.
+- `--direction` (str) Where the light comes from: top, top-right, right, bottom-right, bottom, bottom-left, left, top-left. Default top-left.
+- `--angle` (float) Compass degrees the light comes FROM (0 top, 90 right, 180 bottom, 270 left); beats --direction.
+- `--height` (float) Light elevation in degrees, 1-90 (90 = straight on, low = raking). Default 40.
+- `--intensity` (float) How strongly the light shapes the picture, 0-3. Default 0.9.
+- `--ambient` (float) Base light everywhere, 0-2 (lower = deeper shadows). Default 0.55.
+- `--softness` (float) Blur of the shape in percent of the short side, 0-50. Default 6.
+- `--depth` (float) How pronounced the pseudo-3D is, 0-5. Default 1.
+- `--specular` (float) Sheen, 0 = matte. Default 0.
+- `--color` (str) Tint of the light, e.g. '#ffb36b' (warm) or '#9ec5ff' (cool).
+- `--recursive / -r` (boolean) Recurse into subdirectories.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) List input -> output pairs, write nothing.
+- `--quiet / -q` (boolean) Print only the summary.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite schema`
 
 Describe every command's options, the --json result and exit codes (for agents).
