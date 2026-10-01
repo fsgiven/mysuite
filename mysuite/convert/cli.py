@@ -17,7 +17,7 @@ from mysuite.convert._parsing import (
 from mysuite.convert.converter import ConversionError, convert_file
 from mysuite.doctor import NEEDS, missing_tools, run_doctor
 from mysuite.export._parsing import parse_csv
-from mysuite.utils.console import console, log_error, log_step
+from mysuite.utils.console import console, log_error, log_skip, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
 
@@ -127,6 +127,8 @@ def convert(
                 total_written += 1
                 if not quiet:
                     log_step(escape(str(outcome.output_path)))
+                if outcome.note:  # shown even with --quiet: it means data was left out
+                    log_skip(f"{escape(str(input_path))}: {escape(outcome.note)}")
 
     if not quiet:
         console.print(

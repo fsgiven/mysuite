@@ -27,6 +27,13 @@ _MAGICK_FORMAT_TOKENS = {
 _NO_ALPHA_TARGETS = {"jpeg", "bmp"}
 
 
+# Targets that can carry more than one frame/page; everything else gets frame 0.
+_MULTI_FRAME_TARGETS = {"gif", "webp", "tiff", "pdf"}
+
+# ICO tops out at 256 px per image.
+_ICO_MAX = "256x256>"
+
+
 class ConversionError(RuntimeError):
     pass
 
@@ -36,6 +43,15 @@ class ConvertOutcome:
     input_path: Path
     output_path: Path
     status: str  # "written" | "skipped_existing"
+    note: str | None = None  # something the user should know, e.g. "page 1 of 3 only"
+
+
+def _frame_count(input_path: Path, tools: ToolPaths) -> int:
+    try:
+        result = run([tools.magick, "identify", "-format", "%p\\n", str(input_path)])
+    except Exception:
+        return 1
+    return max(1, len(result.stdout.split()))
 
 
 def _tmp_sibling(input_path: Path, suffix: str) -> Path:
@@ -80,6 +96,15 @@ def convert_file(
     if not overwrite and output_path.exists():
         return ConvertOutcome(input_path, output_path, "skipped_existing")
 
+    # Single-image targets can hold one frame/page. Say so rather than silently
+    # dropping the rest (FINDING V1/V2).
+    note = None
+    if source_format in ("pdf", "gif", "tiff", "webp") and target_format not in _MULTI_FRAME_TARGETS:
+        frames = _frame_count(input_path, tools)
+        if frames > 1:
+            what = "page" if source_format == "pdf" else "frame"
+            note = f"{frames} {what}s in the source; only the first was converted to {target_format}"
+
     if source_format == "svg":
         _convert_from_svg(
             input_path, output_path, target_format, dpi, tools, quality=quality, background=background
@@ -92,7 +117,7 @@ def convert_file(
     else:
         _raster_to_raster(input_path, output_path, target_format, tools, quality=quality, background=background)
 
-    return ConvertOutcome(input_path, output_path, "written")
+    return ConvertOutcome(input_path, output_path, "written", note)
 
 
 def _svg_to_pdf(input_path: Path, output_path: Path, dpi: float, tools: ToolPaths) -> None:
@@ -149,7 +174,7 @@ def _vector_doc_to_png(input_path: Path, output_path: Path, dpi: float, tools: T
     def write(tmp: Path) -> None:
         run([
             tools.gs, "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=png16m",
-            f"-r{dpi}", f"-sOutputFile={tmp}", str(input_path),
+            "-dFirstPage=1", "-dLastPage=1", f"-r{dpi}", f"-sOutputFile={tmp}", str(input_path),
         ])
 
     atomic_write_via(output_path, write)
@@ -217,7 +242,11 @@ def _raster_to_raster(
             ops += ["-background", bg, "-flatten"]
         if quality is not None and target_format in ("jpeg", "webp"):
             ops += ["-quality", str(quality)]
+        if target_format == "ico":
+            ops += ["-resize", _ICO_MAX]
         token = _MAGICK_FORMAT_TOKENS[target_format]
-        run([tools.magick, str(input_path), *ops, f"{token}:{tmp}"])
+        # [0]: one frame for single-image targets; multi-frame formats keep them all.
+        source = str(input_path) if target_format in _MULTI_FRAME_TARGETS else f"{input_path}[0]"
+        run([tools.magick, source, *ops, f"{token}:{tmp}"])
 
     atomic_write_via(output_path, write)

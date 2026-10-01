@@ -93,7 +93,6 @@ def test_animated_gif_to_webp_keeps_the_frames(tmp_path):
 
 
 @need_tools
-@pytest.mark.xfail(strict=True, reason="FINDING V1: animated GIF -> PNG crashes with a traceback AND leaves anim.png-0.tmp/-1.tmp/-2.tmp litter beside the source")
 def test_animated_gif_to_png_fails_cleanly_and_leaves_no_litter(tmp_path):
     subprocess.run(["magick", "-delay", "10", "-size", "40x40", "xc:red", "xc:blue", "xc:green", str(tmp_path / "anim.gif")], check=True)
     res = cli("convert", tmp_path / "anim.gif", "--to", "png", "-q")
@@ -103,7 +102,6 @@ def test_animated_gif_to_png_fails_cleanly_and_leaves_no_litter(tmp_path):
 
 
 @need_tools
-@pytest.mark.xfail(strict=True, reason="FINDING V4: ICO is capped at 256px; large rasters and 300dpi EPS/PDF fail with a raw ImageMagick error instead of being downscaled")
 def test_large_source_converts_to_ico(tmp_path):
     subprocess.run(["magick", "-size", "1000x1000", "xc:red", str(tmp_path / "big.png")], check=True)
     assert cli("convert", tmp_path / "big.png", "--to", "ico", "-q").exit_code == 0
@@ -111,7 +109,6 @@ def test_large_source_converts_to_ico(tmp_path):
 
 
 @need_tools
-@pytest.mark.xfail(strict=True, reason="FINDING V2: multipage PDF -> PNG yields only page 1 (or errors) without telling the user")
 def test_multipage_pdf_to_png_reports_or_handles_all_pages(tmp_path):
     subprocess.run(["magick", "-size", "60x60", "xc:red", "xc:blue", "xc:green", str(tmp_path / "m.pdf")], check=True)
     res = cli("convert", tmp_path / "m.pdf", "--to", "png", "-q")

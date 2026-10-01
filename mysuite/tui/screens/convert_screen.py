@@ -249,6 +249,8 @@ class ConvertScreen(Screen):
             self._log(f"[dim]— exists, skipped: {show_path(outcome.output_path)}[/dim]")
         elif outcome is not None:
             self._log(f"[#4ADE80]✓[/#4ADE80] {show_path(outcome.output_path)}")
+            if outcome.note:
+                self._log(f"[#FBBF24]⚠[/#FBBF24] {escape(outcome.note)}")
 
     def _on_run_complete(self, written: int, skipped: int, failed: int) -> None:
         self.query_one("#run-btn", Button).disabled = False

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import os
 import subprocess
 from pathlib import Path
@@ -44,5 +45,12 @@ def atomic_write_via(output_path: Path, write_fn, *, preserve_extension: bool = 
         tmp_path = output_path.with_name(output_path.stem + ".tmp" + output_path.suffix)
     else:
         tmp_path = output_path.with_suffix(output_path.suffix + ".tmp")
-    write_fn(tmp_path)
+    try:
+        write_fn(tmp_path)
+    except BaseException:
+        # ImageMagick names multi-frame leftovers "<name>-0.tmp" etc.; leave nothing behind.
+        tmp_path.unlink(missing_ok=True)
+        for stray in tmp_path.parent.glob(f"{glob.escape(output_path.name)}-*.tmp"):
+            stray.unlink(missing_ok=True)
+        raise
     os.replace(tmp_path, output_path)
