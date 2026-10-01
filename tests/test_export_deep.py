@@ -192,7 +192,6 @@ def test_unusual_but_valid_svgs_export_without_error(tmp_path, name, svg):
 
 
 @need_tools
-@pytest.mark.xfail(strict=True, reason="FINDING E1: a malformed SVG escapes as an unhandled MysuiteToolError (traceback) instead of a clean one-line error")
 def test_malformed_svg_fails_cleanly_without_a_traceback(tmp_path):
     p = tmp_path / "bad.svg"
     p.write_text("<svg xmlns='http://www.w3.org/2000/svg'><rect")

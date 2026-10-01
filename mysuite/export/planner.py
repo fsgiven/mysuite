@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
 
 from mysuite.export.models import BundleJob, ExportJob, ExportPlan, SkipReason
@@ -32,6 +34,19 @@ _NO_CMYK_REASONS = {
 
 class MysuitePlannerError(RuntimeError):
     pass
+
+
+def _confined(output_path: Path, out_dir: Path) -> Path:
+    """Templates may create subfolders but must not climb out of the output folder
+    (FINDING S2) — profiles and agents make config less trusted than it used to be."""
+    root = os.path.normpath(os.path.abspath(out_dir))
+    target = os.path.normpath(os.path.abspath(output_path))
+    if target != root and not target.startswith(root + os.sep):
+        raise MysuitePlannerError(
+            f"naming/path template resolves outside the output folder: {output_path} — "
+            "templates may not contain '..' or absolute paths"
+        )
+    return output_path
 
 
 def build_plan(
@@ -73,7 +88,7 @@ def build_plan(
                     )
                 else:
                     bundle_sizes = tuple(sizes)
-                output_path = render_bundle_path(
+                output_path = _confined(render_bundle_path(
                     path_template,
                     bundle_naming_template,
                     out_dir=out_dir,
@@ -81,7 +96,7 @@ def build_plan(
                     format=fmt,
                     colorspace=colorspace,
                     variant=variant,
-                )
+                ), out_dir)
                 bundle_jobs.append(
                     BundleJob(
                         sizes=bundle_sizes, format=fmt, colorspace=colorspace, output_path=output_path
@@ -90,7 +105,7 @@ def build_plan(
                 continue
 
             for size in sizes:
-                output_path = render_path(
+                output_path = _confined(render_path(
                     path_template,
                     naming_template,
                     out_dir=out_dir,
@@ -99,7 +114,7 @@ def build_plan(
                     format=fmt,
                     colorspace=colorspace,
                     variant=variant,
-                )
+                ), out_dir)
                 jobs.append(
                     ExportJob(size=size, format=fmt, colorspace=colorspace, output_path=output_path)
                 )

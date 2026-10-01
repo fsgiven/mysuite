@@ -30,6 +30,7 @@ from mysuite.export.units import (
     parse_padding,
     parse_size,
 )
+from mysuite.utils.subprocess_utils import MysuiteToolError
 from mysuite.utils.console import console, log_error, log_skip, log_step
 
 
@@ -249,6 +250,10 @@ def export(
         log_error(f"unknown profile(s): {', '.join(sorted(unknown_profiles))}")
         raise typer.Exit(1)
 
+    if resolved_out.exists() and not resolved_out.is_dir():
+        log_error(f"output path is a file, not a folder: {escape(str(resolved_out))}")
+        raise typer.Exit(1)
+
     missing = missing_tools(config.tools, NEEDS["export"])
     if missing:
         run_doctor(config.tools, NEEDS["export"])
@@ -329,6 +334,13 @@ def export(
         render_svg, is_temp = apply_recolor(input_svg, resolved_recolor_map)
         try:
             result = renderer.execute(plan, render_svg, on_job_done=on_job_done)
+        except MysuiteToolError as exc:
+            detail = (exc.stderr or "").strip().splitlines()
+            log_error(f"{escape(str(input_svg))}: {escape(detail[-1] if detail else str(exc))}")
+            raise typer.Exit(1) from exc
+        except OSError as exc:
+            log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+            raise typer.Exit(1) from exc
         finally:
             if is_temp:
                 render_svg.unlink(missing_ok=True)

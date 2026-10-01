@@ -20,7 +20,7 @@ def logo(tmp_path):
 
 
 def files_outside(root: Path, allowed: Path) -> list[Path]:
-    return [p for p in root.rglob("*") if p.is_file() and allowed not in p.parents and p.name != "logo.svg"]
+    return [p for p in root.rglob("*") if p.is_file() and allowed not in p.parents and p.name not in ("logo.svg", "c.toml")]
 
 
 @need_tools
@@ -58,7 +58,6 @@ def test_name_override_cannot_escape_the_output_directory(logo, tmp_path):
 
 
 @need_tools
-@pytest.mark.xfail(strict=True, reason="FINDING S2: a naming/path template containing ../ escapes the output directory")
 def test_templates_cannot_escape_the_output_directory(logo, tmp_path):
     out = tmp_path / "o"
     cfg = tmp_path / "c.toml"
@@ -78,7 +77,6 @@ def test_absolute_path_in_template_is_not_honoured(logo, tmp_path):
 
 
 @need_tools
-@pytest.mark.xfail(strict=True, reason="FINDING E2: an output path that is a file produces a raw NotADirectoryError traceback")
 def test_out_dir_that_is_a_file_is_a_clean_error(logo, tmp_path):
     f = tmp_path / "afile"
     f.write_text("x")
