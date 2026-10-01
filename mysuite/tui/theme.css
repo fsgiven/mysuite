@@ -407,7 +407,7 @@ ProgressBar Bar > .bar--complete {
 }
 
 WelcomeScreen { align: center middle; }
-#welcome-box { width: 40; height: auto; align: center middle; }
-#mascot { width: 100%; content-align: center middle; text-align: center; }
+#welcome-box { width: 50; height: auto; align: center middle; }
+#mascot { width: 34; height: 12; margin: 0 8; }
 #bubble { width: 100%; text-align: center; margin-top: 1; }
 #welcome-hint { width: 100%; text-align: center; color: $text-muted; margin-top: 1; }

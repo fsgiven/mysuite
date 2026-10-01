@@ -22,3 +22,10 @@ async def test_default_app_still_opens_on_the_overview():
     async with app.run_test() as pilot:
         await pilot.pause()
         assert type(app.screen).__name__ == "HomeScreen"
+
+
+def test_mascot_rows_are_all_the_same_width_in_every_frame():
+    from mysuite.tui.screens.welcome import _art
+
+    for frame in (("●", "●", "‿"), ("─", "─", "‿"), ("●", "─", "◡")):
+        assert len({len(row) for row in _art(*frame)}) == 1, frame
