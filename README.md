@@ -37,17 +37,17 @@ mysuite is a young personal project, released as-is. Please read this before rel
 | Tool | Automated tests | Known problems |
 | --- | --- | --- |
 | `export` | Yes: every format and colourspace, CMYK values read back from the PDF, the recolor matrix, unusual and hostile SVGs, naming and path safety | **CMYK is inconsistent between PDF/EPS and TIFF**, greys come out as rich blacks, no ICC profile is embedded, and recolor misses `#d00`, `rgb()` and `hsl()` colours |
-| `convert` | Yes: the full source × target matrix and edge cases | animated GIF → PNG crashes and leaves temp files; multipage PDF keeps only page 1; ICO fails above 256 px |
-| `watermark` | Yes: all 9 positions, opacity, scale, SVG logos | a colour logo on a grayscale photo turns white; EXIF-rotated photos get the logo in the wrong corner |
-| `cutout` | Yes (needs the macOS helper, so skipped on CI): real Vision runs | misses the subject on ~15% of clean synthetic images and still reports success; copies all source metadata |
+| `convert` | Yes: the full source × target matrix and edge cases | single-frame targets keep only the first page/frame (and say so) |
+| `watermark` | Yes: all 9 positions, opacity, scale, SVG logos | none known |
+| `cutout` | Yes (needs the macOS helper, so skipped on CI): real Vision runs | Vision is probabilistic: it sometimes picks the wrong subject (an empty result is now reported as a failure) |
 | `metadata` | Yes: strip, randomize and **credit** (embed and read back as JPG/PNG/WebP/TIFF) | `credit` uses c2patool's built-in *test* certificate |
-| `compress` | Yes: all six codecs, presets, odd colour modes | `--codec webp` fails on CMYK TIFF |
-| `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | the optional AI backend has **never been run with real model weights**; 16-bit sources become 8-bit |
+| `compress` | Yes: all six codecs, presets, odd colour modes | none known |
+| `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | the optional AI backend has **never been run with real model weights**; 16-bit sources become 8-bit (now reported) |
 | Terminal dashboard | Yes for all screens except the file-picker edge cases | Drag-and-drop depends on your terminal emulator |
 
-**Important:** `export`, `convert`, `watermark` and `metadata` currently **refuse to run unless every tool is
-installed, including the macOS-only cutout helper and `c2patool`** (finding D1). Full details, severity and
-proposed fixes for all 22 findings are in [docs/TEST-FINDINGS.md](docs/TEST-FINDINGS.md).
+Of the 22 findings from the first test pass, 13 are fixed; the open ones are the export colour problems
+(CMYK consistency, ICC profile, recolor notation), which the colour-engine work addresses. Details are in
+[docs/TEST-FINDINGS.md](docs/TEST-FINDINGS.md).
 
 **What was run on:** one machine, macOS 26 (Apple Silicon), Homebrew, Python 3.11, with ImageMagick
 7.1.2, exiftool 13.55, c2patool 0.27.15, Ghostscript 10.07, librsvg 2.62, mozjpeg 4.1.5, libwebp 1.6,

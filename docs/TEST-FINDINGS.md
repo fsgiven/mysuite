@@ -1,10 +1,11 @@
 # Test findings (phase 0)
 
-In-depth testing of every tool, **no fixes made**. Each finding below is pinned by an
+In-depth testing of every tool, **no fixes made in the pass itself** (fixes followed, see below). Each finding below is pinned by an
 `xfail(strict=True)` test, so the suite stays green today and fails loudly the day a bug is fixed
 (that is your cue to delete the marker). Run `pytest -rx` to list them with their reasons.
 
-**Suite now:** 275 passed, 22 expected failures (the findings), stable across repeated runs.
+**Suite now:** 287 passed, 9 expected failures (the open findings: C1–C3, R1–R5), stable across repeated runs.
+**Fixed so far:** D1, V1, V2, V4, W1, W2, K1, K2, Q1, Q2, E1, E2, S2 (rows marked ✅).
 Before this pass the suite had 142 tests and covered none of export, convert, watermark, cutout or
 `metadata credit`.
 
@@ -16,7 +17,7 @@ CMYK, by decompressing the PDF content stream and reading the ink numbers it act
 
 | ID | Sev | Tool | What is wrong | Evidence | Proposed fix (phase) |
 | --- | --- | --- | --- | --- | --- |
-| D1 | **High** | export, convert, watermark, metadata | These commands refuse to run (they print the doctor table and do nothing) unless **every** tool is installed, including the macOS-only `mysuite-cutout` Swift helper and `c2patool`. A fresh clone that follows the README without building the helper cannot export a single file; it is also why CI failed on first run | Simulated config pointing those two at missing binaries: export prints "Install the missing tool(s)" and writes nothing | Check only the tools each command needs (compress already does) (quick win) |
+| ✅ D1 | **High** | export, convert, watermark, metadata | These commands refuse to run (they print the doctor table and do nothing) unless **every** tool is installed, including the macOS-only `mysuite-cutout` Swift helper and `c2patool`. A fresh clone that follows the README without building the helper cannot export a single file; it is also why CI failed on first run | Simulated config pointing those two at missing binaries: export prints "Install the missing tool(s)" and writes nothing | Check only the tools each command needs (compress already does) (quick win) |
 | C1 | **High** | export | CMYK differs by format: PDF/EPS use Ghostscript, TIFF uses ImageMagick | `#dd0000` → PDF **C6 M100 Y100 K1**, TIFF **C0 M100 Y100 K34** | One CMYK engine for all formats (1) |
 | C2 | **High** | export | Neutral grey becomes a noisy "rich" mix | `#222222` → PDF **69/66/65/72**; TIFF gets clean K87 | Keep greys K-only; engine (1) |
 | C3 | Med-High | export | No ICC profile / output intent in CMYK PDFs, so the numbers have no defined meaning for a printer | no `OutputIntent`/`ICCBased` in the file | Embed a chosen profile (1) |
@@ -25,18 +26,18 @@ CMYK, by decompressing the PDF content stream and reading the ink numbers it act
 | R3 | **High** | export | `hsl()` is never recoloured | recolor matrix | (1) |
 | R4 | Med | export | Named colours inside `<style>` blocks are missed (known, documented limit) | recolor matrix | (1) |
 | R5 | Med | export | No tolerance matching: `#dc0100` is not seen as the brand red | recolor matrix | ΔE matching (1) |
-| V1 | Med | convert | Animated GIF → PNG crashes with a traceback **and leaves `x.png-0.tmp`, `-1.tmp`, `-2.tmp` in the user's folder** | reproduced | Detect multi-frame, clean up temp files (fix list) |
-| S2 | Med | export | A `naming_template`/path template containing `../` writes outside the output folder (config-controlled, but profiles/agents will make config less trusted) | test writes `../../esc_32.png` | Reject `..`/absolute components (3, 5) |
-| W2 | Med | watermark | A colour logo on a **grayscale** base (any B&W photo) comes out as a white blob | red logo → `gray(255)` | Convert base to sRGB first |
-| K2 | Med | cutout | When Vision finds no subject it exits 0 and writes an empty/mostly-transparent PNG | **3 of 20** clean synthetic subjects failed this way | Check mask coverage, warn/fail |
-| K1 | Med | cutout | Passthrough keeps *all* source metadata including GPS and serial numbers into the derived file | reproduced | Make passthrough opt-in or strip GPS/serials by default |
-| W1 | Low-Med | watermark | An EXIF-rotated photo gets the logo in the wrong corner (placed on unrotated pixels) | reproduced | `-auto-orient` first |
-| V2 | Low-Med | convert | A multipage PDF → PNG writes **only page 1**, silently dropping the rest | 3-page PDF → one red PNG | Per-page outputs or an explicit warning |
-| V4 | Low-Med | convert | ICO is capped at 256 px: big rasters and 300 dpi EPS/PDF fail with a raw ImageMagick error | `width or height exceeds limit` | Downscale to ≤256 |
-| Q2 | Low-Med | compress | `--codec webp` fails on a CMYK TIFF (handed to `cwebp` as-is) | reproduced | Convert to RGB first |
-| Q1 | Low | enhance | 16-bit sources silently become 8-bit | reproduced | Say so, or keep 16-bit for PNG/TIFF |
-| E1 | Low-Med | export | A malformed SVG surfaces as a raw `MysuiteToolError` traceback | reproduced | One-line error (all tools) |
-| E2 | Low | export | An output path that is a file → raw `NotADirectoryError` traceback | reproduced | Validate up front |
+| ✅ V1 | Med | convert | Animated GIF → PNG crashes with a traceback **and leaves `x.png-0.tmp`, `-1.tmp`, `-2.tmp` in the user's folder** | reproduced | Detect multi-frame, clean up temp files (fix list) |
+| ✅ S2 | Med | export | A `naming_template`/path template containing `../` writes outside the output folder (config-controlled, but profiles/agents will make config less trusted) | test writes `../../esc_32.png` | Reject `..`/absolute components (3, 5) |
+| ✅ W2 | Med | watermark | A colour logo on a **grayscale** base (any B&W photo) comes out as a white blob | red logo → `gray(255)` | Convert base to sRGB first |
+| ✅ K2 | Med | cutout | When Vision finds no subject it exits 0 and writes an empty/mostly-transparent PNG | **3 of 20** clean synthetic subjects failed this way | Check mask coverage, warn/fail |
+| ✅ K1 | Med | cutout | Passthrough keeps *all* source metadata including GPS and serial numbers into the derived file | reproduced | Make passthrough opt-in or strip GPS/serials by default |
+| ✅ W1 | Low-Med | watermark | An EXIF-rotated photo gets the logo in the wrong corner (placed on unrotated pixels) | reproduced | `-auto-orient` first |
+| ✅ V2 | Low-Med | convert | A multipage PDF → PNG writes **only page 1**, silently dropping the rest | 3-page PDF → one red PNG | Per-page outputs or an explicit warning |
+| ✅ V4 | Low-Med | convert | ICO is capped at 256 px: big rasters and 300 dpi EPS/PDF fail with a raw ImageMagick error | `width or height exceeds limit` | Downscale to ≤256 |
+| ✅ Q2 | Low-Med | compress | `--codec webp` fails on a CMYK TIFF (handed to `cwebp` as-is) | reproduced | Convert to RGB first |
+| ✅ Q1 | Low | enhance | 16-bit sources silently become 8-bit | reproduced | Say so, or keep 16-bit for PNG/TIFF |
+| ✅ E1 | Low-Med | export | A malformed SVG surfaces as a raw `MysuiteToolError` traceback | reproduced | One-line error (all tools) |
+| ✅ E2 | Low | export | An output path that is a file → raw `NotADirectoryError` traceback | reproduced | Validate up front |
 
 ## Checked and fine (so you can trust these)
 
@@ -77,3 +78,15 @@ CMYK, by decompressing the PDF content stream and reading the ink numbers it act
 3. **Decisions for you:** K1 (should cutout keep any metadata by default?) and S2 (reject `..` outright, or
    confine to the output root?).
 4. **Phase 3/5:** S2 as part of profiles and the agent sandbox.
+
+## How the quick fixes were resolved
+
+- **D1:** each command now checks only the tools it uses (`doctor.NEEDS`); `mysuite doctor` still lists all.
+- **V1/V2:** single-image targets take frame/page 1 and print a warning (even with `-q`); failed conversions leave no temp files.
+- **V4:** ICO output is downscaled to at most 256 px.
+- **W1/W2:** the base is auto-oriented and converted to true-colour sRGB before compositing.
+- **K1 (decided: yes):** cutout removes GPS, serial-number and owner tags from its output; author/copyright and camera settings stay.
+- **K2:** a cutout with under 0.5% opacity is a failure, writes nothing. Picking the *wrong* subject can't be detected and stays a known limit.
+- **S2 (decided: reject):** a template that resolves outside the output folder is a clear error (`..`, absolute paths).
+- **E1/E2:** malformed SVG and a file-as-output-folder give one-line errors.
+- **Q1:** enhance still writes 8-bit but says so. **Q2:** compress converts CMYK TIFFs to RGB before WebP.

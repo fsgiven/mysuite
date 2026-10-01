@@ -43,7 +43,6 @@ def test_enhance_cmyk_source_comes_out_with_plausible_srgb_colour(tmp_path):
 
 
 @need
-@pytest.mark.xfail(strict=True, reason="FINDING Q1: 16-bit sources are silently reduced to 8-bit by enhance with no mention")
 def test_enhance_preserves_or_reports_16bit_depth(tmp_path):
     src = mk(tmp_path / "s.png", "gradient:black-white", "-depth", "16")
     res = cli("enhance", "run", src, "--scale", "1", "--backend", "classical")

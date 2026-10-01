@@ -92,6 +92,22 @@ def _to_srgb(image: Image.Image, notes: list[str]) -> Image.Image:
     return image.convert("RGB")
 
 
+def _bit_depth(image: Image.Image, path: Path) -> int:
+    """Pillow quietly narrows 16-bit RGB to 8-bit, so look at the file itself."""
+    if image.mode.startswith("I"):
+        return 16
+    try:
+        if image.format == "PNG":
+            with open(path, "rb") as fh:
+                return fh.read(26)[24]
+        if image.format == "TIFF":
+            bits = image.tag_v2.get(258)
+            return max(bits) if isinstance(bits, tuple) else int(bits or 8)
+    except Exception:
+        pass
+    return 8
+
+
 def _load(input_path: Path, notes: list[str]) -> tuple[Image.Image, Image.Image | None]:
     """Returns (rgb, alpha-or-None). Orientation is baked into the pixels —
     the output has no EXIF, so a rotation flag would be lost and phone photos
@@ -102,6 +118,8 @@ def _load(input_path: Path, notes: list[str]) -> tuple[Image.Image, Image.Image 
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
         raise EnhanceError(f"can't read {input_path.name}: {exc}") from exc
 
+    if _bit_depth(image, input_path) > 8:
+        notes.append("source is more than 8 bits per channel; the output is 8-bit")
     image = ImageOps.exif_transpose(image)
     icc = image.info.get("icc_profile")
     alpha = None
