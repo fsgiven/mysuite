@@ -9,12 +9,13 @@ from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.doctor import missing_tools, run_doctor
 from mysuite.metadata._parsing import output_path_for
-from mysuite.metadata.metadata import credit_file, strip_file
+from mysuite.metadata.metadata import credit_file, randomize_file, strip_file
 from mysuite.utils.console import console, log_error, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
 app = typer.Typer(
-    help="Strip metadata for privacy, or embed a signed C2PA provenance record for correct crediting."
+    help="Strip metadata for privacy, replace it with a plausible decoy camera identity, "
+    "or embed a signed C2PA provenance record for correct crediting."
 )
 
 
@@ -146,5 +147,47 @@ def credit(
             p, author=author, copyright_notice=copyright_notice, generator=generator,
             tools=config.tools, overwrite=overwrite,
         ),
+        dry_run=dry_run, quiet=quiet,
+    )
+
+
+@app.command(
+    "randomize",
+    help="Strip all metadata, then write one internally consistent decoy camera identity "
+    "(make/model/lens/firmware + plausible exposure and a recent capture time; never GPS).",
+)
+def randomize(
+    inputs: List[Path] = typer.Argument(
+        ..., exists=True, readable=True,
+        help="One or more image files, and/or directories (non-recursive unless --recursive).",
+    ),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="Recurse into subdirectories."),
+    overwrite: bool = typer.Option(
+        False, "--overwrite/--no-overwrite", help="Overwrite existing output files."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="List input -> output pairs, write nothing."),
+    config_path: Optional[Path] = typer.Option(None, "--config", "-c", help="Explicit path to mysuite.toml."),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress per-file progress, print summary only."),
+) -> None:
+    try:
+        input_files = resolve_input_files(inputs, recursive=recursive)
+    except InvalidInputError as exc:
+        log_error(str(exc))
+        raise typer.Exit(1) from exc
+
+    try:
+        config = load_config(config_path)
+    except MysuiteConfigError as exc:
+        log_error(str(exc))
+        raise typer.Exit(1) from exc
+
+    missing = missing_tools(config.tools)
+    if missing:
+        run_doctor(config.tools)
+        raise typer.Exit(1)
+
+    _run_batch(
+        input_files, mode="randomized",
+        run_one=lambda p: randomize_file(p, tools=config.tools, overwrite=overwrite),
         dry_run=dry_run, quiet=quiet,
     )

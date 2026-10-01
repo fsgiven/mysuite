@@ -6,7 +6,6 @@ from textual import events, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.timer import Timer
 from textual.widgets import (
     Button,
     Checkbox,
@@ -27,7 +26,6 @@ from mysuite.convert._parsing import (
     TARGET_EXTENSIONS,
     InvalidInputError,
     check_no_output_collisions,
-    output_path_for,
     resolve_input_files,
 )
 from mysuite.convert.converter import ConversionError, ConvertOutcome, convert_file
@@ -55,17 +53,12 @@ class ConvertDropInput(Input):
 class ConvertScreen(Screen):
     BINDINGS = [
         ("escape", "go_back", "Back"),
-        ("f5", "preview", "Preview"),
         ("ctrl+r", "run", "Run"),
     ]
-
-    _PREVIEW_MAX_FILES = 6
-    _PREVIEW_DEBOUNCE_SECONDS = 0.4
 
     def __init__(self) -> None:
         super().__init__()
         self._config: Config | None = None
-        self._preview_debounce_timer: Timer | None = None
         self.last_summary_text: str = ""
 
     def compose(self) -> ComposeResult:
@@ -102,12 +95,9 @@ class ConvertScreen(Screen):
                     yield Checkbox("Recursive (for folder inputs)", id="recursive")
 
                 with Horizontal(classes="field-row", id="action-row"):
-                    yield Button("Preview  [f5]", id="preview-btn")
                     yield Button("Run  [ctrl+r]", id="run-btn", variant="primary")
 
             with Vertical(id="results-pane"):
-                with Vertical(id="group-preview", classes="field-group"):
-                    yield RichLog(id="preview-list", markup=True, wrap=True)
                 with Vertical(id="group-run", classes="field-group"):
                     yield ProgressBar(id="run-progress", total=100)
                     yield RichLog(id="run-log", markup=True, wrap=True)
@@ -117,7 +107,6 @@ class ConvertScreen(Screen):
     def on_mount(self) -> None:
         self.app.sub_title = "Convert"
         self.query_one("#group-source", Vertical).border_title = "Source"
-        self.query_one("#group-preview", Vertical).border_title = "Preview"
         self.query_one("#group-run", Vertical).border_title = "Progress"
 
         self._config = load_config()
@@ -129,8 +118,6 @@ class ConvertScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "browse-input-files":
             self._browse_input_files()
-        elif event.button.id == "preview-btn":
-            self.action_preview()
         elif event.button.id == "run-btn":
             self.action_run()
 
@@ -139,7 +126,7 @@ class ConvertScreen(Screen):
             if path is not None:
                 self.query_one("#input-files", Input).value = str(path)
 
-        self.app.push_screen(FilePickerScreen(start_path=Path("/"), title="Choose input file"), apply)
+        self.app.push_screen(FilePickerScreen(title="Choose input file"), apply)
 
     def _log(self, message: str) -> None:
         self.query_one("#run-log", RichLog).write(message)
@@ -202,59 +189,11 @@ class ConvertScreen(Screen):
 
         return files, target_format, dpi, quality, background, overwrite
 
-    def _render_preview_list(self, files: list[Path], target_format: str) -> None:
-        preview_list = self.query_one("#preview-list", RichLog)
-        preview_list.clear()
-        shown = files[: self._PREVIEW_MAX_FILES]
-        for f in shown:
-            out = output_path_for(f, target_format)
-            preview_list.write(f"{f.name} [dim]->[/dim] {out.name}")
-        extra = len(files) - len(shown)
-        if extra > 0:
-            preview_list.write(f"[dim]+{extra} more[/dim]")
-        self.query_one("#run-progress", ProgressBar).update(total=len(files), progress=0)
-
-    def action_preview(self) -> None:
-        resolved = self._resolve_form()
-        if resolved is None:
-            return
-        files, target_format, *_ = resolved
-        self._render_preview_list(files, target_format)
-
-    def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.id != "input-files":
-            return
-        if self._preview_debounce_timer is not None:
-            self._preview_debounce_timer.stop()
-        self._preview_debounce_timer = self.set_timer(
-            self._PREVIEW_DEBOUNCE_SECONDS, self._debounced_preview_refresh
-        )
-
-    def _debounced_preview_refresh(self) -> None:
-        self._preview_debounce_timer = None
-        value = self.query_one("#input-files", Input).value.strip()
-        if not value:
-            self.query_one("#preview-list", RichLog).clear()
-            return
-        raw_inputs = parse_input_files_field(value)
-        recursive = self.query_one("#recursive", Checkbox).value
-        try:
-            files = resolve_input_files(raw_inputs, recursive=recursive)
-        except InvalidInputError:
-            self.query_one("#preview-list", RichLog).clear()
-            return
-
-        target_format = self.query_one("#target-format", Select).value
-        if target_format in (None, Select.BLANK, Select.NULL):
-            return
-        self._render_preview_list(files, target_format)
-
     def action_run(self) -> None:
         resolved = self._resolve_form()
         if resolved is None:
             return
         files, target_format, dpi, quality, background, overwrite = resolved
-        self.action_preview()
 
         assert self._config is not None
         self.query_one("#run-btn", Button).disabled = True
@@ -313,7 +252,3 @@ class ConvertScreen(Screen):
         self.query_one("#run-btn", Button).disabled = False
         self.last_summary_text = f"done — {written} written, {skipped} already existed, {failed} failed"
         self.query_one("#run-summary", Static).update(self.last_summary_text)
-
-    def on_unmount(self) -> None:
-        if self._preview_debounce_timer is not None:
-            self._preview_debounce_timer.stop()

@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 from textual import events
-from textual.widgets import Input, RichLog, Select, Static
+from textual.widgets import Input, Select, Static
 
 from mysuite.tui.app import MysuiteApp
 from mysuite.tui.registry import TOOL_REGISTRY
@@ -60,21 +60,6 @@ async def test_codec_default_is_mozjpeg_and_switching_toggles_groups():
         await pilot.pause()
         assert screen.query_one("#group-mozjpeg").display is False
         assert screen.query_one("#group-webp").display is True
-
-
-@skip_if_magick_missing
-async def test_preview_shows_compressed_output_name(photo):
-    app = MysuiteApp()
-    async with app.run_test() as pilot:
-        screen = await _open_compress_screen(pilot)
-
-        screen.query_one("#input-files", Input).value = str(photo)
-        screen.action_preview()
-        await pilot.pause()
-
-        preview_text = screen.query_one("#preview-list", RichLog)
-        joined = "\n".join(str(line) for line in preview_text.lines)
-        assert "photo_compressed.jpg" in joined
 
 
 @pytest.mark.slow

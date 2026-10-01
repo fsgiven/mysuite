@@ -1,7 +1,23 @@
 # mysuite
 
-A CLI suite of tools for repetitive design/asset work. Phase 1: batch logo/asset export.
-Phase 2: an interactive terminal dashboard (`mysuite tui`) on top of it.
+A free, local toolkit for repetitive image and design-asset work — a command-line suite plus an
+interactive terminal dashboard. Everything runs on your own machine: no uploads, no accounts, no
+telemetry.
+
+| Tool | What it does |
+| --- | --- |
+| `export` | One SVG → many sizes, formats (PNG/PDF/EPS/SVG/JPEG/WebP/TIFF/ICO/ICNS) and color profiles, with presets, recoloring and naming templates |
+| `convert` | Convert files between formats, in place beside the source |
+| `cutout` | Isolate a photo's subject onto a transparent background (macOS Vision) |
+| `watermark` | Stamp a logo onto images as a visible, scalable overlay |
+| `metadata` | **strip** all metadata, **randomize** it into a plausible decoy camera, or **credit** with a C2PA provenance record |
+| `compress` | Re-encode with the same best-in-class codecs Squoosh uses (mozjpeg, WebP, AVIF, oxipng, pngquant, gifsicle), plus sharpening |
+
+Outputs are always written **beside the source** with a suffix (`_cutout`, `_stripped`, `_compressed`,
+...). mysuite never overwrites without `--overwrite` and never modifies your original.
+
+Developed and tested on macOS (Apple Silicon, Homebrew). `cutout` and `icns` export are macOS-only.
+The rest wraps standard command-line tools, so it should work elsewhere, but that's untested.
 
 ## Setup
 
@@ -9,13 +25,16 @@ Phase 2: an interactive terminal dashboard (`mysuite tui`) on top of it.
 brew install librsvg imagemagick ghostscript exiftool c2patool python@3.11
 brew install mozjpeg webp libavif oxipng pngquant gifsicle   # compress tool's codecs
 
-cd ~/Documents/git/mysuite
+git clone https://github.com/fsgiven/mysuite.git && cd mysuite
 /opt/homebrew/bin/python3.11 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install ".[dev]"
+source .venv/bin/activate
+pip install ".[dev]"
 
-.venv/bin/mysuite doctor
+mysuite doctor      # checks every external tool is found
+mysuite tui         # launch the terminal dashboard
 ```
+
+(Without activating the venv, call `.venv/bin/mysuite` instead of `mysuite` in the examples below.)
 
 `mysuite cutout` needs one more tool, `mysuite-cutout` — a small helper built from source (it's
 mysuite-specific, not brew-installable) that wraps macOS's Vision framework
@@ -27,24 +46,23 @@ Preview/Photos "Copy Subject"). Requires macOS 14+ and the Xcode Command Line To
 mysuite/native/cutout/build.sh /opt/homebrew/bin   # builds and installs onto PATH in one step
 ```
 
-Note: this installs `mysuite` normally, **not** in editable (`-e`) mode. On this machine, files
-`pip` writes get tagged with macOS's provenance-tracking flag, which also marks them hidden —
-Python's `site.py` silently skips hidden `.pth` files, which is exactly what editable installs
-rely on, so `-e` breaks with `ModuleNotFoundError: No module named 'mysuite'` here. A plain install
-copies real files into `site-packages` instead of using a `.pth` redirect, sidestepping the whole
-issue. The tradeoff: after changing code under `mysuite/`, re-run `.venv/bin/pip install ".[dev]"`
-to pick up the change before using `.venv/bin/mysuite ...` again (`pytest` doesn't need this — it
-always imports the live source directly).
-
 `mozjpeg` is keg-only (Homebrew won't link it onto PATH — it would shadow the `cjpeg` that ships
 with plain `jpeg-turbo`), so `mysuite compress --codec mozjpeg` points at mozjpeg's keg path
 directly (`/opt/homebrew/opt/mozjpeg/bin/cjpeg`) rather than relying on PATH; no extra linking step
-needed. `mysuite doctor` reports it under the `cjpeg` row.
+needed. On Intel Macs or Linux, set `cjpeg` under `[tools]` in `mysuite.toml` to wherever yours lives.
+
+### Troubleshooting: `pip install -e .` fails with `ModuleNotFoundError`
+
+Use a plain `pip install .` as above, not an editable (`-e`) install. On some Macs, files `pip` writes
+get tagged with macOS's provenance-tracking flag, which also marks them hidden — Python's `site.py`
+silently skips hidden `.pth` files, which is exactly what editable installs rely on. The tradeoff: after
+changing code under `mysuite/`, re-run `pip install .` before using the `mysuite` command again
+(`pytest` doesn't need this — it imports the live source directly).
 
 ## Usage
 
 ```bash
-.venv/bin/mysuite export logo.svg \
+mysuite export logo.svg \
   --sizes 16,32,64,128,256,512,1024 \
   --formats png,pdf,eps,svg \
   --profiles rgb,cmyk \
@@ -60,7 +78,7 @@ built-in `iconutil`, which isn't installed by the `brew` step above (it's alread
 Extra controls:
 
 ```bash
-.venv/bin/mysuite export logo.svg --formats jpeg \
+mysuite export logo.svg --formats jpeg \
   --background white --quality 85 --padding 10% --png-compression 9
 ```
 
@@ -81,7 +99,7 @@ Sizes can also be given in physical units — `mm`, `cm`, or `in` — alongside 
 converted to pixels via `--dpi`/`--ppi` (default 300, both flags are the same thing):
 
 ```bash
-.venv/bin/mysuite export logo.svg --sizes 16,32,5cm,2in --dpi 300 --formats pdf,png
+mysuite export logo.svg --sizes 16,32,5cm,2in --dpi 300 --formats pdf,png
 ```
 
 Filenames use the size exactly as you typed it (`logo_5cm.pdf`), not the resolved pixel count —
@@ -92,7 +110,7 @@ pages are sized in real physical units regardless of DPI.
 If you're mostly working in one unit, set a default instead of typing the suffix every time:
 
 ```bash
-.venv/bin/mysuite export logo.svg --sizes 50,80 --unit mm    # same as --sizes 50mm,80mm
+mysuite export logo.svg --sizes 50,80 --unit mm    # same as --sizes 50mm,80mm
 ```
 
 `--unit` (px/mm/cm/in, also configurable as `default_unit` in `mysuite.toml`) only applies to sizes
@@ -101,7 +119,7 @@ without their own explicit suffix — `--sizes 50,80,32px --unit mm` still expor
 Preview without writing anything:
 
 ```bash
-.venv/bin/mysuite export logo.svg --dry-run
+mysuite export logo.svg --dry-run
 ```
 
 Only PDF, EPS, and TIFF support true CMYK — TIFF is the one *raster* format that does, unlike PNG.
@@ -124,9 +142,9 @@ Point `export` at multiple files and/or a folder instead of one SVG at a time �
 the same flags, its own output tree named after its own filename:
 
 ```bash
-.venv/bin/mysuite export ./logos/                       # every *.svg directly inside the folder
-.venv/bin/mysuite export ./logos/ --recursive             # include subfolders too
-.venv/bin/mysuite export logo-a.svg logo-b.svg icons/     # mix explicit files and folders
+mysuite export ./logos/                       # every *.svg directly inside the folder
+mysuite export ./logos/ --recursive             # include subfolders too
+mysuite export logo-a.svg logo-b.svg icons/     # mix explicit files and folders
 ```
 
 `--name` only works with a single input file (there's no single name to give multiple outputs).
@@ -140,13 +158,13 @@ By default the output name comes from each input file's own filename. Override i
 export (single input only — see above):
 
 ```bash
-.venv/bin/mysuite export logo.svg --name acme-brand   # exports/acme-brand/... instead of exports/logo/...
+mysuite export logo.svg --name acme-brand   # exports/acme-brand/... instead of exports/logo/...
 ```
 
 Add today's date to filenames so exports stay findable/sortable by when they were generated:
 
 ```bash
-.venv/bin/mysuite export logo.svg --date-stamp   # logo_512_20260819.png
+mysuite export logo.svg --date-stamp   # logo_512_20260819.png
 ```
 
 This only changes the tool's own *default* naming templates — a `naming_template`/
@@ -159,8 +177,8 @@ as you wrote it, since `{date}` is available as a token there too if you want to
 its own top-level folder — useful for a negative, mono, or minimal version of the same brand asset:
 
 ```bash
-.venv/bin/mysuite export logo.svg --formats png                              # exports/logo/png/...
-.venv/bin/mysuite export logo.svg --formats png --variant negative           # exports/logo/negative/png/...
+mysuite export logo.svg --formats png                              # exports/logo/png/...
+mysuite export logo.svg --formats png --variant negative           # exports/logo/negative/png/...
 ```
 
 `--recolor FROM=TO` (repeatable) swaps an exact hex color in the SVG source before rendering —
@@ -169,10 +187,10 @@ Each occurrence can itself hold several `FROM=TO` pairs, separated by commas and
 mix, so these two invocations are equivalent:
 
 ```bash
-.venv/bin/mysuite export logo.svg --variant negative \
+mysuite export logo.svg --variant negative \
   --recolor "#2b6cb0=#000000" --recolor "#f6ad55=#ffffff"
 
-.venv/bin/mysuite export logo.svg --variant negative \
+mysuite export logo.svg --variant negative \
   --recolor "#2b6cb0=#000000 #f6ad55=#ffffff"
 ```
 
@@ -186,9 +204,9 @@ rendering — your source SVG is never modified. Save a recurring brand colorset
 don't retype it:
 
 ```bash
-.venv/bin/mysuite preset save acme-negative --variant negative \
+mysuite preset save acme-negative --variant negative \
   --recolor "#2b6cb0=#000000" --recolor "#f6ad55=#ffffff"
-.venv/bin/mysuite export logo.svg --preset acme-negative
+mysuite export logo.svg --preset acme-negative
 ```
 
 Note: this covers *simple* recoloring — swapping one RGB/hex value for another. It doesn't yet
@@ -200,17 +218,17 @@ still produce a muddier result than a manually-tuned brand CMYK value); that's a
 Two ready-made presets work even without a `mysuite.toml`:
 
 ```bash
-.venv/bin/mysuite export logo.svg --preset favicon      # favicon.ico (16/32/48) + individual PNGs
-.venv/bin/mysuite export logo.svg --preset macos-icon    # a complete .icns app icon
+mysuite export logo.svg --preset favicon      # favicon.ico (16/32/48) + individual PNGs
+mysuite export logo.svg --preset macos-icon    # a complete .icns app icon
 ```
 
 Save your own from any combination of export flags — this writes (or updates) a `[presets.NAME]`
 block in `mysuite.toml`, preserving everything else already in the file:
 
 ```bash
-.venv/bin/mysuite preset save mybrand --sizes 24,48,5cm --formats png,webp --quality 88 --background white
-.venv/bin/mysuite preset list
-.venv/bin/mysuite export logo.svg --preset mybrand
+mysuite preset save mybrand --sizes 24,48,5cm --formats png,webp --quality 88 --background white
+mysuite preset list
+mysuite export logo.svg --preset mybrand
 ```
 
 A same-named preset in your own `mysuite.toml` overrides the built-in one.
@@ -223,9 +241,9 @@ size/branding-focused. `convert` takes SVG, PDF, EPS, or common raster formats a
 directory:
 
 ```bash
-.venv/bin/mysuite convert logo.svg --to png,pdf,webp       # logo.png, logo.pdf, logo.webp next to logo.svg
-.venv/bin/mysuite convert scan.pdf --to png --dpi 150
-.venv/bin/mysuite convert photo.jpg --to webp --quality 80
+mysuite convert logo.svg --to png,pdf,webp       # logo.png, logo.pdf, logo.webp next to logo.svg
+mysuite convert scan.pdf --to png --dpi 150
+mysuite convert photo.jpg --to webp --quality 80
 ```
 
 Supported targets: `png`, `jpeg`, `webp`, `tiff`, `bmp`, `gif`, `pdf`, `eps`, `ico`. SVG is
@@ -242,8 +260,8 @@ framework (`VNGenerateForegroundInstanceMaskRequest` — the same tech behind Pr
 "Copy Subject"). Needs the `mysuite-cutout` helper built separately — see Setup above.
 
 ```bash
-.venv/bin/mysuite cutout photo.jpg              # writes photo_cutout.png beside it
-.venv/bin/mysuite cutout ./product-photos/ --recursive --overwrite
+mysuite cutout photo.jpg              # writes photo_cutout.png beside it
+mysuite cutout ./product-photos/ --recursive --overwrite
 ```
 
 Output is always PNG (transparency needs an alpha channel) with a `_cutout` suffix, so it never
@@ -259,8 +277,8 @@ Stamps a logo onto image(s) as a visible, scalable watermark — pure ImageMagic
 dependency:
 
 ```bash
-.venv/bin/mysuite watermark photo.jpg --logo brand-mark.png
-.venv/bin/mysuite watermark ./gallery/ --logo brand-mark.svg --position top-left --scale 20 --opacity 60
+mysuite watermark photo.jpg --logo brand-mark.png
+mysuite watermark ./gallery/ --logo brand-mark.svg --position top-left --scale 20 --opacity 60
 ```
 
 Writes `photo_watermarked.jpg` beside the source (raster sources keep their original extension;
@@ -275,28 +293,52 @@ rasterized the same way as elsewhere in the suite. `--position` is one of the 9-
 
 ## Metadata
 
-Two opposite operations sharing one command group — strip everything for privacy, or embed a signed
-provenance record for correct crediting, the same C2PA Content Credentials standard OpenAI/Adobe/
-Google use on AI-generated images:
+Three modes in one command group — remove everything for privacy, replace it with a believable
+decoy, or embed a signed provenance record for correct crediting (the same C2PA Content Credentials
+standard Adobe, OpenAI and Google use on AI-generated images):
 
 ```bash
-.venv/bin/mysuite metadata strip photo.jpg                                    # photo_stripped.jpg
-.venv/bin/mysuite metadata credit photo.jpg --author "Jane Doe" --copyright "© 2026 Jane Doe"
+mysuite metadata strip photo.jpg                                    # photo_stripped.jpg
+mysuite metadata randomize photo.jpg                                # photo_randomized.jpg
+mysuite metadata credit photo.jpg --author "Jane Doe" --copyright "© 2026 Jane Doe"
 ```
 
-`strip` shells out to `exiftool -all=`, removing standard EXIF/IPTC/XMP/ICC metadata (camera info,
-GPS, author fields, ...) into a new file — the source is never mutated. Note this doesn't necessarily
-remove a C2PA manifest a prior `credit` run embedded — that's a distinct segment exiftool's metadata
-model doesn't fully own.
+**`strip`** removes EXIF, IPTC, XMP, ICC profiles, GPS, maker notes, embedded thumbnails and JPEG
+comments via `exiftool -all=`, writing a new file — the source is never touched. Two details handled
+for you: the **Orientation** flag is kept (it's just a 1-8 rotation hint with nothing identifying, and
+dropping it leaves phone photos sideways), and **TIFFs** get an extra `magick -strip` pass because
+exiftool can't delete a TIFF's main metadata block (Artist/Copyright/Software would otherwise
+survive). Because the output is a new file, macOS extended attributes on the original — the
+quarantine flag and the "downloaded from" URL — don't carry over either. One thing no tool can
+remove: macOS stamps an empty `com.apple.provenance` flag on files written by some processes; it
+carries no information.
 
-`credit` shells out to `c2patool`, embedding a signed manifest with `--author`
+`strip` verified clean against a JPEG, PNG, WebP and TIFF seeded with EXIF, GPS, IPTC, XMP, comments,
+serial numbers, a Photoshop-style software string and a hostname — nothing identifying remained in
+the tags or in the raw file bytes. It does not remove a C2PA manifest embedded by an earlier `credit`
+run (a separate segment exiftool doesn't own). If the source used a non-sRGB color profile, stripping
+the profile can shift how colors render.
+
+**`randomize`** strips everything the same way, then writes **one internally consistent decoy camera**:
+a real device's make, model, lens and firmware string taken together (a Nikon body with a Nikkor
+lens, an iPhone with its real lens description, a Samsung with no lens string like the real thing),
+plus per-photo values drawn from that device's valid ranges (aperture the lens can actually do, ISO
+the sensor offers, exposure time, focal length, and a plausible daytime capture date within the last
+18 months). Seven profiles ship in `mysuite/metadata/camera_profiles.py` — edit or extend the list.
+It **never writes GPS**, and nothing from the original survives. Be realistic about what this is: it
+hides the real capture device in the metadata. It does not defeat image forensics — sensor-noise
+patterns, and the thumbnails and maker-note structure a genuine camera file would carry, are not
+reproduced.
+
+**`credit`** shells out to `c2patool`, embedding a signed manifest with `--author`
 (required), `--copyright` (optional), and `--generator` (defaults to `mysuite`). It signs with
 c2patool's **built-in test certificate** — real enough to embed and read back a provenance record
 for personal/internal verification (`c2patool photo_credited.jpg` reads it back), but **not
 third-party-trusted** — that needs a certificate from an accredited CA, which is your own separate
 step if you ever want one, not something this tool obtains for you.
+
 `--overwrite`/`--recursive`/`--dry-run`/`--config` work the same way as the other tools, applied
-per-subcommand (`mysuite metadata strip --dry-run ...` / `mysuite metadata credit --dry-run ...`).
+per-subcommand (`mysuite metadata strip --dry-run ...`).
 
 ## Compress
 
@@ -305,9 +347,9 @@ hood — not ImageMagick's generic writers — with full per-codec parameter con
 unsharp-mask sharpen pass applied before encoding:
 
 ```bash
-.venv/bin/mysuite compress photo.png --codec mozjpeg --quality 85
-.venv/bin/mysuite compress ./gallery/ --codec webp --quality 80 --method 6 --sharpen-amount 1.2
-.venv/bin/mysuite compress icon.png --codec oxipng --effort 6
+mysuite compress photo.png --codec mozjpeg --quality 85
+mysuite compress ./gallery/ --codec webp --quality 80 --method 6 --sharpen-amount 1.2
+mysuite compress icon.png --codec oxipng --effort 6
 ```
 
 Writes `photo_compressed.<ext>` beside the source. `--codec` picks the encoder (each a distinct,
@@ -340,7 +382,7 @@ that.
 ## Terminal dashboard
 
 ```bash
-.venv/bin/mysuite tui
+mysuite tui
 ```
 
 Opens an interactive home screen listing the available tools — **Export**, **Convert**, **Cutout**,
@@ -352,16 +394,16 @@ Adjustments, Formats & color, Output, Options) rather than one long list — inc
 dropdown (px/mm/cm/in) right next to Sizes, so bare numbers use whatever unit you've picked without
 typing the suffix every time, and a **Recolor** section with dedicated FROM/TO fields per swap (hex
 or CSS color names) plus +/− buttons, rather than one syntax-heavy text field. Convert/Cutout/
-Watermark use the same form/preview/run shape, scaled down to what each actually needs (no
+Watermark use the same form/run shape, scaled down to what each actually needs (no
 sizes/formats/quality concepts for Cutout, for instance); Metadata adds a **Mode** toggle
 (Strip/Credit) that shows or hides the Author/Copyright/Generator fields depending which mode is
 selected; Compress adds a **Codec** dropdown that shows only the six mozjpeg/webp/avif/oxipng/
 pngquant/gifsicle option groups relevant to whichever codec is selected.
-Keyboard shortcuts are shown in the footer: **F5** preview, **Ctrl+R** run, **Ctrl+S** save the
+Keyboard shortcuts are shown in the footer: **Ctrl+R** run, **Ctrl+S** save the
 current Export form as a named preset (writes into `mysuite.toml` right from the TUI, no editing by
 hand). Every screen's input field also takes a folder, a comma-separated list of files, or a file
 dragged straight onto the terminal window (most terminals turn an OS file-drop into a paste of its
-path) — the preview shows one branch/pair per file when there's more than one. Every **Browse**
+path). Every **Browse**
 button opens a picker rooted at the filesystem root (`/`), not the project folder, so any file
 anywhere on disk is reachable by drilling down. The equivalent CLI commands keep working unchanged
 for scripting — the TUI is additive, not a replacement.
@@ -369,8 +411,8 @@ for scripting — the TUI is additive, not a replacement.
 ## Tests
 
 ```bash
-.venv/bin/pytest -m "not slow"   # fast unit tests, no external binaries required
-.venv/bin/pytest                 # full suite, requires rsvg-convert/gs/magick
+pytest -m "not slow"   # fast unit tests, no external binaries required
+pytest                 # full suite, requires rsvg-convert/gs/magick
 ```
 
 A handful of tests skip individually rather than needing a marker override: icns-bundle tests need
@@ -379,3 +421,7 @@ tests need the separately-built `mysuite-cutout` helper (see Setup above); `meta
 need `c2patool`; each `compress` codec's tests need that codec's own tool (mozjpeg/webp/libavif/
 oxipng/pngquant/gifsicle) and skip independently, so a partial install still runs everything it can.
 All skip cleanly with a clear reason if their tool isn't found, rather than failing.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

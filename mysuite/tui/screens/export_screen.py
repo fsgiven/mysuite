@@ -19,7 +19,6 @@ from textual.widgets import (
     Select,
     SelectionList,
     Static,
-    Tree,
 )
 from textual.worker import get_current_worker
 
@@ -39,7 +38,6 @@ from mysuite.export.recolor import InvalidRecolorError, apply_recolor, parse_rec
 from mysuite.export.renderer import ExecutionResult, Renderer
 from mysuite.export.units import VALID_UNITS, InvalidPaddingError, parse_padding, parse_size
 from mysuite.tui.dragdrop import merge_paths_into_input, parse_dropped_paths, parse_input_files_field
-from mysuite.tui.widgets.plan_tree import populate_plan_tree
 from mysuite.tui.widgets.recolor_row import RecolorRow
 from mysuite.tui.widgets.svg_preview import SvgThumbnail, render_svg_thumbnail
 from mysuite.utils.subprocess_utils import MysuiteToolError
@@ -74,7 +72,6 @@ class SvgDropInput(Input):
 class ExportScreen(Screen):
     BINDINGS = [
         ("escape", "go_back", "Back"),
-        ("f5", "preview", "Preview"),
         ("ctrl+r", "run", "Run"),
         ("ctrl+s", "save_preset", "Save preset"),
     ]
@@ -192,7 +189,6 @@ class ExportScreen(Screen):
                             yield Checkbox("Add date stamp to filenames (YYYYMMDD)", id="date-stamp")
 
                 with Horizontal(classes="field-row", id="action-row"):
-                    yield Button("Preview  [f5]", id="preview-btn")
                     yield Button("Run  [ctrl+r]", id="run-btn", variant="primary")
                     yield Button("Save preset  [ctrl+s]", id="save-preset-btn")
 
@@ -200,8 +196,6 @@ class ExportScreen(Screen):
                 with Vertical(id="group-svg-preview", classes="field-group"):
                     with HorizontalScroll(id="svg-thumb-strip"):
                         yield Static("(no SVG yet)", id="svg-thumb-placeholder")
-                with Vertical(id="group-preview", classes="field-group"):
-                    yield Tree("(no plan yet)", id="plan-tree")
                 with Vertical(id="group-run", classes="field-group"):
                     yield ProgressBar(id="run-progress", total=100)
                     yield RichLog(id="run-log", markup=True, wrap=True)
@@ -216,7 +210,6 @@ class ExportScreen(Screen):
         self.query_one("#group-adjust", Vertical).border_title = "Adjustments"
         self.query_one("#group-options", Vertical).border_title = "Options"
         self.query_one("#group-svg-preview", Vertical).border_title = "SVG preview"
-        self.query_one("#group-preview", Vertical).border_title = "Plan preview"
         self.query_one("#group-run", Vertical).border_title = "Progress"
 
         self._config = load_config()
@@ -269,8 +262,6 @@ class ExportScreen(Screen):
             self._browse_input_svg()
         elif event.button.id == "browse-out-dir":
             self._browse_out_dir()
-        elif event.button.id == "preview-btn":
-            self.action_preview()
         elif event.button.id == "run-btn":
             self.action_run()
         elif event.button.id == "save-preset-btn":
@@ -356,7 +347,7 @@ class ExportScreen(Screen):
                 self.query_one("#input-svg", Input).value = str(path)
 
         self.app.push_screen(
-            FilePickerScreen(start_path=Path("/"), title="Choose input SVG"), apply
+            FilePickerScreen(title="Choose input SVG"), apply
         )
 
     def _browse_out_dir(self) -> None:
@@ -368,7 +359,7 @@ class ExportScreen(Screen):
 
         self.app.push_screen(
             FilePickerScreen(
-                start_path=Path("/"), pick_directories=True, title="Choose output directory"
+                pick_directories=True, title="Choose output directory"
             ),
             apply,
         )
@@ -577,36 +568,15 @@ class ExportScreen(Screen):
 
         return plans
 
-    def action_preview(self) -> None:
-        if self._preview_debounce_timer is not None:
-            self._preview_debounce_timer.stop()
-            self._preview_debounce_timer = None
-        self._trigger_preview_refresh()
-
-        plans = self._build_plans_from_form()
-        self._last_plans = plans or []
-        if plans is None:
-            return
-        populate_plan_tree(
-            self.query_one("#plan-tree", Tree),
-            [(self._last_name_override or f.stem, p) for f, p in plans],
-        )
-        total = sum(len(p.jobs) + len(p.bundle_jobs) for _, p in plans)
-        self.query_one("#run-progress", ProgressBar).update(total=total, progress=0)
-        for _, plan in plans:
-            for skip in plan.skips:
-                self._log(f"[#FBBF24]⚠ skipping[/#FBBF24] {skip.format}/{skip.colorspace} — {skip.reason}")
-
     def action_run(self) -> None:
         plans = self._build_plans_from_form()
         self._last_plans = plans or []
         if plans is None:
             return
-        populate_plan_tree(
-            self.query_one("#plan-tree", Tree),
-            [(self._last_name_override or f.stem, p) for f, p in plans],
-        )
         total = sum(len(p.jobs) + len(p.bundle_jobs) for _, p in plans)
+        for _, plan in plans:
+            for skip in plan.skips:
+                self._log(f"[#FBBF24]⚠ skipping[/#FBBF24] {skip.format}/{skip.colorspace} — {skip.reason}")
 
         if self.query_one("#dry-run", Checkbox).value:
             self._log(f"[dim]dry run — {total} file(s) would be written, 0 written[/dim]")
