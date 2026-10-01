@@ -4,8 +4,7 @@ In-depth testing of every tool, **no fixes made in the pass itself** (fixes foll
 `xfail(strict=True)` test, so the suite stays green today and fails loudly the day a bug is fixed
 (that is your cue to delete the marker). Run `pytest -rx` to list them with their reasons.
 
-**Suite now:** 287 passed, 9 expected failures (the open findings: C1–C3, R1–R5), stable across repeated runs.
-**Fixed so far:** D1, V1, V2, V4, W1, W2, K1, K2, Q1, Q2, E1, E2, S2 (rows marked ✅).
+**Suite now:** 369 passed, **0 expected failures**. All 22 findings are fixed (rows marked ✅).
 Before this pass the suite had 142 tests and covered none of export, convert, watermark, cutout or
 `metadata credit`.
 
@@ -18,14 +17,14 @@ CMYK, by decompressing the PDF content stream and reading the ink numbers it act
 | ID | Sev | Tool | What is wrong | Evidence | Proposed fix (phase) |
 | --- | --- | --- | --- | --- | --- |
 | ✅ D1 | **High** | export, convert, watermark, metadata | These commands refuse to run (they print the doctor table and do nothing) unless **every** tool is installed, including the macOS-only `mysuite-cutout` Swift helper and `c2patool`. A fresh clone that follows the README without building the helper cannot export a single file; it is also why CI failed on first run | Simulated config pointing those two at missing binaries: export prints "Install the missing tool(s)" and writes nothing | Check only the tools each command needs (compress already does) (quick win) |
-| C1 | **High** | export | CMYK differs by format: PDF/EPS use Ghostscript, TIFF uses ImageMagick | `#dd0000` → PDF **C6 M100 Y100 K1**, TIFF **C0 M100 Y100 K34** | One CMYK engine for all formats (1) |
-| C2 | **High** | export | Neutral grey becomes a noisy "rich" mix | `#222222` → PDF **69/66/65/72**; TIFF gets clean K87 | Keep greys K-only; engine (1) |
-| C3 | Med-High | export | No ICC profile / output intent in CMYK PDFs, so the numbers have no defined meaning for a printer | no `OutputIntent`/`ICCBased` in the file | Embed a chosen profile (1) |
-| R1 | **High** | export | Recolor misses short hex: `#d00` is not `#dd0000` | recolor matrix | Parse-based colour engine (1) |
-| R2 | **High** | export | `rgb()` and `rgb(%)` are never recoloured | recolor matrix | (1) |
-| R3 | **High** | export | `hsl()` is never recoloured | recolor matrix | (1) |
-| R4 | Med | export | Named colours inside `<style>` blocks are missed (known, documented limit) | recolor matrix | (1) |
-| R5 | Med | export | No tolerance matching: `#dc0100` is not seen as the brand red | recolor matrix | ΔE matching (1) |
+| ✅ C1 | **High** | export | CMYK differs by format: PDF/EPS use Ghostscript, TIFF uses ImageMagick | `#dd0000` → PDF **C6 M100 Y100 K1**, TIFF **C0 M100 Y100 K34** | One CMYK engine for all formats (1) |
+| ✅ C2 | **High** | export | Neutral grey becomes a noisy "rich" mix | `#222222` → PDF **69/66/65/72**; TIFF gets clean K87 | Keep greys K-only; engine (1) |
+| ✅ C3 | Med-High | export | No ICC profile / output intent in CMYK PDFs, so the numbers have no defined meaning for a printer | no `OutputIntent`/`ICCBased` in the file | Embed a chosen profile (1) |
+| ✅ R1 | **High** | export | Recolor misses short hex: `#d00` is not `#dd0000` | recolor matrix | Parse-based colour engine (1) |
+| ✅ R2 | **High** | export | `rgb()` and `rgb(%)` are never recoloured | recolor matrix | (1) |
+| ✅ R3 | **High** | export | `hsl()` is never recoloured | recolor matrix | (1) |
+| ✅ R4 | Med | export | Named colours inside `<style>` blocks are missed (known, documented limit) | recolor matrix | (1) |
+| ✅ R5 | Med | export | No tolerance matching: `#dc0100` is not seen as the brand red | recolor matrix | ΔE matching (1) |
 | ✅ V1 | Med | convert | Animated GIF → PNG crashes with a traceback **and leaves `x.png-0.tmp`, `-1.tmp`, `-2.tmp` in the user's folder** | reproduced | Detect multi-frame, clean up temp files (fix list) |
 | ✅ S2 | Med | export | A `naming_template`/path template containing `../` writes outside the output folder (config-controlled, but profiles/agents will make config less trusted) | test writes `../../esc_32.png` | Reject `..`/absolute components (3, 5) |
 | ✅ W2 | Med | watermark | A colour logo on a **grayscale** base (any B&W photo) comes out as a white blob | red logo → `gray(255)` | Convert base to sRGB first |
@@ -90,3 +89,6 @@ CMYK, by decompressing the PDF content stream and reading the ink numbers it act
 - **S2 (decided: reject):** a template that resolves outside the output folder is a clear error (`..`, absolute paths).
 - **E1/E2:** malformed SVG and a file-as-output-folder give one-line errors.
 - **Q1:** enhance still writes 8-bit but says so. **Q2:** compress converts CMYK TIFFs to RGB before WebP.
+- **C1–C3, R1–R5 (colour engine):** `mysuite/color/`. Recolor parses real colours and compares by value with CIEDE2000
+  tolerance; PDF, EPS and TIFF share one ICC-based CMYK engine (`exact`, `clean[:N]`, K-only greys); PDFs carry an
+  output intent. See the README's "CMYK: one engine" section for modes and limits.

@@ -20,6 +20,7 @@ from mysuite.export._parsing import (
 )
 from mysuite.export.naming import resolve_naming_templates, resolve_path_template_for_variant
 from mysuite.export.planner import MysuitePlannerError, build_plan
+from mysuite.color.cmyk import CmykError, CmykSettings
 from mysuite.color.svg import DEFAULT_TOLERANCE
 from mysuite.export.recolor import InvalidRecolorError, apply_recolor, parse_recolor_list
 from mysuite.export.renderer import Renderer
@@ -150,6 +151,17 @@ def export(
         "as it; 0 = exact match only, 2 = just-noticeable difference (default). Catches "
         "anti-aliased or slightly-off brand colours.",
     ),
+    cmyk_mode: Optional[str] = typer.Option(
+        None, "--cmyk-mode",
+        help="How CMYK numbers are chosen for --profiles cmyk (pdf/eps/tiff all use the same engine): "
+        "'exact' keeps the profile's values; 'clean' or 'clean:N' snaps every channel to a multiple "
+        "of N (default 5, so 73/92 becomes 75/90) and prints the colour shift. Greys are always K-only.",
+    ),
+    cmyk_profile: Optional[Path] = typer.Option(
+        None, "--cmyk-profile", exists=True, dir_okay=False,
+        help="CMYK ICC profile (e.g. FOGRA39 or your printer's) used for the conversion and embedded "
+        "as the PDF output intent. Default: Ghostscript's SWOP profile.",
+    ),
     recursive: bool = typer.Option(
         False, "--recursive", help="When an input is a directory, include SVGs in subdirectories too."
     ),
@@ -210,6 +222,15 @@ def export(
         date_stamp=resolved_date_stamp,
         default_naming_template=DEFAULT_NAMING_TEMPLATE,
     )
+
+    try:
+        resolved_cmyk = CmykSettings.parse(
+            cmyk_mode or settings.cmyk_mode, str(cmyk_profile) if cmyk_profile else settings.cmyk_profile
+        )
+    except CmykError as exc:
+        log_error(str(exc))
+        raise typer.Exit(1) from exc
+    resolved_recolor_tolerance = settings.recolor_tolerance if recolor_tolerance == DEFAULT_TOLERANCE else recolor_tolerance
 
     resolved_variant = settings.variant if variant is None else variant
     effective_path_template = resolve_path_template_for_variant(
@@ -285,6 +306,7 @@ def export(
         margin_bottom=resolved_margin_bottom,
         margin_left=resolved_margin_left,
         png_compression=resolved_png_compression,
+        cmyk=resolved_cmyk,
     )
 
     batch = len(input_files) > 1
@@ -338,9 +360,12 @@ def export(
             else:
                 log_step(str(job.output_path))
 
-        render_svg, is_temp = apply_recolor(input_svg, resolved_recolor_map, recolor_tolerance)
+        render_svg, is_temp = apply_recolor(input_svg, resolved_recolor_map, resolved_recolor_tolerance)
         try:
             result = renderer.execute(plan, render_svg, on_job_done=on_job_done)
+        except CmykError as exc:
+            log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+            raise typer.Exit(1) from exc
         except MysuiteToolError as exc:
             detail = (exc.stderr or "").strip().splitlines()
             log_error(f"{escape(str(input_svg))}: {escape(detail[-1] if detail else str(exc))}")
@@ -351,6 +376,16 @@ def export(
         finally:
             if is_temp:
                 render_svg.unlink(missing_ok=True)
+        if result.cmyk_conversions and not quiet:
+            console.print(
+                f"[dim]CMYK ({escape(resolved_cmyk.mode)}"
+                f"{':' + str(resolved_cmyk.step) if resolved_cmyk.mode == 'clean' else ''}, "
+                f"{escape(renderer._engine.description)}):[/dim]"
+            )
+            for conv in sorted(result.cmyk_conversions, key=lambda c: c.rgb):
+                console.print(f"[dim]  {escape(conv.label())}[/dim]")
+        for note in result.cmyk_notes:
+            log_skip(escape(note))
         total_written += len(result.written)
         total_skipped_existing += len(result.skipped_existing)
 

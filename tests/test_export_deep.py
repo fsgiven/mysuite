@@ -97,7 +97,6 @@ def test_cmyk_tiff_really_is_cmyk(logo, tmp_path):
 
 
 @need_tools
-@pytest.mark.xfail(strict=True, reason="FINDING C1: pdf (Ghostscript) and tiff (ImageMagick) convert RGB->CMYK with different engines, so one brand red gets different inks per format")
 def test_same_colour_gets_the_same_ink_in_pdf_and_tiff(logo, tmp_path):
     run_export(logo, tmp_path / "o", "--formats", "pdf,tiff", "--profiles", "cmyk", "--sizes", "100", "-q")
     (pdf,) = (tmp_path / "o").rglob("*.pdf")
@@ -110,7 +109,6 @@ def test_same_colour_gets_the_same_ink_in_pdf_and_tiff(logo, tmp_path):
 
 
 @need_tools
-@pytest.mark.xfail(strict=True, reason="FINDING C2: neutral grey #222222 becomes a 'rich' CMYK mix (~69/66/65/72) in PDF/EPS instead of K-only")
 def test_neutral_grey_stays_black_ink_only_in_cmyk_pdf(tmp_path):
     svg = write_svg(tmp_path / "g.svg", '<rect width="200" height="100" fill="#222222"/>')
     run_export(svg, tmp_path / "o", "--formats", "pdf", "--profiles", "cmyk", "--sizes", "100", "-q")
@@ -120,7 +118,6 @@ def test_neutral_grey_stays_black_ink_only_in_cmyk_pdf(tmp_path):
 
 
 @need_tools
-@pytest.mark.xfail(strict=True, reason="FINDING C3: no ICC profile / output intent is embedded, so the CMYK numbers have no defined meaning for a print shop")
 def test_cmyk_pdf_declares_a_colour_profile_or_output_intent(logo, tmp_path):
     run_export(logo, tmp_path / "o", "--formats", "pdf", "--profiles", "cmyk", "--sizes", "100", "-q")
     (pdf,) = (tmp_path / "o").rglob("*.pdf")

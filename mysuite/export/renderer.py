@@ -6,6 +6,8 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from mysuite.color import pdfink
+from mysuite.color.cmyk import CmykEngine, CmykSettings
 from mysuite.config import ToolPaths
 from mysuite.export.models import BundleJob, ExportJob, ExportPlan
 from mysuite.export.planner import ICNS_STANDARD_PIXEL_SIZES
@@ -33,6 +35,8 @@ _ICNS_ICONSET_FILENAMES: dict[int, list[str]] = {
 class ExecutionResult:
     written: list[Path] = field(default_factory=list)
     skipped_existing: list[Path] = field(default_factory=list)
+    cmyk_conversions: list = field(default_factory=list)  # color.cmyk.Conversion, one per distinct flat colour
+    cmyk_notes: list[str] = field(default_factory=list)
 
 
 def native_svg_size(svg_path: Path) -> int | None:
@@ -179,6 +183,35 @@ def _render_derived_raster(
     _atomic_write_via(output_path, write)
 
 
+def _render_cmyk_tiff(
+    input_svg: Path, output_path: Path, size: Size, dpi: float, tools: ToolPaths, engine: CmykEngine,
+    *, background: str | None, margin: Margin, notes: list[str],
+) -> None:
+    """CMYK TIFF through the same colour engine as the PDF (was ImageMagick's own, different, conversion)."""
+    from PIL import Image
+
+    def write(tmp_path: Path) -> None:
+        base_png = tmp_path.with_suffix(".base.png")
+        try:
+            _rsvg_render_png(input_svg, base_png, size, dpi, tools)
+            _apply_background_and_margin(base_png, background=background, margin=margin, tools=tools)
+            with Image.open(base_png) as im:
+                im = im.convert("RGBA")
+                if im.getchannel("A").getextrema()[0] < 255:
+                    note = "CMYK TIFF has no transparency: transparent areas were flattened on white (use --background to choose)"
+                    if note not in notes:
+                        notes.append(note)
+                flat = Image.new("RGB", im.size, "white")
+                flat.paste(im, mask=im.getchannel("A"))
+                cmyk = engine.convert_image(flat)
+            cmyk.save(tmp_path, format="TIFF", compression="tiff_lzw", dpi=(dpi, dpi), icc_profile=engine.icc_bytes)
+        finally:
+            if base_png.exists():
+                base_png.unlink()
+
+    _atomic_write_via(output_path, write, preserve_extension=True)
+
+
 def _render_pdf_rgb(input_svg: Path, output_path: Path, size: Size, dpi: float, tools: ToolPaths) -> None:
     def write(tmp_path: Path) -> None:
         run([
@@ -196,22 +229,44 @@ def _render_pdf_rgb(input_svg: Path, output_path: Path, size: Size, dpi: float, 
     _atomic_write_via(output_path, write)
 
 
-def _convert_pdf_to_cmyk(input_pdf: Path, output_path: Path, tools: ToolPaths) -> None:
-    def write(tmp_path: Path) -> None:
-        run([
-            tools.gs,
-            "-dBATCH",
-            "-dNOPAUSE",
-            "-dSAFER",
-            "-sDEVICE=pdfwrite",
-            "-sColorConversionStrategy=CMYK",
-            "-dProcessColorModel=/DeviceCMYK",
-            "-dCompatibilityLevel=1.4",
-            f"-sOutputFile={tmp_path}",
-            str(input_pdf),
-        ])
+def _gs_pdf(tools: ToolPaths, input_pdf: Path, output_path: Path, *extra: str) -> None:
+    run([
+        tools.gs, "-q", "-dBATCH", "-dNOPAUSE", "-dSAFER", "-sDEVICE=pdfwrite",
+        "-dCompatibilityLevel=1.4", *extra, f"-sOutputFile={output_path}", str(input_pdf),
+    ])
 
+
+def _build_cmyk_pdf(
+    rgb_pdf: Path, output_path: Path, tools: ToolPaths, engine: CmykEngine
+) -> int:
+    """RGB master -> CMYK PDF whose flat colours carry exactly the engine's numbers.
+    Returns how many non-flat RGB constructs (gradients, images, groups) Ghostscript had to convert itself."""
+    def write(tmp_path: Path) -> None:
+        classic = tmp_path.with_suffix(".classic.pdf")
+        rewritten = tmp_path.with_suffix(".k.pdf")
+        try:
+            # 1. classic-structure RGB copy (cairo writes object streams we don't edit)
+            _gs_pdf(tools, rgb_pdf, classic, "-sColorConversionStrategy=LeaveColorUnchanged")
+            # 2. flat rg/RG/g/G -> k/K with our numbers
+            data = pdfink.rewrite_flat_colours(classic.read_bytes(), engine.convert01)
+            remaining[0] = pdfink.count_rgb_operators(data)
+            rewritten.write_bytes(data)
+            # 3. Ghostscript converts whatever is still RGB (gradients, images); k/K stay as written
+            _gs_pdf(
+                tools, rewritten, tmp_path,
+                "-sColorConversionStrategy=CMYK", "-dProcessColorModel=/DeviceCMYK",
+                f"--permit-file-read={engine.profile_path}",   # -dSAFER blocks reading a user-chosen profile otherwise
+                f"-sOutputICCProfile={engine.profile_path}",
+            )
+            # 4. say which CMYK the numbers mean
+            tmp_path.write_bytes(pdfink.add_output_intent(tmp_path.read_bytes(), engine.icc_bytes, engine.description))
+        finally:
+            for leftover in (classic, rewritten):
+                leftover.unlink(missing_ok=True)
+
+    remaining = [0]
     _atomic_write_via(output_path, write)
+    return remaining[0]
 
 
 def _convert_pdf_to_eps(input_pdf: Path, output_path: Path, tools: ToolPaths) -> None:
@@ -384,7 +439,10 @@ class Renderer:
         margin_bottom: str | None = None,
         margin_left: str | None = None,
         png_compression: int | None = None,
+        cmyk: CmykSettings | None = None,
     ):
+        self.cmyk = cmyk or CmykSettings()
+        self._engine: CmykEngine | None = None
         self.tools = tools
         self.dpi = dpi
         self.normalize_png = normalize_png
@@ -396,6 +454,11 @@ class Renderer:
         self.margin_bottom = margin_bottom
         self.margin_left = margin_left
         self.png_compression = png_compression
+
+    def _cmyk_engine(self) -> CmykEngine:
+        if self._engine is None:
+            self._engine = CmykEngine(self.cmyk, gs_binary=self.tools.gs)
+        return self._engine
 
     def _margin(self, reference_px: int) -> Margin:
         return resolve_margin(
@@ -426,7 +489,12 @@ class Renderer:
                     _render_pdf_rgb(input_svg, target, size, self.dpi, self.tools)
                 else:
                     rgb_master = get_pdf_master("rgb")
-                    _convert_pdf_to_cmyk(rgb_master, target, self.tools)
+                    unflat = _build_cmyk_pdf(rgb_master, target, self.tools, self._cmyk_engine())
+                    if unflat:
+                        note = (f"{unflat} gradient/image/transparency colour space(s) were converted by "
+                                "Ghostscript with the same profile, not rewritten to the chosen mode")
+                        if note not in result.cmyk_notes:
+                            result.cmyk_notes.append(note)
                 pdf_master_cache[colorspace] = target
                 return target
 
@@ -464,8 +532,13 @@ class Renderer:
                         margin=margin,
                         extra_magick_args=["-quality", str(self.quality)] if self.quality is not None else [],
                     )
+                elif job.format == "tiff" and job.colorspace == "cmyk":
+                    _render_cmyk_tiff(
+                        input_svg, job.output_path, size, self.dpi, self.tools, self._cmyk_engine(),
+                        background=self.background, margin=margin, notes=result.cmyk_notes,
+                    )
                 elif job.format == "tiff":
-                    extra = ["-colorspace", "CMYK"] if job.colorspace == "cmyk" else []
+                    extra: list[str] = []
                     _render_derived_raster(
                         input_svg, job.output_path, size, self.dpi, self.tools,
                         magick_format_token="tiff",
@@ -493,6 +566,10 @@ class Renderer:
             for path in pdf_master_cache.values():
                 if path.exists():
                     path.unlink()
+
+        if self._engine is not None:
+            result.cmyk_conversions = self._engine.conversions
+            result.cmyk_notes += self._engine.warnings()
 
         for bundle_job in plan.bundle_jobs:
             if not self.overwrite and bundle_job.output_path.exists():

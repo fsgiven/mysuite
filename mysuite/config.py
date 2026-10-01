@@ -67,9 +67,16 @@ class ExportSettings:
     """Nests this export under exports/<name>/<variant>/... alongside the primary
     exports/<name>/... export, instead of getting its own top-level name folder."""
     recolor: dict[str, str] = field(default_factory=dict)
-    """Exact hex color substitutions ({"#000000": "#ffffff"}) applied to the SVG
-    source before rendering — matches literal #hex tokens only, not named colors
-    or rgb()/hsl() notation."""
+    """Colour substitutions ({"#000000": "#ffffff"}) applied to the SVG source before
+    rendering. Colours are matched by value (#d00 = #dd0000 = rgb(221,0,0) = hsl(...))
+    and, within recolor_tolerance (CIEDE2000), near-identical colours too."""
+    recolor_tolerance: float = 2.0
+    cmyk_mode: str = "exact"
+    """'exact' (the profile's numbers), 'clean' or 'clean:<step>' (snap each channel to a
+    multiple of step, default 5: 73/92 -> 75/90)."""
+    cmyk_profile: str | None = None
+    """ICC profile used for RGB->CMYK and embedded as the PDF output intent. Default:
+    Ghostscript's CMYK SWOP profile (else macOS Generic CMYK)."""
 
 
 @dataclass

@@ -8,7 +8,7 @@ offline, file-in/file-out, no preview needed, each step reports JSON, each step 
 
 | # | Block | Clears / delivers |
 | --- | --- | --- |
-| 1 | **Colour engine** (`mysuite/color/`) | the 9 open findings C1–C3, R1–R5; then every `xfail` marker is deleted |
+| 1 | ✅ **Colour engine** (`mysuite/color/`) — done | C1–C3, R1–R5 fixed; no `xfail` markers left; `mysuite colors` palette command and `tokens` CMYK mode still to add |
 | 2 | **Agent layer** (SPEC-agents milestones 1–4) | API layer, `--json`, exit codes, sandbox, `schema`, `inspect`, `AGENTS.md`, `llms.txt`, skill, doc-tests |
 | 3 | **Pipelines** (milestone 5) | declarative multi-tool runs, one dry-run plan |
 | 4 | **MCP server** (milestone 6) | `mysuite mcp` for Claude Desktop/Cursor/local-model clients |

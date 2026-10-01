@@ -36,6 +36,7 @@ from mysuite.export._parsing import InvalidInputError, parse_sizes, resolve_inpu
 from mysuite.export.models import ExportJob, ExportPlan
 from mysuite.export.naming import resolve_naming_templates, resolve_path_template_for_variant
 from mysuite.export.planner import MysuitePlannerError, build_plan
+from mysuite.color.cmyk import CmykSettings
 from mysuite.export.recolor import InvalidRecolorError, apply_recolor, parse_recolor_pairs
 from mysuite.export.renderer import ExecutionResult, Renderer
 from mysuite.export.units import VALID_UNITS, InvalidPaddingError, parse_padding, parse_size
@@ -636,6 +637,7 @@ class ExportScreen(Screen):
             margin_bottom=margin_bottom,
             margin_left=margin_left,
             png_compression=png_compression,
+            cmyk=CmykSettings.parse(self._settings.cmyk_mode, self._settings.cmyk_profile),
         )
 
         def on_job_done(job, skipped: bool) -> None:

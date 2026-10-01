@@ -38,7 +38,7 @@ mysuite is a young personal project, released as-is. Please read this before rel
 
 | Tool | Automated tests | Known problems |
 | --- | --- | --- |
-| `export` | Yes: every format and colourspace, CMYK values read back from the PDF, the recolor matrix, unusual and hostile SVGs, naming and path safety | **CMYK is inconsistent between PDF/EPS and TIFF**, greys come out as rich blacks, no ICC profile is embedded, and recolor misses `#d00`, `rgb()` and `hsl()` colours |
+| `export` | Yes: every format and colourspace, CMYK values read back from the PDF, the recolor matrix, unusual and hostile SVGs, naming and path safety | CMYK numbers come from an ICC profile, so they are only as good as that profile: the default is Ghostscript's SWOP-like one, not your printer's (pass `--cmyk-profile`). Gradients and images are converted by Ghostscript, not rewritten to `clean` values (and the export says so). Spot colours (Pantone) are not supported |
 | `convert` | Yes: the full source × target matrix and edge cases | single-frame targets keep only the first page/frame (and say so) |
 | `watermark` | Yes: all 9 positions, opacity, scale, SVG logos | none known |
 | `cutout` | Yes (needs the macOS helper, so skipped on CI): real Vision runs | Vision is probabilistic: it sometimes picks the wrong subject (an empty result is now reported as a failure) |
@@ -47,8 +47,7 @@ mysuite is a young personal project, released as-is. Please read this before rel
 | `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | the optional AI backend has **never been run with real model weights**; 16-bit sources become 8-bit (now reported) |
 | Terminal dashboard | Yes for all screens except the file-picker edge cases | Drag-and-drop depends on your terminal emulator |
 
-Of the 22 findings from the first test pass, 13 are fixed; the open ones are the export colour problems
-(CMYK consistency, ICC profile, recolor notation), which the colour-engine work addresses. Details are in
+All 22 findings from the first test pass are fixed and the suite has no expected failures. Details are in
 [docs/TEST-FINDINGS.md](docs/TEST-FINDINGS.md).
 
 **What was run on:** one machine, macOS 26 (Apple Silicon), Homebrew, Python 3.11, with ImageMagick
@@ -274,9 +273,36 @@ mysuite preset save acme-negative --variant negative \
 mysuite export logo.svg --preset acme-negative
 ```
 
-Note: this covers *simple* recoloring — swapping one RGB/hex value for another. It doesn't yet
-guarantee an *exact* CMYK output value for a color (Ghostscript's automatic RGB→CMYK conversion can
-still produce a muddier result than a manually-tuned brand CMYK value); that's a planned follow-up.
+Colours are compared **by value**, wherever SVG allows a colour (attributes, `style=""`, `<style>`
+blocks, gradient stops): `#d00`, `#dd0000`, `rgb(221,0,0)`, `rgb(86.7%,0,0)`, `hsl(0,100%,43.3%)` and the
+named colour are all the same colour. A colour within `--recolor-tolerance` (CIEDE2000, default 2 — about the
+smallest difference you can see; 0 = exact only) also counts, so anti-aliased or slightly-off brand colours
+are caught. A colour written with an alpha (`#dd0000ff`, `rgba()`) only matches a FROM that also has an alpha.
+`FROM` can be hex or a name on the command line; `rgb()`/`hsl()` forms work in config files.
+
+### CMYK: one engine for PDF, EPS and TIFF
+
+All three formats now get their CMYK numbers from the same ICC conversion, so one brand red has the same inks
+in every file (it used to differ: PDF C6 M100 Y100 K1, TIFF C0 M100 Y100 K34).
+
+```bash
+mysuite export logo.svg --formats pdf,eps,tiff --profiles cmyk                       # exact: the profile's numbers
+mysuite export logo.svg --formats pdf,eps,tiff --profiles cmyk --cmyk-mode clean     # snap to multiples of 5
+mysuite export logo.svg --formats pdf --profiles cmyk --cmyk-mode clean:10            # coarser
+mysuite export logo.svg --formats pdf --profiles cmyk --cmyk-profile FOGRA39.icc      # your printer's profile
+```
+
+- `exact` keeps the profile's numbers; `clean[:N]` snaps every channel to the nearest multiple of N (default 5,
+  so 73/92 becomes 75/90; ≤3 becomes 0 and ≥97 becomes 100). The export prints each colour's result and how far
+  it moved (CIEDE2000 "dE"), so cleaning is never silent. The same settings can live in `mysuite.toml` as
+  `cmyk_mode` and `cmyk_profile`.
+- Greys are always **black ink only** (no "rich" 69/66/65/72 mixes), with the K that best matches the grey in
+  the profile. Pure black is 0/0/0/100.
+- The PDF declares the profile as its **output intent**, so a print shop knows what the numbers mean.
+- Limits: gradients, images and transparency groups are converted by Ghostscript with the same profile but are
+  not snapped to `clean` values (the export tells you when that happened); ink values in the PDF can wobble by
+  about 0.1 % (Ghostscript prints 70 as 69.9); a CMYK TIFF can't hold transparency, so it is flattened on white
+  unless you pass `--background`; spot colours are not supported.
 
 ## Presets
 
