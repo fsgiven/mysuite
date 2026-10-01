@@ -8,9 +8,10 @@ import typer
 from rich.markup import escape
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
-from mysuite.doctor import NEEDS, missing_tools, run_doctor
+from mysuite.doctor import require_tools
 from mysuite.metadata._parsing import output_path_for
 from mysuite.metadata.metadata import credit_file, randomize_file, strip_file
+from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
@@ -24,6 +25,7 @@ def _run_batch(input_files: list[Path], *, mode: str, run_one, dry_run: bool, qu
     if dry_run:
         for input_path in input_files:
             output_path = output_path_for(input_path, mode)
+            jsonout.add_item(input=input_path, output=output_path, status="planned")
             if not quiet:
                 console.print(f"[dim]{escape(str(input_path))} -> {escape(str(output_path))}[/dim]")
         if not quiet:
@@ -39,10 +41,13 @@ def _run_batch(input_files: list[Path], *, mode: str, run_one, dry_run: bool, qu
             outcome = run_one(input_path)
         except MysuiteToolError as exc:
             failures.append((input_path, str(exc)))
+            jsonout.add_item(input=input_path, status="failed", error=str(exc))
             if not quiet:
                 log_error(f"{escape(str(input_path))}: {escape(str(exc))}")
             continue
 
+        jsonout.add_item(input=input_path, output=outcome.output_path,
+                         status="skipped_existing" if outcome.status == "skipped_existing" else "written")
         if outcome.status == "skipped_existing":
             total_skipped += 1
             if not quiet:
@@ -64,6 +69,7 @@ def _run_batch(input_files: list[Path], *, mode: str, run_one, dry_run: bool, qu
 
 
 @app.command("strip", help="Strip all EXIF/IPTC/XMP/ICC metadata, writing a new file beside the source.")
+@jsonout.with_json("metadata-strip")
 def strip(
     inputs: List[Path] = typer.Argument(
         ..., exists=True, readable=True,
@@ -89,10 +95,7 @@ def strip(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools, NEEDS["metadata-strip"])
-    if missing:
-        run_doctor(config.tools, NEEDS["metadata-strip"])
-        raise typer.Exit(1)
+    require_tools(config.tools, "metadata-strip")
 
     _run_batch(
         input_files, mode="stripped",
@@ -102,6 +105,7 @@ def strip(
 
 
 @app.command("credit", help="Embed a signed C2PA provenance manifest (author/copyright) for correct crediting.")
+@jsonout.with_json("metadata-credit")
 def credit(
     inputs: List[Path] = typer.Argument(
         ..., exists=True, readable=True,
@@ -137,10 +141,7 @@ def credit(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools, NEEDS["metadata-credit"])
-    if missing:
-        run_doctor(config.tools, NEEDS["metadata-credit"])
-        raise typer.Exit(1)
+    require_tools(config.tools, "metadata-credit")
 
     _run_batch(
         input_files, mode="credited",
@@ -157,6 +158,7 @@ def credit(
     help="Strip all metadata, then write one internally consistent decoy camera identity "
     "(make/model/lens/firmware + plausible exposure and a recent capture time; never GPS).",
 )
+@jsonout.with_json("metadata-randomize")
 def randomize(
     inputs: List[Path] = typer.Argument(
         ..., exists=True, readable=True,
@@ -182,10 +184,7 @@ def randomize(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools, NEEDS["metadata-randomize"])
-    if missing:
-        run_doctor(config.tools, NEEDS["metadata-randomize"])
-        raise typer.Exit(1)
+    require_tools(config.tools, "metadata-randomize")
 
     _run_batch(
         input_files, mode="randomized",

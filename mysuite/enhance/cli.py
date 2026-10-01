@@ -17,6 +17,7 @@ from mysuite.enhance._parsing import (
 )
 from mysuite.enhance.enhance import EnhanceError, EnhanceSettings, enhance_file
 from mysuite.enhance.upscalers import backend_status
+from mysuite.utils import jsonout
 from mysuite.utils.console import WARNING, console, log_error, log_step
 
 app = typer.Typer(
@@ -26,6 +27,7 @@ app = typer.Typer(
 
 
 @app.command("run", help="Enhance photo(s), writing <name>_enhanced.<ext> beside each source.")
+@jsonout.with_json("enhance")
 def run(
     inputs: List[Path] = typer.Argument(
         ..., exists=True, readable=True,
@@ -86,6 +88,7 @@ def run(
 
     if dry_run:
         for f in files:
+            jsonout.add_item(input=f, output=output_path_for(f, settings.output_format), status="planned")
             if not quiet:
                 console.print(f"[dim]{escape(str(f))} -> {escape(str(output_path_for(f, settings.output_format)))}[/dim]")
         if not quiet:
@@ -98,12 +101,23 @@ def run(
             outcome = enhance_file(f, settings, backend=backend, overwrite=overwrite)
         except EnhanceError as exc:
             failed += 1
+            jsonout.add_item(input=f, status="failed", error=str(exc))
             log_error(f"{escape(str(f))}: {escape(str(exc))}")
             if record_history:
                 history.record(input_path=str(f), output_path=None, preset=preset or "gentle",
                                backend=backend, status="failed", error=str(exc))
             continue
 
+        jsonout.add_item(
+            input=f, output=outcome.output_path,
+            status="skipped_existing" if outcome.status == "skipped_existing" else "written",
+            **({} if outcome.status == "skipped_existing" else {
+                "input_size": list(outcome.input_size), "output_size": list(outcome.output_size),
+                "backend": outcome.backend_used, "seconds": round(outcome.duration_seconds, 2),
+                "notes": outcome.notes}),
+        )
+        for note in getattr(outcome, "notes", []) or []:
+            jsonout.add_warning(f"{f}: {note}")
         if outcome.status == "skipped_existing":
             skipped += 1
             if not quiet:

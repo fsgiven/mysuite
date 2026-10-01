@@ -6,7 +6,8 @@ from mysuite.compress.cli import compress as compress_command
 from mysuite.config import load_config
 from mysuite.convert.cli import convert as convert_command
 from mysuite.cutout.cli import cutout as cutout_command
-from mysuite.doctor import run_doctor
+from mysuite.doctor import TOOL_SPECS, check_tools, run_doctor
+from mysuite.utils import jsonout
 from mysuite.enhance.cli import app as enhance_app
 from mysuite.export.cli import export as export_command
 from mysuite.metadata.cli import app as metadata_app
@@ -39,8 +40,14 @@ app.add_typer(enhance_app, name="enhance")
 
 
 @app.command("doctor", help="Check that required tools (rsvg-convert, gs, magick, mysuite-cutout, exiftool, c2patool, codec encoders) are installed.")
+@jsonout.with_json("doctor")
 def doctor() -> None:
     config = load_config()
+    resolved = check_tools(config.tools)
+    hints = {spec.attr: spec.install_hint for spec in TOOL_SPECS}
+    for name, path in resolved.items():
+        jsonout.add_item(tool=name, found=path is not None, path=path,
+                         install_hint=None if path else hints[name])
     all_ok = run_doctor(config.tools)
     raise typer.Exit(0 if all_ok else 1)
 

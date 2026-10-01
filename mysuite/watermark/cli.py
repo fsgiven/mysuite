@@ -8,13 +8,15 @@ import typer
 from rich.markup import escape
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, detect_source_format, resolve_input_files
-from mysuite.doctor import NEEDS, missing_tools, run_doctor
+from mysuite.doctor import require_tools
+from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 from mysuite.watermark._parsing import output_path_for
 from mysuite.watermark.watermark import GRAVITY_BY_POSITION, WatermarkError, watermark_file
 
 
+@jsonout.with_json("watermark")
 def watermark(
     inputs: List[Path] = typer.Argument(
         ..., exists=True, readable=True,
@@ -73,10 +75,7 @@ def watermark(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools, NEEDS["watermark"])
-    if missing:
-        run_doctor(config.tools, NEEDS["watermark"])
-        raise typer.Exit(1)
+    require_tools(config.tools, "watermark")
 
     if dry_run:
         for input_path in input_files:
@@ -84,6 +83,7 @@ def watermark(
             if source_format is None:
                 continue
             output_path = output_path_for(input_path, source_format)
+            jsonout.add_item(input=input_path, output=output_path, status="planned")
             if not quiet:
                 console.print(f"[dim]{escape(str(input_path))} -> {escape(str(output_path))}[/dim]")
         if not quiet:
@@ -103,10 +103,13 @@ def watermark(
             )
         except (WatermarkError, MysuiteToolError) as exc:
             failures.append((input_path, str(exc)))
+            jsonout.add_item(input=input_path, status="failed", error=str(exc))
             if not quiet:
                 log_error(f"{escape(str(input_path))}: {escape(str(exc))}")
             continue
 
+        jsonout.add_item(input=input_path, output=outcome.output_path,
+                         status="skipped_existing" if outcome.status == "skipped_existing" else "written")
         if outcome.status == "skipped_existing":
             total_skipped += 1
             if not quiet:

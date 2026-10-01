@@ -15,7 +15,8 @@ from mysuite.compress._parsing import (
 from mysuite.compress.compress import CompressError, compress_file
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
-from mysuite.doctor import missing_tools, run_doctor
+from mysuite.doctor import require_tools
+from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
@@ -32,6 +33,7 @@ _TOOL_ATTR_BY_CODEC: dict[str, str] = {
 }
 
 
+@jsonout.with_json("compress")
 def compress(
     inputs: Optional[List[Path]] = typer.Argument(
         None, exists=True, readable=True,
@@ -179,10 +181,7 @@ def compress(
         log_error(f"unknown codec: {resolved_codec!r} — expected one of {', '.join(CODECS)}")
         raise typer.Exit(1)
 
-    required_attr = _TOOL_ATTR_BY_CODEC[resolved_codec]
-    if required_attr in missing_tools(config.tools):
-        run_doctor(config.tools)
-        raise typer.Exit(1)
+    require_tools(config.tools, f"compress-{resolved_codec}")
 
     try:
         check_no_output_collisions(input_files, resolved_codec)
@@ -193,6 +192,7 @@ def compress(
     if dry_run:
         for input_path in input_files:
             output_path = output_path_for(input_path, resolved_codec)
+            jsonout.add_item(input=input_path, output=output_path, status="planned")
             if not quiet:
                 console.print(f"[dim]{escape(str(input_path))} -> {escape(str(output_path))}[/dim]")
         if not quiet:
@@ -211,10 +211,13 @@ def compress(
             )
         except (CompressError, MysuiteToolError) as exc:
             failures.append((input_path, str(exc)))
+            jsonout.add_item(input=input_path, status="failed", error=str(exc))
             if not quiet:
                 log_error(f"{escape(str(input_path))}: {escape(str(exc))}")
             continue
 
+        jsonout.add_item(input=input_path, output=outcome.output_path,
+                         status="skipped_existing" if outcome.status == "skipped_existing" else "written")
         if outcome.status == "skipped_existing":
             total_skipped += 1
             if not quiet:

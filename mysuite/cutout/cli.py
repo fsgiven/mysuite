@@ -10,11 +10,13 @@ from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.cutout._parsing import output_path_for
 from mysuite.cutout.cutout import CutoutError, cutout_file
-from mysuite.doctor import NEEDS, missing_tools, run_doctor
+from mysuite.doctor import require_tools
+from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
 
+@jsonout.with_json("cutout")
 def cutout(
     inputs: List[Path] = typer.Argument(
         ..., exists=True, readable=True,
@@ -48,14 +50,12 @@ def cutout(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools, NEEDS["cutout"])
-    if missing:
-        run_doctor(config.tools, NEEDS["cutout"])
-        raise typer.Exit(1)
+    require_tools(config.tools, "cutout")
 
     if dry_run:
         for input_path in input_files:
             output_path = output_path_for(input_path)
+            jsonout.add_item(input=input_path, output=output_path, status="planned")
             if not quiet:
                 console.print(f"[dim]{escape(str(input_path))} -> {escape(str(output_path))}[/dim]")
         if not quiet:
@@ -71,10 +71,13 @@ def cutout(
             outcome = cutout_file(input_path, tools=config.tools, overwrite=overwrite)
         except (CutoutError, MysuiteToolError) as exc:
             failures.append((input_path, str(exc)))
+            jsonout.add_item(input=input_path, status="failed", error=str(exc))
             if not quiet:
                 log_error(f"{escape(str(input_path))}: {escape(str(exc))}")
             continue
 
+        jsonout.add_item(input=input_path, output=outcome.output_path,
+                         status="skipped_existing" if outcome.status == "skipped_existing" else "written")
         if outcome.status == "skipped_existing":
             total_skipped += 1
             if not quiet:

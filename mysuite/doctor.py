@@ -70,6 +70,12 @@ NEEDS: dict[str, tuple[str, ...]] = {
     "metadata-strip": ("exiftool", "magick"),
     "metadata-randomize": ("exiftool", "magick"),
     "metadata-credit": ("c2patool",),
+    "compress-mozjpeg": ("cjpeg",),
+    "compress-webp": ("cwebp",),
+    "compress-avif": ("avifenc",),
+    "compress-oxipng": ("oxipng",),
+    "compress-pngquant": ("pngquant",),
+    "compress-gifsicle": ("gifsicle",),
 }
 
 
@@ -113,3 +119,20 @@ def run_doctor(tools: ToolPaths, needed: tuple[str, ...] | None = None) -> bool:
                 console.print(f"  {attr}: {hints_by_attr[attr]}")
 
     return all_ok
+
+
+def require_tools(tools: ToolPaths, key: str) -> None:
+    """Exit 4 (with the doctor table and, for --json, structured install hints) if a command's tools are missing."""
+    import typer
+
+    from mysuite.utils import jsonout
+
+    needed = NEEDS[key]
+    missing = missing_tools(tools, needed)
+    if not missing:
+        return
+    hints = {spec.attr: spec.install_hint for spec in TOOL_SPECS}
+    jsonout.add_error("missing required tool(s): " + ", ".join(missing))
+    jsonout.set_extra(missing_tools=[{"tool": name, "install_hint": hints[name]} for name in missing])
+    run_doctor(tools, needed)
+    raise typer.Exit(jsonout.EXIT_MISSING_TOOL)

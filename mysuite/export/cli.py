@@ -9,7 +9,7 @@ from rich.tree import Tree
 
 from rich.markup import escape
 from mysuite.config import DEFAULT_NAMING_TEMPLATE, DEFAULT_PATH_TEMPLATE, MysuiteConfigError, load_config
-from mysuite.doctor import NEEDS, missing_tools, run_doctor
+from mysuite.doctor import require_tools
 from mysuite.export._parsing import (
     VALID_FORMATS,
     VALID_PROFILES,
@@ -33,6 +33,7 @@ from mysuite.export.units import (
     parse_size,
 )
 from mysuite.utils.subprocess_utils import MysuiteToolError
+from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_skip, log_step
 
 
@@ -73,6 +74,7 @@ def _build_tree(name: str, jobs, skips, bundle_jobs) -> Tree:
     return tree
 
 
+@jsonout.with_json("export")
 def export(
     inputs: List[Path] = typer.Argument(
         ..., exists=True, readable=True,
@@ -282,10 +284,7 @@ def export(
         log_error(f"output path is a file, not a folder: {escape(str(resolved_out))}")
         raise typer.Exit(1)
 
-    missing = missing_tools(config.tools, NEEDS["export"])
-    if missing:
-        run_doctor(config.tools, NEEDS["export"])
-        raise typer.Exit(1)
+    require_tools(config.tools, "export")
 
     if "icns" in resolved_formats and shutil.which(config.tools.iconutil) is None:
         log_error(
@@ -342,6 +341,16 @@ def export(
         file_total = len(plan.jobs) + len(plan.bundle_jobs)
         total_planned += file_total
 
+        for job in [*plan.jobs, *plan.bundle_jobs]:
+            if dry_run:
+                jsonout.add_item(
+                    input=input_svg, output=job.output_path, format=job.format,
+                    colorspace=job.colorspace, status="planned",
+                    **({"size": job.size.label} if hasattr(job, "size") else {"sizes": [s.label for s in job.sizes]}),
+                )
+        for skip in plan.skips:
+            jsonout.add_warning(f"{skip.format}/{skip.colorspace} skipped: {skip.reason}")
+
         if dry_run:
             if not quiet:
                 console.print(f"\n[dim]dry run — {file_total} file(s) would be written, 0 written[/dim]")
@@ -352,7 +361,12 @@ def export(
                 continue
             log_skip(f"{skip.format}/{skip.colorspace} — {escape(skip.reason)}")
 
-        def on_job_done(job, skipped: bool) -> None:
+        def on_job_done(job, skipped: bool, input_svg=input_svg) -> None:
+            jsonout.add_item(
+                input=input_svg, output=job.output_path, format=job.format, colorspace=job.colorspace,
+                status="skipped_existing" if skipped else "written",
+                **({"size": job.size.label} if hasattr(job, "size") else {"sizes": [s.label for s in job.sizes]}),
+            )
             if quiet:
                 return
             if skipped:
@@ -384,6 +398,16 @@ def export(
             )
             for conv in sorted(result.cmyk_conversions, key=lambda c: c.rgb):
                 console.print(f"[dim]  {escape(conv.label())}[/dim]")
+        if result.cmyk_conversions:
+            jsonout.set_extra(cmyk={
+                "mode": resolved_cmyk.mode, "step": resolved_cmyk.step if resolved_cmyk.mode == "clean" else None,
+                "profile": renderer._engine.description,
+                "colours": [
+                    {"rgb": f"#{c.rgb[0]:02x}{c.rgb[1]:02x}{c.rgb[2]:02x}", "cmyk": list(c.cmyk),
+                     "delta_e": c.delta_e, "neutral": c.neutral}
+                    for c in sorted(result.cmyk_conversions, key=lambda c: c.rgb)
+                ],
+            })
         for note in result.cmyk_notes:
             log_skip(escape(note))
         total_written += len(result.written)

@@ -15,12 +15,14 @@ from mysuite.convert._parsing import (
     resolve_input_files,
 )
 from mysuite.convert.converter import ConversionError, convert_file
-from mysuite.doctor import NEEDS, missing_tools, run_doctor
+from mysuite.doctor import require_tools
 from mysuite.export._parsing import parse_csv
+from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_skip, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
 
+@jsonout.with_json("convert")
 def convert(
     inputs: List[Path] = typer.Argument(
         ..., exists=True, readable=True,
@@ -78,10 +80,7 @@ def convert(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools, NEEDS["convert"])
-    if missing:
-        run_doctor(config.tools, NEEDS["convert"])
-        raise typer.Exit(1)
+    require_tools(config.tools, "convert")
 
     for target_format in target_formats:
         try:
@@ -94,6 +93,7 @@ def convert(
         for input_path in input_files:
             for target_format in target_formats:
                 output_path = output_path_for(input_path, target_format)
+                jsonout.add_item(input=input_path, output=output_path, format=target_format, status="planned")
                 if not quiet:
                     console.print(f"[dim]{escape(str(input_path))} -> {escape(str(output_path))}[/dim]")
         total_planned = len(input_files) * len(target_formats)
@@ -115,10 +115,18 @@ def convert(
                 )
             except (ConversionError, MysuiteToolError) as exc:
                 failures.append((input_path, target_format, str(exc)))
+                jsonout.add_item(input=input_path, format=target_format, status="failed", error=str(exc))
                 if not quiet:
                     log_error(f"{escape(str(input_path))} -> {target_format}: {escape(str(exc))}")
                 continue
 
+            jsonout.add_item(
+                input=input_path, output=outcome.output_path, format=target_format,
+                status="skipped_existing" if outcome.status == "skipped_existing" else "written",
+                note=outcome.note,
+            )
+            if outcome.note:
+                jsonout.add_warning(f"{input_path}: {outcome.note}")
             if outcome.status == "skipped_existing":
                 total_skipped += 1
                 if not quiet:
