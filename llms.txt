@@ -1,0 +1,9 @@
+# mysuite
+
+> Local, offline CLI toolbox for quick image/logo jobs (export, convert, cutout, watermark, metadata, compress, enhance). Every command supports --json.
+
+- [Agent guide](AGENTS.md): rules, which command to use, examples, exit codes
+- [Command reference](docs/agents/COMMANDS.md): every option, generated from the CLI
+- [README](README.md): install, tools, status and honest limits
+- [Roadmap](docs/ROADMAP.md)
+- Run `mysuite schema` for a machine-readable description of all commands and the result format

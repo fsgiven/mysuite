@@ -102,7 +102,7 @@ def schema(
     if command and not data["commands"]:
         typer.echo(f"unknown command: {' '.join(command)}", err=True)
         raise typer.Exit(2)
-    typer.echo(schema_module.markdown(data) if markdown else json.dumps(data, indent=2, ensure_ascii=False))
+    typer.echo(schema_module.markdown(data) if markdown else json.dumps(data, indent=2, ensure_ascii=False), nl=not markdown)
 
 
 def main() -> None:
