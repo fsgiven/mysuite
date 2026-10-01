@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 # Maps a recognized source file extension to a canonical format name.
@@ -52,6 +53,16 @@ def output_path_for(input_path: Path, target_format: str) -> Path:
     return input_path.with_suffix(TARGET_EXTENSIONS[target_format])
 
 
+
+def _absolute(path: Path) -> Path:
+    """Absolute (but symlink-preserving) path. Every downstream tool gets a path
+    that starts with "/" — a file named "-all=.jpg" or "-@" found by globbing a
+    folder would otherwise be parsed by exiftool/ImageMagick as an option, which
+    a hostile folder could abuse. Not resolve(): that would write outputs next
+    to a symlink's target instead of beside the link."""
+    return Path(os.path.abspath(path))
+
+
 def resolve_input_files(inputs: list[Path], *, recursive: bool = False) -> list[Path]:
     """Expands a mix of file paths and directories into a flat, de-duplicated,
     order-preserving list of recognized-format files. A directory is globbed
@@ -79,7 +90,7 @@ def resolve_input_files(inputs: list[Path], *, recursive: bool = False) -> list[
             key = f.resolve()
             if key not in seen:
                 seen.add(key)
-                resolved.append(f)
+                resolved.append(_absolute(f))
 
     if not resolved:
         raise InvalidInputError("no convertible files found")

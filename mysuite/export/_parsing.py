@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -11,6 +12,16 @@ VALID_PROFILES = {"rgb", "cmyk"}
 
 class InvalidInputError(ValueError):
     pass
+
+
+
+def _absolute(path: Path) -> Path:
+    """Absolute (but symlink-preserving) path. Every downstream tool gets a path
+    that starts with "/" — a file named "-all=.jpg" or "-@" found by globbing a
+    folder would otherwise be parsed by exiftool/ImageMagick as an option, which
+    a hostile folder could abuse. Not resolve(): that would write outputs next
+    to a symlink's target instead of beside the link."""
+    return Path(os.path.abspath(path))
 
 
 def resolve_input_files(inputs: list[Path], *, recursive: bool = False) -> list[Path]:
@@ -32,7 +43,7 @@ def resolve_input_files(inputs: list[Path], *, recursive: bool = False) -> list[
             key = f.resolve()
             if key not in seen_paths:
                 seen_paths.add(key)
-                resolved.append(f)
+                resolved.append(_absolute(f))
 
     if not resolved:
         raise InvalidInputError("no SVG files found")

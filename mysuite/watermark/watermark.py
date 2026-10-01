@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,6 +85,8 @@ def watermark_file(
     grid positions with margin_pct% breathing room from the edge, blended at
     opacity%. Raises WatermarkError for an unrecognized source/logo format or
     an unknown position, and MysuiteToolError if any tool invocation fails."""
+    input_path = Path(os.path.abspath(input_path))
+    logo_path = Path(os.path.abspath(logo_path))
     source_format = detect_source_format(input_path)
     if source_format is None:
         raise WatermarkError(f"unrecognized source format: {input_path}")
