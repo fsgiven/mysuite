@@ -9,6 +9,8 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DirectoryTree, Input, Static
 
+from mysuite.utils.paths import show_path
+
 
 class _VisibleDirectoryTree(DirectoryTree):
     """Hides dotfiles/dot-folders (.git, .DS_Store, ...) — they're clutter when
@@ -85,11 +87,11 @@ class FilePickerScreen(ModalScreen[Path | None]):
         return Path(self._tree.path)
 
     def _show_current(self) -> None:
-        self.query_one("#picker-current", Static).update(f"[dim]{self._current_dir()}[/dim]")
+        self.query_one("#picker-current", Static).update(f"[dim]{show_path(self._current_dir())}[/dim]")
 
     def _go(self, target: Path) -> None:
         if not target.is_dir():
-            self.query_one("#picker-current", Static).update(f"[#F87171]not a folder: {target}[/#F87171]")
+            self.query_one("#picker-current", Static).update(f"[#F87171]not a folder: {show_path(target)}[/#F87171]")
             return
         self._tree.path = target
         self._show_current()
@@ -114,7 +116,7 @@ class FilePickerScreen(ModalScreen[Path | None]):
         elif target.is_file() and not self.pick_directories:
             self._finish(target)
         else:
-            self.query_one("#picker-current", Static).update(f"[#F87171]not found: {target}[/#F87171]")
+            self.query_one("#picker-current", Static).update(f"[#F87171]not found: {show_path(target)}[/#F87171]")
 
     _JUMPS = {
         "jump-home": lambda: Path.home(),

@@ -89,3 +89,54 @@ def test_strong_but_only_somewhat_short_scratch_still_removed():
     damaged[40:80, 150] = 245  # 40px, above the 25px minimum
     out = np.asarray(reduce_scratches(_as_image(damaged))).astype(float)
     assert np.abs(out[40:80, 150] - clean[40:80, 150]).mean() < 8
+
+
+def _edge_scene() -> np.ndarray:
+    rng = np.random.default_rng(0)
+    arr = np.zeros((120, 160, 3))
+    arr[:60] = (200, 190, 170)
+    arr[60:] = (60, 55, 50)
+    return np.clip(arr + rng.normal(0, 2, arr.shape), 0, 255)
+
+
+def test_a_scratch_crossing_a_strong_edge_does_not_smudge_it():
+    # Regression: filling from an average of ALL nearby pixels blended sky and
+    # hill across the crossing (error ~18); interpolating across the scratch keeps
+    # the edge continuous.
+    clean = _edge_scene()
+    damaged = clean.copy()
+    damaged[10:110, 80] = 250
+    damaged[10:110, 81] = 230
+    out = np.asarray(reduce_scratches(_as_image(damaged))).astype(float)
+    crossing = (slice(52, 68), slice(78, 84))
+    assert np.abs(out[crossing] - clean[crossing]).mean() < 5
+
+
+def test_a_diagonal_scratch_crossing_an_edge_is_also_clean():
+    clean = _edge_scene()
+    damaged = clean.copy()
+    for i in range(100):
+        damaged[10 + i, 30 + i] = 5
+    out = np.asarray(reduce_scratches(_as_image(damaged))).astype(float)
+    ys = np.arange(50, 70)
+    repaired = np.abs(out[ys, ys + 20] - clean[ys, ys + 20]).mean()
+    unrepaired = np.abs(damaged[ys, ys + 20] - clean[ys, ys + 20]).mean()
+    assert repaired < 20 and repaired < unrepaired * 0.25
+
+
+def test_scratch_close_to_the_border_is_still_filled():
+    clean = _photo()
+    damaged = clean.copy()
+    damaged[:, 4] = 250  # near the edge: only a couple of clean pixels on one side
+    damaged[:, 5] = 250
+    out = np.asarray(reduce_scratches(_as_image(damaged))).astype(float)
+    assert np.abs(out[30:170, 4:6] - clean[30:170, 4:6]).mean() < 15
+
+
+def test_scratch_within_two_pixels_of_the_border_is_a_known_miss():
+    # Documented limitation: the 5x5 median pads the edge with the scratch itself,
+    # so a line in the outermost columns can't be told apart from the image.
+    damaged = _photo()
+    damaged[:, 0] = 250
+    damaged[:, 1] = 250
+    assert not find_scratch_mask(_as_image(damaged))[:, 0:2].any()

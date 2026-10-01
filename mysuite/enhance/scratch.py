@@ -10,13 +10,16 @@ lines (film scratches, fold creases, scanner hairs). Pipeline:
    (horizontal, vertical or either diagonal). That is what separates a scratch
    from legitimate fine detail such as eyelashes, text strokes or grain.
 3. Dilate the mask by one pixel to cover the scratch's anti-aliased edge.
-4. Fill masked pixels with the average of nearby UNmasked pixels (normalized
-   box average), so the fill comes from clean surroundings, not the scratch.
+4. Fill each masked pixel by linear interpolation along the SHORTEST bridge
+   between clean pixels (horizontal, vertical or diagonal), which for a thin line
+   is across it. That keeps an edge the scratch crosses continuous; averaging
+   all neighbours (the fallback for pixels with no short bridge) smudges it.
 
 Only masked pixels are changed; every other pixel is returned bit-for-bit. This
 is not generative inpainting: wide damage, torn areas, faint and short scratches
-are out of scope and left alone. Isolated dust specks are the denoise stage's
-job. Limitation: any thin, straight, high-contrast line looks like a scratch,
+are out of scope and left alone, as are scratches within ~2px of the image
+border (the median pads the edge with the scratch itself). Isolated dust specks
+are the denoise stage's job. Limitation: any thin, straight, high-contrast line looks like a scratch,
 so power lines or rigging in a photo can be partly filled in; that's why it is
 off by default and only the old-photo preset enables it.
 """
@@ -98,6 +101,50 @@ def _box_sum(a: np.ndarray, r: int) -> np.ndarray:
     )
 
 
+MAX_BRIDGE = 8   # farthest clean pixel (px) searched for on each side of a masked one
+_DIRECTIONS = ((0, 1, 1.0), (1, 0, 1.0), (1, 1, 2 ** 0.5), (1, -1, 2 ** 0.5))
+
+
+def _bridge_fill(pixels: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Interpolates each masked pixel across the shortest span of masked pixels
+    through it. Returns (values for the masked pixels in np.nonzero order,
+    boolean per masked pixel: True if a bridge was found). Works only on the
+    masked coordinates, so cost scales with the damage, not the image."""
+    h, w, _ = pixels.shape
+    ys, xs = np.nonzero(mask)
+    count = len(ys)
+    best_gap = np.full(count, np.inf)
+    best_val = np.zeros((count, 3))
+
+    def nearest_clean(dy: int, dx: int, sign: int) -> tuple[np.ndarray, np.ndarray]:
+        dist = np.full(count, np.inf)
+        val = np.zeros((count, 3))
+        found = np.zeros(count, dtype=bool)
+        for k in range(1, MAX_BRIDGE + 1):
+            yy, xx = ys + sign * k * dy, xs + sign * k * dx
+            inside = (yy >= 0) & (yy < h) & (xx >= 0) & (xx < w)
+            clean = np.zeros(count, dtype=bool)
+            clean[inside] = ~mask[yy[inside], xx[inside]]
+            new = clean & ~found
+            dist[new] = k
+            val[new] = pixels[yy[new], xx[new]]
+            found |= new
+        return dist, val
+
+    for dy, dx, step_length in _DIRECTIONS:
+        d_plus, v_plus = nearest_clean(dy, dx, +1)
+        d_minus, v_minus = nearest_clean(dy, dx, -1)
+        span = d_plus + d_minus
+        usable = np.isfinite(span)
+        gap = np.where(usable, span * step_length, np.inf)
+        better = gap < best_gap
+        safe = np.where(usable, span, 1.0)[:, None]
+        interpolated = (v_plus * d_minus[:, None].clip(max=MAX_BRIDGE) + v_minus * d_plus[:, None].clip(max=MAX_BRIDGE)) / safe
+        best_val[better] = interpolated[better]
+        best_gap[better] = gap[better]
+    return best_val, np.isfinite(best_gap)
+
+
 def find_scratch_mask(image: Image.Image) -> np.ndarray:
     """Boolean H x W mask of pixels judged to be part of a scratch."""
     luma = image.convert("L")
@@ -117,8 +164,10 @@ def reduce_scratches(image: Image.Image) -> Image.Image:
     valid = (~mask).astype(np.float64)
     weighted = _box_sum(pixels * valid[..., None], FILL_RADIUS)
     weight = _box_sum(valid, FILL_RADIUS)[..., None]
-    fillable = mask[..., None] & (weight > 0)
-    fill = np.divide(weighted, weight, out=pixels.copy(), where=weight > 0)
+    fallback = np.divide(weighted, weight, out=pixels.copy(), where=weight > 0)
 
-    result = np.where(fillable, fill, pixels)
+    result = np.where(mask[..., None] & (weight > 0), fallback, pixels)
+    bridged, has_bridge = _bridge_fill(pixels, mask)
+    ys, xs = np.nonzero(mask)
+    result[ys[has_bridge], xs[has_bridge]] = bridged[has_bridge]
     return Image.fromarray(np.clip(result.round(), 0, 255).astype(np.uint8))
