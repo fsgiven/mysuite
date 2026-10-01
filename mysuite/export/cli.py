@@ -20,6 +20,7 @@ from mysuite.export._parsing import (
 )
 from mysuite.export.naming import resolve_naming_templates, resolve_path_template_for_variant
 from mysuite.export.planner import MysuitePlannerError, build_plan
+from mysuite.color.svg import DEFAULT_TOLERANCE
 from mysuite.export.recolor import InvalidRecolorError, apply_recolor, parse_recolor_list
 from mysuite.export.renderer import Renderer
 from mysuite.export.units import (
@@ -142,6 +143,12 @@ def export(
         "color (e.g. --recolor 'white=black'). Repeatable, and each occurrence may itself hold "
         "several space/comma-separated pairs, e.g. --recolor '#000=#fff white=black'. Applied to "
         "the SVG source before rendering.",
+    ),
+    recolor_tolerance: float = typer.Option(
+        DEFAULT_TOLERANCE, "--recolor-tolerance", min=0.0,
+        help="How close (CIEDE2000 colour difference) a colour must be to a --recolor FROM to count "
+        "as it; 0 = exact match only, 2 = just-noticeable difference (default). Catches "
+        "anti-aliased or slightly-off brand colours.",
     ),
     recursive: bool = typer.Option(
         False, "--recursive", help="When an input is a directory, include SVGs in subdirectories too."
@@ -331,7 +338,7 @@ def export(
             else:
                 log_step(str(job.output_path))
 
-        render_svg, is_temp = apply_recolor(input_svg, resolved_recolor_map)
+        render_svg, is_temp = apply_recolor(input_svg, resolved_recolor_map, recolor_tolerance)
         try:
             result = renderer.execute(plan, render_svg, on_job_done=on_job_done)
         except MysuiteToolError as exc:

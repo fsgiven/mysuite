@@ -259,12 +259,12 @@ RECOLOR_CASES = [
     ("style-attr", '<rect width="9" height="9" style="fill:#dd0000"/>', None),
     ("stop-color", '<linearGradient id="g"><stop stop-color="#dd0000"/></linearGradient><rect width="9" height="9" fill="url(#g)"/>', None),
     ("css-block-hex", '<style>.a{fill:#dd0000}</style><rect class="a" width="9" height="9"/>', None),
-    ("hex3-short", '<rect width="9" height="9" fill="#d00"/>', "FINDING R1: short hex #d00 is not recognised as #dd0000"),
-    ("rgb()", '<rect width="9" height="9" fill="rgb(221,0,0)"/>', "FINDING R2: rgb() notation is never recoloured"),
-    ("rgb-percent", '<rect width="9" height="9" fill="rgb(86.7%,0%,0%)"/>', "FINDING R2: rgb(%) notation is never recoloured"),
-    ("hsl()", '<rect width="9" height="9" fill="hsl(0,100%,43.3%)"/>', "FINDING R3: hsl() notation is never recoloured"),
-    ("named-in-css-block", '<style>.a{fill:red}</style><rect class="a" width="9" height="9"/>', "FINDING R4: named colours inside <style> blocks are not recoloured (documented limit)"),
-    ("near-identical", '<rect width="9" height="9" fill="#dc0100"/>', "FINDING R5: no tolerance matching, so anti-aliased/near-identical brand reds are missed"),
+    ("hex3-short", '<rect width="9" height="9" fill="#d00"/>', None),
+    ("rgb()", '<rect width="9" height="9" fill="rgb(221,0,0)"/>', None),
+    ("rgb-percent", '<rect width="9" height="9" fill="rgb(86.7%,0%,0%)"/>', None),
+    ("hsl()", '<rect width="9" height="9" fill="hsl(0,100%,43.3%)"/>', None),
+    ("named-in-css-block", '<style>.a{fill:red}</style><rect class="a" width="9" height="9"/>', None),
+    ("near-identical", '<rect width="9" height="9" fill="#dc0100"/>', None),
 ]
 
 

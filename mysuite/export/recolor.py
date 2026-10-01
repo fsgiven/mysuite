@@ -4,6 +4,9 @@ import re
 import tempfile
 from pathlib import Path
 
+from mysuite.color.parse import parse_color
+from mysuite.color.svg import DEFAULT_TOLERANCE, recolor_text
+
 _HEX_RE = re.compile(r"^#?[0-9a-fA-F]{3}$|^#?[0-9a-fA-F]{4}$|^#?[0-9a-fA-F]{6}$|^#?[0-9a-fA-F]{8}$")
 
 # The 147 standard CSS3/SVG named colors. Deliberately excludes "transparent"
@@ -55,6 +58,8 @@ def _normalize_color(value: str) -> str:
     lowered = stripped.lower()
     if lowered in _SVG_NAMED_COLORS:
         return lowered
+    if parse_color(stripped) is not None:  # rgb(), hsl(), ... (not splittable on the CLI, fine in config)
+        return stripped
     raise InvalidRecolorError(
         f"invalid color {value!r} — expected a hex color like #fff, #ffffff, #ffffffaa, "
         f"or a named CSS color like white, black, red"
@@ -103,72 +108,21 @@ def parse_recolor_list(items: list[str]) -> dict[str, str]:
     return mapping
 
 
-def _hex_pattern_for(hex_color: str) -> re.Pattern[str]:
-    # Match the exact hex token as a whole color literal — not as a substring of
-    # a longer hex run — so recoloring #fff never touches #ffffff or #fffabc.
-    # Deliberately a blind whole-document match, not scoped to any particular
-    # XML context: a "#RRGGBB"-shaped string has essentially zero collision
-    # risk of appearing except as an actual color value.
-    escaped = re.escape(hex_color.lstrip("#"))
-    return re.compile(rf"#{escaped}(?![0-9a-fA-F])", re.IGNORECASE)
+def apply_recolor(
+    input_svg: Path, recolor_map: dict[str, str], tolerance: float = DEFAULT_TOLERANCE
+) -> tuple[Path, bool]:
+    """Applies FROM->TO colour substitutions to an SVG. Returns (path, is_temp): the
+    original path unchanged if recolor_map is empty, otherwise a new temporary file
+    the caller must delete after use.
 
-
-def _named_color_attr_pattern_for(name: str) -> re.Pattern[str]:
-    # fill="white" / stroke='white' / stop-color="white". The (?<![\w-])
-    # lookbehind stops this from also matching inside e.g. a hypothetical
-    # data-fill="white" attribute.
-    escaped = re.escape(name)
-    return re.compile(
-        rf'(?<![\w-])(fill|stroke|stop-color)(\s*=\s*)(["\']){escaped}(["\'])',
-        re.IGNORECASE,
-    )
-
-
-def _named_color_style_pattern_for(name: str) -> re.Pattern[str]:
-    # style="...fill:white;..." / style="...stroke: white ..."
-    escaped = re.escape(name)
-    return re.compile(
-        rf'(?<![\w-])(fill|stroke|stop-color)(\s*:\s*){escaped}(?=\s*[;"\'])',
-        re.IGNORECASE,
-    )
-
-
-def _apply_named_color(text: str, name: str, replacement: str) -> str:
-    attr_pattern = _named_color_attr_pattern_for(name)
-    text = attr_pattern.sub(
-        lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}{replacement}{m.group(4)}", text
-    )
-    style_pattern = _named_color_style_pattern_for(name)
-    text = style_pattern.sub(lambda m: f"{m.group(1)}{m.group(2)}{replacement}", text)
-    return text
-
-
-def apply_recolor(input_svg: Path, recolor_map: dict[str, str]) -> tuple[Path, bool]:
-    """Applies FROM->TO color substitutions to an SVG's raw text. Returns
-    (path, is_temp): the original path unchanged if recolor_map is empty,
-    otherwise a new temporary file the caller is responsible for deleting
-    after use.
-
-    Two matching strategies, chosen per FROM key by whether it starts with
-    "#": a hex FROM does a blind whole-document match of the literal #hex
-    token (fill="#xxx", style="fill:#xxx", <style> CSS blocks — anywhere it
-    appears). A named-color FROM (e.g. "white") is matched only when it's the
-    value of a fill=/stroke=/stop-color= attribute or an inline
-    style="fill:...;" declaration — never a blind whole-document match, since
-    plain English color words collide with unrelated content (ids, class
-    names, <title> text) far more than a "#RRGGBB"-shaped token ever would.
-    Note this named-color scope does NOT reach a bare <style>.cls{fill:white}</style>
-    CSS block with no style= wrapper — out of scope for now."""
+    Colours are compared by *value* (see mysuite.color.svg): #d00 == #dd0000 ==
+    rgb(221,0,0) == hsl(0,100%,43.3%) == the named colour, anywhere SVG allows a
+    colour (attributes, style="", <style> blocks, gradient stops), and a colour
+    within `tolerance` CIEDE2000 of FROM counts as FROM (0 = exact only)."""
     if not recolor_map:
         return input_svg, False
 
-    text = input_svg.read_text(encoding="utf-8")
-    for from_color, to_color in recolor_map.items():
-        if from_color.startswith("#"):
-            text = _hex_pattern_for(from_color).sub(to_color, text)
-        else:
-            text = _apply_named_color(text, from_color, to_color)
-
+    text = recolor_text(input_svg.read_text(encoding="utf-8"), recolor_map, tolerance)
     tmp = tempfile.NamedTemporaryFile(
         mode="w", suffix=".svg", prefix=f"mysuite-recolor-{input_svg.stem}-", delete=False
     )
