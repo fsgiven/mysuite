@@ -22,6 +22,9 @@ class ToolSpec:
     # Shown by the helper (F1 / h): what the tool does, how to use its screen, and the same job in the terminal.
     help: str = ""
     cli: str = ""
+    # Tools without a hand-built screen get one generated from the CLI (screens/auto_screen.py):
+    # (label shown in the "What do you want to do?" list, command path). Several entries = one card, many commands.
+    commands: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 def _export_screen_factory() -> Screen:
@@ -64,6 +67,16 @@ def _compress_screen_factory() -> Screen:
     from mysuite.tui.screens.compress_screen import CompressScreen
 
     return CompressScreen()
+
+
+def _auto_factory(key: str) -> Callable[[], Screen]:
+    def factory() -> Screen:
+        from mysuite.tui.screens.auto_screen import AutoToolScreen
+
+        spec = next(s for s in TOOL_REGISTRY if s.key == key)
+        return AutoToolScreen(spec)
+
+    return factory
 
 
 TOOL_REGISTRY: list[ToolSpec] = [
@@ -158,5 +171,76 @@ TOOL_REGISTRY: list[ToolSpec] = [
             "'old_photo' also fills thin straight scratches. Output is name_enhanced.png."
         ),
         cli="mysuite enhance run old.jpg --preset old_photo --scale 2",
+    ),
+    ToolSpec(
+        key="kits",
+        label="Kits",
+        description="A whole set from one logo: favicons, app icons, social images, retina.",
+        screen_factory=_auto_factory("kits"),
+        accent="#BEF264",  # lime
+        commands=(("Make a kit from a logo", ("kit", "make")),),
+        help=(
+            "Choose a logo (SVG or image) and a kit: favicon (ico, PNGs, Apple/Android icons, web manifest, HTML snippet), "
+            "ios-app-icon (every size + Contents.json), android-icons (every density), social (Open Graph, Twitter, "
+            "LinkedIn, YouTube, Instagram sizes; needs a background colour) or retina (@1x/@2x/@3x).\n"
+            "Every file has exactly the size its platform asks for, so there is nothing to review. Files go to "
+            "kits/<logo name>/<kit>/ and nothing is overwritten unless you tick it."
+        ),
+        cli="mysuite kit make logo.svg --kit favicon",
+    ),
+    ToolSpec(
+        key="pdf",
+        label="PDF",
+        description="Merge, split, rotate, number, stamp, compress; pages to images and back.",
+        screen_factory=_auto_factory("pdf"),
+        accent="#FDBA74",  # orange
+        commands=(
+            ("Merge PDFs", ("pdf", "merge")), ("Split into pieces", ("pdf", "split")), ("Keep only some pages", ("pdf", "extract")),
+            ("Rotate pages", ("pdf", "rotate")), ("Fit pages to a paper size", ("pdf", "resize")), ("Add page numbers", ("pdf", "number")),
+            ("Stamp text or a logo", ("pdf", "stamp")), ("Make smaller", ("pdf", "compress")), ("Remove metadata", ("pdf", "strip")),
+            ("Pages to images", ("pdf", "render")), ("Extract embedded pictures", ("pdf", "images")),
+            ("Images to a PDF", ("pdf", "from-images")), ("Show facts about a PDF", ("pdf", "info")),
+        ),
+        help=(
+            "Pick what you want to do, then the PDF(s). Page ranges look like 1,3-5,8- (also last, odd, even). "
+            "Paper sizes: a4, letter, 210x297mm …\nEvery job writes a new file next to the original (with a suffix like "
+            "_merged or _rotated) and never changes the original. Password-protected PDFs are not opened."
+        ),
+        cli="mysuite pdf extract doc.pdf --pages 1,3-5",
+    ),
+    ToolSpec(
+        key="exact",
+        label="Exact",
+        description="Exact sizes and specs: print size, rename, contact sheet, colour profile.",
+        screen_factory=_auto_factory("exact"),
+        accent="#F0ABFC",  # fuchsia
+        commands=(
+            ("Output at an exact size (px / cm / in)", ("print",)), ("Rename many files by a pattern", ("rename",)),
+            ("Contact sheet of many pictures", ("sheet",)), ("Convert colour profile (sRGB / CMYK)", ("profile",)),
+        ),
+        help=(
+            "Print: '10x15cm' at 300 dpi is exactly 1181x1772 px, with the dpi stored in the file; fit = contain, cover "
+            "or stretch; bleed in mm.\nRename: tokens {name} {ext} {n} {n:3} {date} {w} {h}; makes copies unless you tick "
+            "move; use the preview option first.\nSheet: one labelled picture of many.\nProfile: Adobe RGB / Display P3 / "
+            "CMYK photos to a correct sRGB copy, or RGB to CMYK for print."
+        ),
+        cli="mysuite print photo.jpg --size 10x15cm --dpi 300",
+    ),
+    ToolSpec(
+        key="helpers",
+        label="Helpers",
+        description="Read text (OCR), QR codes, find duplicates, compare images, check contrast.",
+        screen_factory=_auto_factory("helpers"),
+        accent="#A7F3D0",  # mint
+        commands=(
+            ("Read the text in an image (OCR)", ("ocr",)), ("Make a QR code", ("qr", "make")), ("Read a QR code / barcode", ("qr", "read")),
+            ("Find duplicate pictures", ("dupes",)), ("Compare two images", ("diff",)), ("Check colour contrast", ("contrast",)),
+        ),
+        help=(
+            "Read-only helpers: nothing is changed except the optional files you ask for. OCR and QR reading use macOS's "
+            "built-in text recognition (the mysuite-vision helper). Duplicates are found by what pictures look like, so "
+            "resized and re-saved copies are caught too. Contrast uses the WCAG formula (4.5:1 is the bar for body text)."
+        ),
+        cli="mysuite dupes ~/Pictures --recursive",
     ),
 ]

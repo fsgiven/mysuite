@@ -63,7 +63,7 @@ class MysuiteServer:
         if bad:
             return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
                     "errors": [f"unknown option(s) for {spec_key}: {', '.join(bad)}. Valid: {', '.join(sorted(valid - {'json', 'config'}))}"]}
-        argv = engine.build_argv(step, [Path(p) for p in inputs], overwrite=overwrite, dry_run=dry_run, commands=commands)
+        argv = engine.build_argv(step, [str(p) for p in inputs], overwrite=overwrite, dry_run=dry_run, commands=commands)
         return self._run(argv)
 
     # --------------------------------------------------------------------- tools
@@ -162,6 +162,73 @@ class MysuiteServer:
             opts = {"preset": preset, "direction": direction, "angle": angle, "height": height, "intensity": intensity,
                     "ambient": ambient, "softness": softness, "depth": depth, "specular": specular, "color": color}
             return self._call(["relight"], inputs, opts, dry_run=dry_run, overwrite=overwrite)
+
+        @mcp.tool(description="Make a whole set of files from one logo with exact sizes: kit = favicon | ios-app-icon | android-icons | social | retina. Files land in <out>/<logo name>/<kit>/. social needs background (a colour); retina takes size (the @1x pixels).")
+        def mysuite_kit(inputs: list[str], kit: str, out: str | None = None, background: str | None = None,
+                        padding: float | None = None, size: int | None = None, name: str | None = None,
+                        dry_run: bool = False, overwrite: bool = False) -> dict[str, Any]:
+            return self._call(["kit", "make"], inputs, {"kit": kit, "out": out, "background": background, "padding": padding,
+                                                        "size": size, "name": name}, dry_run=dry_run, overwrite=overwrite)
+
+        @mcp.tool(description="PDF toolbox. action: info | merge | split | extract | rotate | resize | strip | number | stamp | images | render | from-images | compress. options = that action's options (see mysuite_schema 'pdf <action>'), e.g. extract: {pages:'1,3-5'}; split: {every:2}; rotate: {degrees:90}; resize: {size:'a4'}; number: {format:'Page {n} of {total}'}; stamp: {text:'DRAFT', angle:45}; render: {dpi:150}; compress: {level:'ebook'}; from-images: {size:'a4'}; merge takes two or more PDFs and writes <first>_merged.pdf. Originals are never modified.")
+        def mysuite_pdf(action: str, inputs: list[str], options: dict[str, Any] | None = None, overwrite: bool = False) -> dict[str, Any]:
+            if action not in engine.PDF_ACTIONS:
+                return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
+                        "errors": [f"action must be one of {sorted(engine.PDF_ACTIONS)}"]}
+            return self._call(["pdf", action], inputs, dict(options or {}), overwrite=overwrite)
+
+        @mcp.tool(description="Read the text in images (macOS Vision helper required). Returns text plus each line with its box. save=true also writes <name>.txt.")
+        def mysuite_ocr(inputs: list[str], languages: str | None = None, fast: bool = False, save: bool = False,
+                        overwrite: bool = False) -> dict[str, Any]:
+            return self._call(["ocr"], inputs, {"languages": languages, "fast": fast or None, "save": save or None}, overwrite=overwrite)
+
+        @mcp.tool(description="QR codes. action 'make': text = what to encode, out = .png or .svg file (scale, border, error l|m|q|h, dark, light colours). action 'read': text is ignored, inputs = images to read (macOS Vision helper required).")
+        def mysuite_qr(action: str, text: str | None = None, inputs: list[str] | None = None, out: str | None = None,
+                       scale: int | None = None, border: int | None = None, error: str | None = None, dark: str | None = None,
+                       light: str | None = None, overwrite: bool = False) -> dict[str, Any]:
+            if action == "make":
+                if not text:
+                    return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [], "errors": ["make needs text"]}
+                return self._call(["qr", "make"], [text], {"out": out, "scale": scale, "border": border, "error": error,
+                                                         "dark": dark, "light": light}, overwrite=overwrite)
+            if action == "read":
+                return self._call(["qr", "read"], inputs or [], {})
+            return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [], "errors": ["action must be make or read"]}
+
+        @mcp.tool(description="Find identical and look-alike images in folders/files (perceptual hash). Read only. threshold 0-20 = how many of 64 hash bits may differ.")
+        def mysuite_dupes(inputs: list[str], threshold: int | None = None, recursive: bool = False) -> dict[str, Any]:
+            return self._call(["dupes"], inputs, {"threshold": threshold, "recursive": recursive or None})
+
+        @mcp.tool(description="Compare two images: identical?, % of pixels changed, PSNR. out writes a PNG showing the changes in red.")
+        def mysuite_diff(first: str, second: str, threshold: int | None = None, out: str | None = None, overwrite: bool = False) -> dict[str, Any]:
+            return self._call(["diff"], [first, second], {"threshold": threshold, "out": out}, overwrite=overwrite)
+
+        @mcp.tool(description="WCAG contrast ratio of two colours (foreground, background), or of every colour of a logo file on a background (logo + on).")
+        def mysuite_contrast(foreground: str | None = None, background: str | None = None, logo: str | None = None, on: str | None = None) -> dict[str, Any]:
+            return self._call(["contrast"], [v for v in (foreground, background) if v], {"logo": logo, "on": on})
+
+        @mcp.tool(description="Output at an EXACT size: size '10x15cm' | '4x6in' | '210x297mm' | '1200x630' (pixels); dpi for physical sizes (also stored in the file); fit contain|cover|stretch; gravity; bleed in mm; format png|jpeg|tiff|webp. Output <name>_print.<ext>.")
+        def mysuite_print(inputs: list[str], size: str, dpi: float | None = None, fit: str | None = None, background: str | None = None,
+                          gravity: str | None = None, bleed: float | None = None, format: str | None = None,
+                          dry_run: bool = False, overwrite: bool = False) -> dict[str, Any]:
+            return self._call(["print"], inputs, {"size": size, "dpi": dpi, "fit": fit, "background": background, "gravity": gravity,
+                                                  "bleed": bleed, "format": format}, dry_run=dry_run, overwrite=overwrite)
+
+        @mcp.tool(description="Rename files by a pattern with tokens {name} {ext} {n} {n:3} {date} {datetime} {w} {h}. Makes renamed COPIES (into out, or beside the originals); move=true renames in place. sort: name | date | size. Use dry_run first.")
+        def mysuite_rename(inputs: list[str], pattern: str, start: int | None = None, sort: str | None = None, out: str | None = None,
+                           move: bool = False, dry_run: bool = False, overwrite: bool = False) -> dict[str, Any]:
+            return self._call(["rename"], inputs, {"pattern": pattern, "start": start, "sort": sort, "out": out, "move": move or None},
+                              dry_run=dry_run, overwrite=overwrite)
+
+        @mcp.tool(description="One picture of many: a contact sheet (.png, .jpg or .pdf) with labels. columns 1-20, cell = box size in px.")
+        def mysuite_sheet(inputs: list[str], out: str | None = None, columns: int | None = None, cell: int | None = None,
+                          title: str | None = None, background: str | None = None, overwrite: bool = False) -> dict[str, Any]:
+            return self._call(["sheet"], inputs, {"out": out, "columns": columns, "cell": cell, "title": title, "background": background},
+                              overwrite=overwrite)
+
+        @mcp.tool(description="Colour profile conversion: to 'srgb' (correct sRGB copy of Adobe RGB / Display P3 / CMYK photos) or 'cmyk' (print; same engine as export: cmyk_mode exact | clean | clean:N).")
+        def mysuite_profile(inputs: list[str], to: str, cmyk_mode: str | None = None, format: str | None = None, overwrite: bool = False) -> dict[str, Any]:
+            return self._call(["profile"], inputs, {"to": to, "cmyk_mode": cmyk_mode, "format": format}, overwrite=overwrite)
 
         @mcp.tool(description="Which external tools are installed (and how to install the missing ones).")
         def mysuite_doctor() -> dict[str, Any]:

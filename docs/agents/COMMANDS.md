@@ -131,6 +131,16 @@ Re-encode image(s) via a best-in-class codec (mozjpeg/webp/avif/oxipng/pngquant/
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite contrast`
+
+WCAG contrast ratio of two colours, or of a logo's colours on a background.
+
+- argument `foreground` (str) Foreground colour, e.g. '#dd0000' (or use --logo).
+- argument `background` (str) Background colour, e.g. white.
+- `--logo` (file) Check every colour of this logo (SVG or image) against --on.
+- `--on` (str, default `#ffffff`) Background for --logo.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite convert`
 
 Convert file(s) to another format, in place beside the source.
@@ -159,10 +169,30 @@ Isolate a photo's subject into a transparent-background PNG (macOS Vision).
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite diff`
+
+Compare two images: how much changed, optionally as a picture.
+
+- argument `first` (file, required) Reference image.
+- argument `second` (file, required) Image to compare.
+- `--threshold` (int, default `16`) A pixel counts as changed when any channel differs by more than this (0-255).
+- `--out / -o` (path) Write a PNG with the changed pixels in red over a faded first image.
+- `--overwrite / --no-overwrite` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite doctor`
 
 Check that required tools (rsvg-convert, gs, magick, mysuite-cutout, exiftool, c2patool, codec encoders) are installed.
 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite dupes`
+
+Find identical and look-alike images. Read only.
+
+- argument `inputs` (path, required, repeatable) Folders and/or images to compare.
+- `--threshold` (int, default `5`) How different (bits of 64, 0-20) two pictures may be and still count as similar. 0 = look-alikes must hash identically.
+- `--recursive / -r` (boolean) Recurse into subdirectories.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
 ## `mysuite enhance history`
@@ -251,6 +281,30 @@ Report facts about image/vector files (size, colour mode, transparency, palette,
 - `--config / -c` (path) Explicit path to mysuite.toml.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite kit list`
+
+List the available kits and what each one makes.
+
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite kit make`
+
+Make a kit from a logo: `mysuite kit make logo.svg --kit favicon`.
+
+- argument `inputs` (path, required, repeatable) Logo file(s): SVG, PNG, JPEG, WebP, PDF, EPS…
+- `--kit / -k` (str) Which kit: favicon, ios-app-icon, android-icons, social, retina. See `mysuite kit list`.
+- `--out / -o` (path) Output folder. Files go to <out>/<logo name>/<kit>/…
+- `--name` (str) Name used in the folder and file names (default: the logo's file name).
+- `--background` (str) Colour behind the logo (e.g. '#ffffff'). Needed for social images; opaque icons default to white.
+- `--padding` (float) Empty border around the logo, percent of the canvas (0-49).
+- `--size` (int, default `64`) Retina kit only: the @1x size in pixels (@2x and @3x follow).
+- `--recursive / -r` (boolean) Recurse into subdirectories.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing files.
+- `--dry-run` (boolean) List the files that would be written.
+- `--config / -c` (path) Explicit path to mysuite.toml.
+- `--quiet / -q` (boolean) Print only the summary.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite mcp`
 
 Run the MCP server (stdio) so MCP clients can use mysuite. Needs `pip install 'mysuite[mcp]'`. Sandboxed to --allow folders (default: the current folder).
@@ -296,6 +350,173 @@ Strip all EXIF/IPTC/XMP/ICC metadata, writing a new file beside the source.
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite ocr`
+
+Read the text in images (macOS Vision, on device).
+
+- argument `inputs` (path, required, repeatable) Images / screenshots / scans.
+- `--languages` (str) Recognition languages, e.g. en-US,de-DE (default: automatic).
+- `--fast` (boolean) Faster, less accurate.
+- `--save` (boolean) Also write <name>.txt beside each image (never overwrites without --overwrite).
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing .txt files.
+- `--recursive / -r` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf compress`
+
+Make a PDF smaller (Ghostscript): screen < ebook < printer < prepress.
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--level` (str, default `ebook`) screen (smallest), ebook, printer, prepress (best quality).
+- `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf extract`
+
+Keep only some pages: --pages '1,3-5,8-' (also last, odd, even).
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--pages` (str) Pages to keep, e.g. '1,3-5,8-', last, odd, even.
+- `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf from-images`
+
+Make a PDF from images (one page each), optionally fitted on a paper size.
+
+- argument `files` (file, required, repeatable) Image files, in page order.
+- `--size` (str) Paper size (a4, letter, 210x297mm …); default: each page is its image's size.
+- `--dpi` (int, default `300`) Resolution used for the pages.
+- `--margin` (float) Margin in mm when --size is used.
+- `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf images`
+
+Extract the embedded pictures of a PDF as files.
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--out / -o` (path) Output folder.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf info`
+
+Pages, page sizes, rotation, metadata, forms - read only.
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf merge`
+
+Join PDFs into one, in the order given.
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf number`
+
+Add page numbers. Format may use {n} and {total}, e.g. 'Page {n} of {total}'.
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--position` (str, default `bottom-center`) bottom-center, bottom-left, bottom-right, top-center, top-left, top-right, center
+- `--format` (str, default `{n}`) Label, e.g. 'Page {n} of {total}'.
+- `--start` (int, default `1`) Number of the first page.
+- `--size` (float, default `10.0`) Font size in points (4-72).
+- `--color` (str, default `#333333`) Text colour.
+- `--pages` (str, default `all`) Which pages get a number.
+- `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf render`
+
+Turn pages into PNG/JPEG images at a chosen resolution (Ghostscript).
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--dpi` (int, default `150`) Resolution, 10-1200.
+- `--format` (str, default `png`) png or jpeg.
+- `--pages` (str, default `all`) Which pages.
+- `--out / -o` (path) Output folder.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf resize`
+
+Fit every page onto a standard size (a4, letter, 210x297mm …), centred, content scaled to fit.
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--size` (str) a0-a6, b5, letter, legal, tabloid, or 210x297mm / 8.5x11in / 595x842 (points).
+- `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf rotate`
+
+Rotate pages clockwise by 90/180/270 degrees.
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--degrees` (int, default `90`) Clockwise: 90, 180 or 270 (or -90).
+- `--pages` (str, default `all`) Which pages (default all).
+- `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf split`
+
+Cut a PDF into pieces: --every N pages, or --ranges '1-3,4-6'.
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--every` (int) Pages per piece.
+- `--ranges` (str) Comma-separated page ranges, one file each.
+- `--out / -o` (path) Output folder (default: beside the source).
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf stamp`
+
+Stamp text and/or a logo on pages (e.g. DRAFT, CONFIDENTIAL), with opacity and angle.
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--text` (str) Text to stamp, e.g. DRAFT.
+- `--logo` (file) PNG/JPEG logo to stamp (raster).
+- `--position` (str, default `center`) bottom-center, bottom-left, bottom-right, top-center, top-left, top-right, center
+- `--opacity` (float, default `0.25`) 0-1.
+- `--angle` (float) Degrees counter-clockwise (e.g. 45 for a diagonal stamp).
+- `--size` (float, default `48.0`) Text size in points.
+- `--color` (str, default `#cc0000`) Text colour.
+- `--scale` (float, default `20.0`) Logo width in percent of the page width.
+- `--pages` (str, default `all`) Which pages.
+- `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite pdf strip`
+
+Remove title, author, producer, dates and the XMP packet.
+
+- argument `files` (file, required, repeatable) PDF file(s).
+- `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite pipeline run`
 
 Run a pipeline file (TOML or JSON). Steps run in order; each takes the previous step's outputs.
@@ -338,6 +559,63 @@ Save export settings as a new (or replacement) preset in mysuite.toml.
 - `--normalize-png / --no-normalize-png` (boolean) 
 - `--config / -c` (path) TOML file to save into (default: ./mysuite.toml).
 
+## `mysuite print`
+
+Output at an exact size (10x15cm @300dpi = 1181x1772 px), dpi stored in the file.
+
+- argument `inputs` (path, required, repeatable) Images (or SVG/PDF/EPS) to output at an exact size.
+- `--size` (str) Exact output size: 10x15cm, 4x6in, 210x297mm or 1200x630px (plain numbers are pixels).
+- `--dpi` (float, default `300.0`) Resolution for physical sizes, and the dpi written into the file.
+- `--fit` (str, default `contain`) contain = whole picture inside (padded); cover = fill the size and crop; stretch = distort to fit.
+- `--background` (str) Padding colour for contain (default transparent; white for JPEG).
+- `--gravity` (str, default `center`) Where the picture sits (contain) or which part is kept (cover).
+- `--bleed` (float) Print bleed in mm added around the size (0-50).
+- `--auto-rotate` (boolean) Turn the picture 90° when its orientation doesn't match the paper.
+- `--format` (str) png, jpeg, tiff or webp (default: same as the source).
+- `--quality` (int, default `95`) JPEG quality 1-100.
+- `--recursive / -r` (boolean) 
+- `--overwrite / --no-overwrite` (boolean) 
+- `--dry-run` (boolean) Show the pixel size that would be written.
+- `--config / -c` (path) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite profile`
+
+Convert colour profiles: to sRGB for screens, to CMYK for print.
+
+- argument `inputs` (path, required, repeatable) Raster images.
+- `--to` (str) srgb (for screens/web) or cmyk (for print; same engine as export).
+- `--cmyk-mode` (str, default `exact`) exact, clean or clean:N (see export).
+- `--cmyk-profile` (file) CMYK ICC profile (default: Ghostscript's SWOP).
+- `--format` (str) png/jpeg/tiff/webp (cmyk: tiff or jpeg).
+- `--quality` (int, default `95`) 
+- `--recursive / -r` (boolean) 
+- `--overwrite / --no-overwrite` (boolean) 
+- `--config / -c` (path) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite qr make`
+
+Make a QR code: `mysuite qr make "https://example.com" --out qr.png`.
+
+- argument `text` (str, required) What the code should say (a URL, text, Wi-Fi string…).
+- `--out / -o` (path) Output file (.png or .svg).
+- `--scale` (int, default `10`) Pixels per module (PNG) / units (SVG), 1-100.
+- `--border` (int, default `4`) Quiet-zone modules around the code (the spec wants 4).
+- `--error` (str, default `m`) Error correction: l (7%), m (15%), q (25%), h (30%).
+- `--dark` (str, default `#000000`) Colour of the modules.
+- `--light` (str, default `#ffffff`) Background colour.
+- `--overwrite / --no-overwrite` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite qr read`
+
+Read QR codes and barcodes in images (macOS Vision).
+
+- argument `inputs` (path, required, repeatable) 
+- `--recursive / -r` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite relight`
 
 Experimental: re-shade a picture as if lit from another direction (classical, no AI model).
@@ -359,12 +637,43 @@ Experimental: re-shade a picture as if lit from another direction (classical, no
 - `--quiet / -q` (boolean) Print only the summary.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite rename`
+
+Rename many files by a pattern ({n}, {date}, {name}...). Copies by default.
+
+- argument `inputs` (path, required, repeatable) Files and/or folders to rename.
+- `--pattern` (str) New name with tokens: {name} {ext} {n} {n:3} {date} {datetime} {w} {h}, e.g. 'trip_{n:3}{ext}'.
+- `--start` (int, default `1`) Number of the first file ({n}).
+- `--sort` (str, default `name`) Order for {n}: name, date (EXIF capture time, else file time) or size.
+- `--out / -o` (path) Folder for the renamed COPIES (default: beside the originals).
+- `--move` (boolean) Rename the originals in place instead of making renamed copies.
+- `--recursive / -r` (boolean) 
+- `--overwrite / --no-overwrite` (boolean) 
+- `--dry-run` (boolean) Show the old -> new names, change nothing.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite schema`
 
 Describe every command's options, the --json result and exit codes (for agents).
 
 - argument `command` (str, repeatable) Limit to one command, e.g. `export` or `metadata strip`.
 - `--markdown` (boolean) Print the command reference as Markdown instead of JSON.
+
+## `mysuite sheet`
+
+Contact sheet: many pictures on one labelled page.
+
+- argument `inputs` (path, required, repeatable) Images / folders to put on one sheet.
+- `--out / -o` (path) Output file: .png, .jpg or .pdf.
+- `--columns` (int, default `4`) Pictures per row (1-20).
+- `--cell` (int, default `240`) Size of each picture's box in pixels (32-1200).
+- `--no-labels` (boolean) Leave out the file names.
+- `--background` (str, default `#1b1d22`) Sheet colour.
+- `--title` (str) A heading.
+- `--recursive / -r` (boolean) 
+- `--overwrite / --no-overwrite` (boolean) 
+- `--config / -c` (path) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
 ## `mysuite transform`
 

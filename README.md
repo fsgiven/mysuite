@@ -23,6 +23,11 @@ telemetry.
 | `metadata` | **strip** all metadata, **randomize** it into a plausible decoy camera, or **credit** with a C2PA provenance record |
 | `enhance` | Upscale and restore photos locally: denoise, sharpen, scratch removal, color, optional AI backend |
 | `compress` | Re-encode with the same best-in-class codecs Squoosh uses (mozjpeg, WebP, AVIF, oxipng, pngquant, gifsicle), plus sharpening |
+| `kit` | A whole set from one logo with exact specs: favicon set (ico, PNGs, Apple/Android icons, manifest), iOS `AppIcon.appiconset`, Android mipmaps, social images (Open Graph, Twitter, LinkedIn, YouTube, Instagram), retina @1x/@2x/@3x |
+| `pdf` | PDF toolbox: merge, split, extract pages, rotate, fit to a paper size, page numbers, stamp text/logo, strip metadata, compress, pages ⇄ images |
+| `print` | Output at an exact size: `10x15cm` at 300 dpi is exactly 1181×1772 px, dpi stored in the file; contain/cover/stretch, bleed |
+| `rename`, `sheet`, `profile` | Rename by pattern (`{n:3}`, `{date}`…; copies by default), contact sheets (PNG/PDF), colour profiles (to sRGB, or RGB → CMYK with the export engine) |
+| `ocr`, `qr`, `dupes`, `diff`, `contrast` | Read text and QR codes (macOS Vision), make QR codes, find duplicate/look-alike pictures, compare two images, WCAG contrast checks |
 | `transform` | Quick edits: trim, crop (box or aspect), rotate, flip, resize, pad, round corners, background — in a fixed, predictable order |
 | `relight` | *Experimental, classical (no AI model):* re-shade a cut-out/product/logo as if lit from another direction, with presets (key-left, dramatic, golden-hour…) |
 | `inspect` | Facts about a file (size, colour mode, transparency, palette, sharpness, GPS…) as numbers — for agents and humans |
@@ -54,6 +59,10 @@ mysuite is a young personal project, released as-is. Please read this before rel
 | `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | the optional AI backend has **never been run with real model weights**; 16-bit sources become 8-bit (now reported) |
 | `transform` | Yes: every operation checked on pixels (resize modes, crop, trim, rotate, flip, pad, round, flatten), fixed order, EXIF handling, safety | no preview exists in a terminal, so judge the result by opening the file; animated sources keep only the first frame (and say so) |
 | `relight` | Yes: the lit side is brighter for every direction, flat areas unchanged, alpha kept, tint, presets, bad values, safety | **experimental**: it fakes depth from the picture's own brightness and an alpha-mask dome, so it is a lighting nudge, not a true relight; faces and busy photos will not look right. A depth-model backend is planned |
+| `kit` | Yes: every PNG of every kit has exactly the specified pixels, ICO contents, manifest and Contents.json match the files, opaque iOS icons, backgrounds, padding, overwrite and safety | the specs follow the platforms' published sizes today; platforms change them, so check before shipping an app |
+| `pdf` | Yes: page ranges, merge/split/extract/rotate/resize/strip/number/stamp/render/images/from-images/compress, corrupt and password-protected files, sandbox | encrypted PDFs are refused, not opened; stamps and numbers use rsvg-convert's fonts (Helvetica/Arial fallback); `compress` can make a small PDF bigger (it says so) |
+| `print`, `rename`, `sheet`, `profile` | Yes: exact pixels and dpi for cm/in/mm/px, fit modes, bleed, rename safety (collisions, swaps, existing files), contact sheets, sRGB and CMYK conversion | colour conversion honours embedded ICC profiles but cannot replace a calibrated print workflow; `rename --move` changes your originals, so use `--dry-run` first |
+| `ocr`, `qr`, `dupes`, `diff`, `contrast` | Yes (`ocr` and `qr read` need the macOS `mysuite-vision` helper, so they are skipped on CI): real Vision runs, QR round trip, duplicates (identical, resized, recompressed), diff metrics, WCAG ratios | OCR quality is whatever Apple's model gives; duplicate detection is a perceptual hash, so very similar but different pictures can be grouped (nothing is ever deleted) |
 | `inspect` | Yes: CMYK/alpha/gray, EXIF orientation/GPS/serial, blank/blurry, multipage, SVG facts, thumbnails | the "blurry" flag is a heuristic (variance of the Laplacian), not a verdict |
 | `--json`, sandbox, `pipeline`, `mcp` | Yes: one JSON document on stdout, exit codes 0–4, escape attempts (`..`, absolute paths, symlinks), pipelines end to end, the MCP server through a real MCP client | the sandbox is off unless you ask for it (the MCP server always uses it); pipelines are unproven beyond the examples; MCP tested with the Python SDK, **not yet with Claude Desktop or Cursor** |
 | Terminal dashboard | Yes for all screens except the file-picker edge cases | Drag-and-drop depends on your terminal emulator |
@@ -77,16 +86,17 @@ Found a problem? Please open an issue with the exact command, the file type and 
 
 ## Screens
 
-Real screenshots of the dashboard, run on synthetic images (a generated sunset harbour, a generated
+The animated front page and the tool cards, then more screens. Real screenshots of the dashboard, run on synthetic images (a generated sunset harbour, a generated
 damaged "old scan" and a generated logo). File paths are shown as `~/…`.
 
 | | |
 | --- | --- |
-| ![Home screen listing the seven tools](docs/images/screen-home.png)<br>**Home** — pick a tool with a number key | ![Enhance screen after restoring a scratched photo](docs/images/screen-enhance.png)<br>**Enhance** — preset applied, scratches filled, and it says face enhancement was skipped |
+| ![Home screen: tool cards with icons](docs/images/screen-home.png)<br>**Home** — one card per tool; arrows and Enter, or a number key; **h**/**F1** opens the helper | ![Enhance screen after restoring a scratched photo](docs/images/screen-enhance.png)<br>**Enhance** — preset applied, scratches filled, and it says face enhancement was skipped |
 | ![Metadata screen in randomize mode](docs/images/screen-metadata.png)<br>**Metadata** — strip, randomize or credit | ![Compress screen using the modern-web-webp preset](docs/images/screen-compress.png)<br>**Compress** — preset, codec options, result |
 | ![Export screen with SVG thumbnail and 14 written files](docs/images/screen-export.png)<br>**Export** — one SVG to many sizes and formats | ![File picker with Home, Desktop, Downloads and Root jumps](docs/images/screen-picker.png)<br>**File picker** — jumps, paste-a-path, hidden files off |
 | ![Convert screen](docs/images/screen-convert.png)<br>**Convert** | ![Watermark screen](docs/images/screen-watermark.png)<br>**Watermark** |
-| ![Cutout screen](docs/images/screen-cutout.png)<br>**Cutout** (macOS) | |
+| ![Cutout screen](docs/images/screen-cutout.png)<br>**Cutout** (macOS) | ![PDF screen generated from the CLI](docs/images/screen-pdf.png)<br>**PDF** — a screen generated from the command's own options |
+| ![Animated front page with the suitcase mascot](docs/images/screen-welcome.png)<br>**Front page** — drifting file-type tags, the suitcase blinks and talks | |
 
 ## Setup
 
@@ -113,6 +123,13 @@ Preview/Photos "Copy Subject"). Requires macOS 14+ and the Xcode Command Line To
 
 ```bash
 mysuite/native/cutout/build.sh /opt/homebrew/bin   # builds and installs onto PATH in one step
+```
+
+`mysuite ocr` and `mysuite qr read` need a second helper of the same kind, `mysuite-vision` (macOS's
+on-device text recognition and barcode reading; macOS 13+). Everything else works without it:
+
+```bash
+mysuite/native/vision/build.sh /opt/homebrew/bin
 ```
 
 `mozjpeg` is keg-only (Homebrew won't link it onto PATH — it would shadow the `cjpeg` that ships

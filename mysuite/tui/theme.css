@@ -417,3 +417,21 @@ WelcomeScreen { align: center middle; }
 #mascot { width: 34; height: 12; margin: 0 8; }
 #bubble { width: 100%; text-align: center; margin-top: 1; }
 #welcome-hint { width: 100%; text-align: center; color: $text-muted; margin-top: 1; }
+
+AutoToolScreen .field-group {
+    border-title-color: #E8E8E8;
+}
+
+AutoToolScreen Collapsible {
+    background: #161822;
+    border: none;
+    padding: 0;
+}
+
+AutoToolScreen #run-log {
+    background: #0D0E14;
+}
+
+AutoToolScreen #group-what, AutoToolScreen #group-fields, AutoToolScreen #fields {
+    height: auto;
+}

@@ -63,3 +63,14 @@ local VLM through Ollama (only if the user runs one), local upscaler weights for
 ## Done criteria for the whole roadmap
 All tests pass with **zero** expected failures; CI green; README status table honest; every new tool documented
 in `AGENTS.md` and exercised by a doc-test.
+
+## Update 2026-10-02: what was added after this plan
+
+- Dashboard: animated front page, tool cards with icons, helper mascot (F1 / h), and **generated screens**: any CLI command
+  gets a form from its own option schema (`tui/screens/auto_screen.py`), so new tools show up as cards without hand-built UI.
+- Decided with the user: no free-form editing screen (can't preview in a terminal) - `transform` stays CLI/agent/pipeline only; build
+  deterministic one-shot tools instead ("ask for 500, get 500").
+- Shipped: `kit` (favicon, iOS, Android, social, retina), `pdf` (13 jobs), `print`, `rename`, `sheet`, `profile`, `ocr`, `qr`,
+  `dupes`, `diff`, `contrast`; optional macOS helper `mysuite-vision` (`mysuite/native/vision/build.sh`).
+- Still open from the shortlist: SVG optimise, `.ai`/PDF-to-SVG import (needs poppler), video poster frames, content-aware rename,
+  the relight depth model, tokens/variants, profiles, `mysuite agent`.

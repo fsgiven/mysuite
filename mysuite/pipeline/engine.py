@@ -156,7 +156,7 @@ def _flag_for(key: str, spec: dict[str, Any]) -> tuple[str, bool]:
     return target, False
 
 
-def build_argv(step: Step, inputs: list[Path], *, overwrite: bool, dry_run: bool, commands: dict[str, Any] | None = None) -> list[str]:
+def build_argv(step: Step, inputs: list[Path | str], *, overwrite: bool, dry_run: bool, commands: dict[str, Any] | None = None) -> list[str]:
     commands = commands or schema.build()["commands"]
     spec = commands[" ".join(step.command)]
     argv: list[str] = []

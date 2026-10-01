@@ -51,7 +51,7 @@ async def test_lists_every_tool_with_descriptions(work):
     async with server(work) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert {"mysuite_inspect", "mysuite_export", "mysuite_convert", "mysuite_cutout", "mysuite_watermark",
-            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_relight", "mysuite_metadata", "mysuite_pipeline_run", "mysuite_doctor",
+            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_relight", "mysuite_metadata", "mysuite_kit", "mysuite_pdf", "mysuite_ocr", "mysuite_qr", "mysuite_dupes", "mysuite_diff", "mysuite_contrast", "mysuite_print", "mysuite_rename", "mysuite_sheet", "mysuite_profile", "mysuite_pipeline_run", "mysuite_doctor",
             "mysuite_schema"} <= set(tools)
     assert all(t.description for t in tools.values())
     assert "dry_run" in tools["mysuite_export"].input_schema["properties"]
@@ -190,3 +190,38 @@ async def test_transform_through_mcp(work):
             assert im.size == (20, 20) and im.getpixel((0, 0))[3] == 0
         bad = await call(c, "mysuite_transform", inputs=[str(work / "pic.png")], resize="abc", overwrite=True)
         assert bad["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_new_tools_through_mcp(work):
+    from PIL import Image
+    from pypdf import PdfReader
+
+    async with server(work) as c:
+        kit = await call(c, "mysuite_kit", inputs=[str(work / "logo.svg")], kit="favicon", out=str(work / "k"))
+        assert kit["ok"] and any(i["output"].endswith("favicon.ico") for i in kit["items"])
+        qr = await call(c, "mysuite_qr", action="make", text="https://example.com/a?b=c", out=str(work / "q.png"))
+        assert qr["ok"] and (work / "q.png").exists()
+        ratio = await call(c, "mysuite_contrast", foreground="#000", background="#fff")
+        assert ratio["items"][0]["ratio"] == 21.0
+        pr = await call(c, "mysuite_print", inputs=[str(work / "pic.png")], size="10x15cm")
+        assert Image.open(pr["items"][0]["output"]).size == (1181, 1772)
+        ren = await call(c, "mysuite_rename", inputs=[str(work / "pic.png")], pattern="renamed_{n:2}{ext}", dry_run=True)
+        assert ren["items"][0]["output"].endswith("renamed_01.png") and not (work / "renamed_01.png").exists()
+        sheet = await call(c, "mysuite_sheet", inputs=[str(work / "pic.png")], out=str(work / "s.png"))
+        assert sheet["ok"] and (work / "s.png").exists()
+        diff = await call(c, "mysuite_diff", first=str(work / "pic.png"), second=str(work / "pic.png"))
+        assert diff["items"][0]["identical"]
+        dup = await call(c, "mysuite_dupes", inputs=[str(work)])
+        assert dup["ok"]
+        prof = await call(c, "mysuite_profile", inputs=[str(work / "pic.png")], to="cmyk")
+        assert prof["ok"]
+        Image.new("RGB", (100, 100), "white").save(work / "d.pdf")
+        pdf = await call(c, "mysuite_pdf", action="rotate", inputs=[str(work / "d.pdf")], options={"degrees": 90})
+        assert pdf["ok"] and len(PdfReader(pdf["items"][0]["output"]).pages) == 1
+        bad = await call(c, "mysuite_pdf", action="explode", inputs=[str(work / "d.pdf")])
+        assert bad["exit_code"] == 2
+        wrong = await call(c, "mysuite_pdf", action="rotate", inputs=[str(work / "d.pdf")], options={"nope": 1})
+        assert wrong["exit_code"] == 2 and "nope" in wrong["errors"][0]
+        outside = await call(c, "mysuite_qr", action="make", text="x", out=str(work.parent / "escape.png"))
+        assert outside["exit_code"] == 3 and not (work.parent / "escape.png").exists()

@@ -38,6 +38,17 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | smaller files | `mysuite compress FILE --codec mozjpeg\|webp\|avif\|oxipng\|pngquant\|gifsicle --json` |
 | to crop, trim borders, rotate, flip, resize, pad to a size/aspect, round corners | `mysuite transform FILE --crop-aspect 1:1 --resize 512 --round 50% --json` |
 | to change the lighting direction/tint of a cut-out, product or logo (experimental) | `mysuite relight FILE --preset golden-hour --json` or `--direction left --height 30` |
+| a whole set of files from one logo (favicon, iOS/Android app icons, social images, retina) | `mysuite kit make logo.svg --kit favicon --json` (`mysuite kit list --json` shows all kits) |
+| to merge / split / extract / rotate / resize / number / stamp / strip / compress a PDF, or turn pages into images and images into a PDF | `mysuite pdf merge a.pdf b.pdf --json`, `mysuite pdf extract doc.pdf --pages 1,3-5 --json` … (`mysuite pdf --help`) |
+| an image at an exact size or print size (500 px, 10x15cm at 300 dpi), dpi stored in the file | `mysuite print photo.jpg --size 10x15cm --dpi 300 --fit cover --json` |
+| to rename many files by a pattern | `mysuite rename DIR --pattern "trip_{n:3}{ext}" --dry-run --json` (copies by default; `--move` renames in place) |
+| one picture showing many pictures | `mysuite sheet DIR --out sheet.png --columns 5 --json` |
+| a photo in the right colour space (sRGB for web, CMYK for print) | `mysuite profile photo.tif --to srgb --json` / `--to cmyk --cmyk-mode clean` |
+| the text in a screenshot or scan (macOS) | `mysuite ocr shot.png --json` |
+| a QR code, or the content of one (read: macOS) | `mysuite qr make "https://…" --out qr.png --json` / `mysuite qr read photo.jpg --json` |
+| to find duplicate or look-alike pictures (read only) | `mysuite dupes DIR --json` |
+| what changed between two images | `mysuite diff a.png b.png --out changes.png --json` |
+| whether a colour (or a logo's colours) is readable on a background | `mysuite contrast "#dd0000" white --json` / `mysuite contrast --logo logo.svg --on "#ffffff" --json` |
 | a bigger/cleaner photo | `mysuite enhance run FILE --preset gentle --json` |
 | no hidden data (GPS, serials) | `mysuite metadata strip FILE --json` |
 | a plausible different camera identity | `mysuite metadata randomize FILE --json` |
@@ -56,6 +67,16 @@ mysuite export logo.svg --formats png,pdf --sizes 64 --out out --json
 mysuite export logo.svg --formats pdf --profiles cmyk --cmyk-mode clean --sizes 100 --out out_cmyk --json
 mysuite convert pic.png --to webp --json
 mysuite transform pic.png --resize 20 --pad 1:1 --round 50% --json
+mysuite kit list --json
+mysuite kit make logo.svg --kit favicon --out kits --json
+mysuite print pic.png --size 1200x630 --fit cover --json
+mysuite sheet pic.png photo.jpg --out sheet.png --json
+mysuite dupes . --json
+mysuite diff pic.png pic.png --json
+mysuite contrast "#dd0000" white --json
+mysuite qr make "https://example.com" --out qr.png --json
+mysuite profile pic.png --to cmyk --json
+mysuite rename pic.png photo.jpg --pattern "x_{n:2}{ext}" --dry-run --json
 mysuite metadata strip photo.jpg --json
 mysuite --allow . convert pic.png --to jpeg --overwrite --json
 mysuite pipeline run release.toml --json
@@ -82,6 +103,14 @@ math, not an AI model**: a pseudo-depth (the picture's own brightness blurred, p
 transparency) is lit with a directional light. Good for cut-outs, products and logos (try `--preset key-left`,
 `dramatic`, `golden-hour`, `cool-fill`); it cannot invent light on faces or complex scenes. Output
 `<name>_relit.png`. Say so when you offer it to a user.
+
+## Exact jobs: "ask for 500, get 500"
+
+`print`, `kit`, `pdf` and `profile` are deterministic one-shot jobs: the output has exactly the size/spec asked for, so
+there is nothing to review. `print --size 10x15cm --dpi 300` writes 1181x1772 px with 300 dpi stored in the file.
+`kit` writes every file of a set (and says which ones it skipped, e.g. `favicon.svg` when the logo is not an SVG).
+`pdf` never opens password-protected files and never modifies the original. `rename` makes copies unless you pass
+`--move`; always `--dry-run` first. `ocr` and `qr read` need the macOS helper `mysuite-vision` (exit code 4 if missing).
 
 ## Several tools in one go: pipelines
 
@@ -136,7 +165,8 @@ Claude Desktop / Cursor (`mcpServers` in their config JSON):
 ```
 
 Tools: `mysuite_inspect`, `mysuite_export`, `mysuite_convert`, `mysuite_cutout`, `mysuite_watermark`,
-`mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_relight`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
+`mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_relight`, `mysuite_kit`, `mysuite_pdf`,
+`mysuite_print`, `mysuite_rename`, `mysuite_sheet`, `mysuite_profile`, `mysuite_ocr`, `mysuite_qr`, `mysuite_dupes`, `mysuite_diff`, `mysuite_contrast`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
 `mysuite_schema`; resources `mysuite://guide`, `mysuite://schema`, `mysuite://allowed-folders`. They run the same
 commands as the CLI and return the same JSON, always sandboxed, never overwriting unless `overwrite=true`.
 Without `--allow` the server only sees the folder it was started in. With a local model (Ollama, LM Studio, …)
