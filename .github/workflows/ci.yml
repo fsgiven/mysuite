@@ -38,7 +38,7 @@ jobs:
           webp libavif oxipng pngquant gifsicle mozjpeg c2patool
 
       - name: Install mysuite
-        run: pip install ".[dev]"
+        run: pip install ".[dev,mcp]"
 
       - name: Tool versions
         run: mysuite doctor || true

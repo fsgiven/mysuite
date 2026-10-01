@@ -107,6 +107,18 @@ def schema(
     typer.echo(schema_module.markdown(data) if markdown else json.dumps(data, indent=2, ensure_ascii=False), nl=not markdown)
 
 
+@app.command("mcp", help="Run the MCP server (stdio) so MCP clients can use mysuite. Needs `pip install 'mysuite[mcp]'`. Sandboxed to --allow folders (default: the current folder).")
+def mcp_command(
+    allow: Optional[List[Path]] = typer.Option(None, "--allow", help="Folder the server may read/write (repeatable). Default: the current folder."),
+) -> None:
+    try:
+        from mysuite import mcpserver
+    except ImportError as exc:
+        typer.echo("the MCP server needs the optional dependency: pip install 'mysuite[mcp]'", err=True)
+        raise typer.Exit(4) from exc
+    mcpserver.serve(list(allow or []))
+
+
 def main() -> None:
     app()
 

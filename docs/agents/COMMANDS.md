@@ -251,6 +251,12 @@ Report facts about image/vector files (size, colour mode, transparency, palette,
 - `--config / -c` (path) Explicit path to mysuite.toml.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite mcp`
+
+Run the MCP server (stdio) so MCP clients can use mysuite. Needs `pip install 'mysuite[mcp]'`. Sandboxed to --allow folders (default: the current folder).
+
+- `--allow` (path, repeatable) Folder the server may read/write (repeatable). Default: the current folder.
+
 ## `mysuite metadata credit`
 
 Embed a signed C2PA provenance manifest (author/copyright) for correct crediting.

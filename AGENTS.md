@@ -102,6 +102,27 @@ mysuite pipeline run release.toml --json
 
 The result has one item per step (`status`, `outputs`, and the step's own `result` document).
 
+## As an MCP server (Claude Desktop, Cursor, Claude Code, local-model clients)
+
+```bash
+pip install 'mysuite[mcp]'
+mysuite mcp --allow ~/Pictures/work          # stdio server; reads/writes ONLY inside --allow folders
+```
+
+Claude Code: `claude mcp add mysuite -- mysuite mcp --allow /path/to/folder`.
+Claude Desktop / Cursor (`mcpServers` in their config JSON):
+
+```json
+{"mcpServers": {"mysuite": {"command": "mysuite", "args": ["mcp", "--allow", "/path/to/folder"]}}}
+```
+
+Tools: `mysuite_inspect`, `mysuite_export`, `mysuite_convert`, `mysuite_cutout`, `mysuite_watermark`,
+`mysuite_compress`, `mysuite_enhance`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
+`mysuite_schema`; resources `mysuite://guide`, `mysuite://schema`, `mysuite://allowed-folders`. They run the same
+commands as the CLI and return the same JSON, always sandboxed, never overwriting unless `overwrite=true`.
+Without `--allow` the server only sees the folder it was started in. With a local model (Ollama, LM Studio, …)
+use any MCP-capable client for it and point that client at `mysuite mcp`.
+
 ## Reading the result
 
 ```json
