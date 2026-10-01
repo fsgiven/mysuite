@@ -66,7 +66,7 @@ NEEDS: dict[str, tuple[str, ...]] = {
     "export": ("rsvg_convert", "gs", "magick"),
     "convert": ("rsvg_convert", "gs", "magick"),
     "watermark": ("rsvg_convert", "gs", "magick"),
-    "cutout": ("cutout_tool", "rsvg_convert", "gs", "magick"),
+    "cutout": ("cutout_tool", "rsvg_convert", "gs", "magick", "exiftool"),
     "metadata-strip": ("exiftool", "magick"),
     "metadata-randomize": ("exiftool", "magick"),
     "metadata-credit": ("c2patool",),

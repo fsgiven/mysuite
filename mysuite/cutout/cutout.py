@@ -51,6 +51,30 @@ def _rasterize_to_png(input_path: Path, source_format: str, tools: ToolPaths) ->
     return tmp_png
 
 
+# Below this mean opacity the "cutout" is effectively blank: Vision found no subject
+# but still exited 0 (FINDING K2).
+_MIN_COVERAGE = 0.005
+
+# The helper passes source metadata through; a derived image shouldn't carry where it
+# was taken or the device's serial numbers (FINDING K1). Orientation, colour profile and
+# ordinary camera settings are left alone.
+_IDENTIFYING_TAGS = ["-GPS:all=", "-XMP:GPS*=", "-*SerialNumber=", "-OwnerName=", "-CameraOwnerName="]
+
+
+def _check_not_empty(path: Path, tools: ToolPaths) -> None:
+    result = run([tools.magick, str(path), "-alpha", "extract", "-format", "%[fx:mean]", "info:"])
+    try:
+        coverage = float(result.stdout.strip())
+    except ValueError:
+        return
+    if coverage < _MIN_COVERAGE:
+        raise CutoutError("no foreground subject found — the cutout would be empty, nothing written")
+
+
+def _drop_identifying_metadata(path: Path, tools: ToolPaths) -> None:
+    run([tools.exiftool, "-q", "-overwrite_original", *_IDENTIFYING_TAGS, str(path)])
+
+
 def cutout_file(input_path: Path, *, tools: ToolPaths, overwrite: bool = False) -> CutoutOutcome:
     """Isolates the foreground subject of input_path (via the macOS Vision
     framework, through the compiled mysuite-cutout helper) and writes a
@@ -76,8 +100,11 @@ def cutout_file(input_path: Path, *, tools: ToolPaths, overwrite: bool = False) 
     try:
         def write(tmp_path: Path) -> None:
             run([tools.cutout_tool, str(raster_path), str(tmp_path)])
+            _check_not_empty(tmp_path, tools)
+            _drop_identifying_metadata(tmp_path, tools)
 
-        atomic_write_via(output_path, write)
+        # preserve_extension: exiftool picks the writer from the extension (".png.tmp" fails)
+        atomic_write_via(output_path, write, preserve_extension=True)
     finally:
         if is_temp_raster:
             raster_path.unlink(missing_ok=True)

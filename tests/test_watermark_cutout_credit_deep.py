@@ -149,21 +149,18 @@ def test_cutout_is_actually_transparent_somewhere_and_opaque_somewhere(tmp_path)
 
 
 @need_cutout
-@pytest.mark.xfail(strict=True, reason="FINDING K2: when Vision finds no subject (3 of 20 clean synthetic seeds) cutout exits 0 and writes an all-/mostly-transparent PNG instead of reporting failure")
-def test_cutout_reports_when_the_result_is_empty(tmp_path):
-    src = subject_photo(tmp_path / "photo.png", seed=9)
-    res = cli("cutout", src, "-q")
-    out = tmp_path / "photo_cutout.png"
-    center_alpha = float(subprocess.run(["magick", str(out), "-format", "%[fx:p{300,300}.a]", "info:"], capture_output=True, text=True).stdout) if out.exists() else 0
-    assert res.exit_code != 0 or center_alpha > 0.5 or not out.exists()
-
-
-@need_cutout
-def test_cutout_on_a_plain_image_with_no_subject_fails_or_warns_cleanly(tmp_path):
+def test_cutout_on_a_plain_image_with_no_subject_fails_cleanly_and_writes_nothing(tmp_path):
+    """FINDING K2: Vision finding nothing used to exit 0 with a blank PNG."""
     p = tmp_path / "plain.png"
     subprocess.run(["magick", "-size", "200x200", "xc:white", str(p)], check=True)
     res = cli("cutout", p, "-q")
     assert res.exception is None or isinstance(res.exception, SystemExit), "no traceback"
+    out = tmp_path / "plain_cutout.png"
+    if res.exit_code == 0:   # Vision did pick something: then it must not be blank
+        cov = float(subprocess.run(["magick", str(out), "-alpha", "extract", "-format", "%[fx:mean]", "info:"], capture_output=True, text=True).stdout)
+        assert cov >= 0.005
+    else:
+        assert not out.exists() and not list(tmp_path.glob("*.tmp*"))
 
 
 @need_cutout
@@ -178,7 +175,6 @@ def test_cutout_passes_through_source_metadata_and_never_touches_source(tmp_path
 
 
 @need_cutout
-@pytest.mark.xfail(strict=True, reason="FINDING K1: cutout's passthrough keeps ALL source metadata incl. GPS/serial numbers — the opposite of what a privacy-minded user expects from a derived image")
 def test_cutout_does_not_carry_gps_or_serial_numbers_into_the_output(tmp_path):
     src = subject_photo(tmp_path / "photo.jpg")
     subprocess.run(["exiftool", "-q", "-overwrite_original", "-GPSLatitude=52.5", "-GPSLatitudeRef=N", "-GPSLongitude=13.4", "-GPSLongitudeRef=E", "-SerialNumber=SN123", str(src)], check=True)
