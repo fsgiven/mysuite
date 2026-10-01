@@ -93,7 +93,6 @@ def test_transparent_base_keeps_its_alpha(tmp_path, logo):
 
 
 @need_magick
-@pytest.mark.xfail(strict=True, reason="FINDING W2: a colour logo on a GRAYSCALE base (any B&W photo) is composited into gray and comes out as a white blob")
 def test_colour_logo_keeps_its_colour_on_a_grayscale_photo(tmp_path, logo):
     bw = tmp_path / "bw.png"
     subprocess.run(["magick", "-size", "400x300", "gradient:#222-#ddd", "-colorspace", "Gray", str(bw)], check=True)
@@ -102,7 +101,6 @@ def test_colour_logo_keeps_its_colour_on_a_grayscale_photo(tmp_path, logo):
 
 
 @need_magick
-@pytest.mark.xfail(strict=True, reason="FINDING W1: watermarking an EXIF-rotated photo places the logo on the stored (unrotated) pixels, so it lands in the wrong corner")
 def test_exif_rotated_photo_gets_logo_in_the_visually_correct_corner(tmp_path, logo):
     p = tmp_path / "rot.jpg"
     subprocess.run(["magick", "-size", "200x300", "xc:#808080", str(p)], check=True)

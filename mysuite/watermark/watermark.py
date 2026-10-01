@@ -64,6 +64,12 @@ def _rasterize_to_png(input_path: Path, source_format: str, tools: ToolPaths) ->
     return tmp_png
 
 
+def _tmp_png(input_path: Path) -> Path:
+    handle = tempfile.NamedTemporaryFile(suffix=".png", prefix=f"mysuite-wm-{input_path.stem}-", delete=False)
+    handle.close()
+    return Path(handle.name)
+
+
 def _image_width(path: Path, tools: ToolPaths) -> int:
     result = run([tools.magick, "identify", "-format", "%w", str(path)])
     return int(result.stdout.strip())
@@ -110,6 +116,24 @@ def watermark_file(
     if source_format not in RASTER_FORMATS:
         base_path = _rasterize_to_png(input_path, source_format, tools)
         is_temp_base = True
+
+    # Normalise the base: bake in EXIF rotation (W1: the logo must land in the visual
+    # corner) and make it true-colour sRGB (W2: a grayscale base composites to gray).
+    normalised = _tmp_png(input_path)
+    try:
+        has_alpha = run([tools.magick, "identify", "-format", "%A", f"{base_path}[0]"]).stdout.strip().lower() not in ("false", "undefined", "")
+        run([tools.magick, f"{base_path}[0]", "-auto-orient", "-colorspace", "sRGB",
+             "-type", "TrueColorAlpha" if has_alpha else "TrueColor",
+             # PNG32:/PNG24: force colour: plain png: re-optimises a gray-looking image to gray
+             f"{'PNG32' if has_alpha else 'PNG24'}:{normalised}"])
+    except BaseException:
+        normalised.unlink(missing_ok=True)
+        if is_temp_base:
+            base_path.unlink(missing_ok=True)
+        raise
+    if is_temp_base:
+        base_path.unlink(missing_ok=True)
+    base_path, is_temp_base = normalised, True
 
     logo_raster = logo_path
     is_temp_logo = False
