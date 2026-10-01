@@ -86,6 +86,7 @@ class ToolPaths:
     magick: str = "magick"
     iconutil: str = "iconutil"
     cutout_tool: str = "mysuite-cutout"
+    vision_tool: str = "mysuite-vision"
     exiftool: str = "exiftool"
     c2patool: str = "c2patool"
     cjpeg: str = "/opt/homebrew/opt/mozjpeg/bin/cjpeg"

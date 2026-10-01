@@ -18,6 +18,7 @@ from mysuite.export.cli import export as export_command
 from mysuite.inspect.cli import inspect_command
 from mysuite.metadata.cli import app as metadata_app
 from mysuite.pipeline.cli import app as pipeline_app
+from mysuite.helpers.cli import contrast as contrast_command, diff as diff_command, dupes as dupes_command, ocr as ocr_command, qr_app
 from mysuite.kits.cli import app as kit_app
 from mysuite.pdf.cli import app as pdf_app
 from mysuite.preset_cli import app as preset_app
@@ -75,6 +76,11 @@ app.command("transform", help="Quick edits: trim, crop, rotate, flip, resize, pa
 app.command("relight", help="Experimental: re-shade a picture as if lit from another direction (classical, no AI model).")(
     relight_command
 )
+app.command("ocr", help="Read the text in images (macOS Vision, on device).")(ocr_command)
+app.command("dupes", help="Find identical and look-alike images. Read only.")(dupes_command)
+app.command("diff", help="Compare two images: how much changed, optionally as a picture.")(diff_command)
+app.command("contrast", help="WCAG contrast ratio of two colours, or of a logo's colours on a background.")(contrast_command)
+app.add_typer(qr_app, name="qr")
 app.add_typer(kit_app, name="kit")
 app.add_typer(pdf_app, name="pdf")
 app.add_typer(pipeline_app, name="pipeline")

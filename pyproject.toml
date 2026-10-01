@@ -17,6 +17,7 @@ dependencies = [
     "pillow",
     "numpy>=1.24",
     "pypdf>=4",
+    "segno>=1.6",
 ]
 
 [project.optional-dependencies]

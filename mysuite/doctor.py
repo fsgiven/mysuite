@@ -15,6 +15,12 @@ _NATIVE_BUILD_HINT = (
 )
 
 
+_VISION_BUILD_HINT = (
+    "mysuite/native/vision/build.sh /opt/homebrew/bin — text recognition (ocr) and QR reading; built from source "
+    "(macOS 13+, Xcode Command Line Tools). Optional: only `ocr` and `qr read` need it"
+)
+
+
 @dataclass(frozen=True)
 class ToolSpec:
     attr: str
@@ -27,6 +33,7 @@ TOOL_SPECS: list[ToolSpec] = [
     ToolSpec("gs", "brew install ghostscript"),
     ToolSpec("magick", "brew install imagemagick"),
     ToolSpec("cutout_tool", _NATIVE_BUILD_HINT),
+    ToolSpec("vision_tool", _VISION_BUILD_HINT),
     ToolSpec("exiftool", "brew install exiftool", version_flag="-ver"),
     ToolSpec("c2patool", "brew install c2patool"),
     ToolSpec(
@@ -67,6 +74,8 @@ NEEDS: dict[str, tuple[str, ...]] = {
     "convert": ("rsvg_convert", "gs", "magick"),
     "watermark": ("rsvg_convert", "gs", "magick"),
     "cutout": ("cutout_tool", "rsvg_convert", "gs", "magick", "exiftool"),
+    "ocr": ("vision_tool",),
+    "qr-read": ("vision_tool",),
     "metadata-strip": ("exiftool", "magick"),
     "metadata-randomize": ("exiftool", "magick"),
     "metadata-credit": ("c2patool",),

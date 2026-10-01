@@ -23,7 +23,7 @@ from mysuite.convert._parsing import SOURCE_EXTENSIONS
 
 MAX_STEPS = 20
 RESERVED = {"tool", "action", "id", "from", "inputs", "only"}
-SINGLE = {"export", "convert", "cutout", "watermark", "compress", "inspect", "transform", "relight"}
+SINGLE = {"export", "convert", "cutout", "watermark", "compress", "inspect", "transform", "relight", "ocr", "dupes"}
 METADATA_ACTIONS = {"strip", "randomize", "credit"}
 PDF_ACTIONS = {"info", "merge", "split", "extract", "rotate", "resize", "strip", "number", "stamp", "images", "render", "from-images", "compress"}
 
