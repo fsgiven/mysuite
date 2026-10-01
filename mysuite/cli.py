@@ -22,6 +22,7 @@ from mysuite.helpers.cli import contrast as contrast_command, diff as diff_comma
 from mysuite.kits.cli import app as kit_app
 from mysuite.pdf.cli import app as pdf_app
 from mysuite.preset_cli import app as preset_app
+from mysuite.specs.cli import print_command, profile_command, rename_command, sheet_command
 from mysuite.relight.cli import relight as relight_command
 from mysuite.transform.cli import transform as transform_command
 from mysuite.watermark.cli import watermark as watermark_command
@@ -80,6 +81,10 @@ app.command("ocr", help="Read the text in images (macOS Vision, on device).")(oc
 app.command("dupes", help="Find identical and look-alike images. Read only.")(dupes_command)
 app.command("diff", help="Compare two images: how much changed, optionally as a picture.")(diff_command)
 app.command("contrast", help="WCAG contrast ratio of two colours, or of a logo's colours on a background.")(contrast_command)
+app.command("print", help="Output at an exact size (10x15cm @300dpi = 1181x1772 px), dpi stored in the file.")(print_command)
+app.command("rename", help="Rename many files by a pattern ({n}, {date}, {name}...). Copies by default.")(rename_command)
+app.command("sheet", help="Contact sheet: many pictures on one labelled page.")(sheet_command)
+app.command("profile", help="Convert colour profiles: to sRGB for screens, to CMYK for print.")(profile_command)
 app.add_typer(qr_app, name="qr")
 app.add_typer(kit_app, name="kit")
 app.add_typer(pdf_app, name="pdf")
