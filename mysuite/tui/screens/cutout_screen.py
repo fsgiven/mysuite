@@ -45,6 +45,8 @@ class CutoutDropInput(Input):
 
 
 class CutoutScreen(Screen):
+    TOOL_KEY = "cutout"
+
     BINDINGS = [
         ("escape", "go_back", "Back"),
         ("ctrl+r", "run", "Run"),

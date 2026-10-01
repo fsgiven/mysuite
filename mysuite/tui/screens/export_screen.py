@@ -73,6 +73,8 @@ class SvgDropInput(Input):
 
 
 class ExportScreen(Screen):
+    TOOL_KEY = "export"
+
     BINDINGS = [
         ("escape", "go_back", "Back"),
         ("ctrl+r", "run", "Run"),

@@ -68,6 +68,8 @@ class EnhanceDropInput(Input):
 
 
 class EnhanceScreen(Screen):
+    TOOL_KEY = "enhance"
+
     BINDINGS = [
         ("escape", "go_back", "Back"),
         ("ctrl+r", "run", "Run"),

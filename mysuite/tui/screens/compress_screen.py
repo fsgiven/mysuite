@@ -57,6 +57,8 @@ class CompressDropInput(Input):
 
 
 class CompressScreen(Screen):
+    TOOL_KEY = "compress"
+
     BINDINGS = [
         ("escape", "go_back", "Back"),
         ("ctrl+r", "run", "Run"),

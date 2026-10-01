@@ -53,6 +53,8 @@ class ConvertDropInput(Input):
 
 
 class ConvertScreen(Screen):
+    TOOL_KEY = "convert"
+
     BINDINGS = [
         ("escape", "go_back", "Back"),
         ("ctrl+r", "run", "Run"),

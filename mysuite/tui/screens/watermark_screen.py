@@ -56,6 +56,8 @@ class WatermarkDropInput(Input):
 
 
 class WatermarkScreen(Screen):
+    TOOL_KEY = "watermark"
+
     BINDINGS = [
         ("escape", "go_back", "Back"),
         ("ctrl+r", "run", "Run"),

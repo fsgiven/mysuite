@@ -35,7 +35,7 @@ Outputs are always written **beside the source** with a suffix (`_cutout`, `_str
 Developed and tested on macOS (Apple Silicon, Homebrew). `cutout` and `icns` export are macOS-only (`enhance` is plain Python and has no such limit).
 The rest wraps standard command-line tools, so it should work elsewhere, but that's untested.
 
-`mysuite tui` opens the dashboard: a front page (a suitcase mascot in a top hat, with tips), then the tool overview; press any key to continue.
+`mysuite tui` opens the dashboard: an animated front page (file-type tags drifting past, the suitcase mascot with two handles bobbing and talking), then the tools as cards (icon, name, one line; arrows or number keys). Press **h** (overview) or **F1** (any screen) and the mascot slides up and explains the tool you're in, with the same job as a terminal command.
 
 **Using it from an AI agent?** Every command has `--json`, there is a sandbox, a pipeline format and an MCP server. Start with [AGENTS.md](AGENTS.md) (rules, which command to use, tested examples) and [docs/agents/COMMANDS.md](docs/agents/COMMANDS.md).
 

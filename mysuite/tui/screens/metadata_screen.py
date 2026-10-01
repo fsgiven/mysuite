@@ -46,6 +46,8 @@ class MetadataDropInput(Input):
 
 
 class MetadataScreen(Screen):
+    TOOL_KEY = "metadata"
+
     BINDINGS = [
         ("escape", "go_back", "Back"),
         ("ctrl+r", "run", "Run"),
