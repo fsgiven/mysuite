@@ -15,9 +15,18 @@ dependencies = [
     "textual>=2.0",
     "tomlkit>=0.13",
     "pillow",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]
+# Optional neural backend for `mysuite enhance` (Real-ESRGAN upscaling + GFPGAN faces).
+# Also needs model weights in ~/.cache/mysuite/models — see README.
+ai = [
+    "torch>=2.0",
+    "realesrgan>=0.3.0",
+    "basicsr>=1.4.2",
+    "gfpgan>=1.3.8",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",

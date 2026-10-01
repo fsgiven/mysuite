@@ -22,6 +22,9 @@ files** to other programs: `exiftool`, ImageMagick (`magick`), Ghostscript (`gs`
 - **Filenames are untrusted too.** mysuite always hands tools absolute paths, so a file named like
   `-all=.png` can't be mistaken for an option. If you find a way around that, please report it.
 
+`mysuite enhance` is different: it decodes images **in-process with Pillow** (and optionally PyTorch
+models) rather than through a separate program, so keep `pillow` up to date (`pip install -U pillow`).
+
 mysuite never modifies your originals; every output is a new file beside the source.
 
 ## What this is not

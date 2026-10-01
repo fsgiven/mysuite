@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from mysuite.compress.presets import BUILT_IN_COMPRESS_PRESETS
+from mysuite.enhance.presets import BUILT_IN_ENHANCE_PRESETS
 from mysuite.export.naming import DEFAULT_BUNDLE_NAMING_TEMPLATE
 
 
@@ -99,6 +100,9 @@ class Config:
     compress_presets: dict[str, dict] = field(
         default_factory=lambda: dict(BUILT_IN_COMPRESS_PRESETS)
     )
+    enhance_presets: dict[str, dict] = field(
+        default_factory=lambda: dict(BUILT_IN_ENHANCE_PRESETS)
+    )
 
     def resolve_export_settings(self, preset: str | None) -> ExportSettings:
         settings = self.export
@@ -116,16 +120,24 @@ class Config:
         anything not None) on top of preset's settings bundle, if given. A
         preset is a starting point, not a lock: any field also present in
         overrides wins over the preset's value for that field."""
-        base: dict = {}
-        if preset is not None:
-            if preset not in self.compress_presets:
-                raise MysuiteConfigError(
-                    f"unknown compress preset {preset!r}; available presets: "
-                    f"{', '.join(sorted(self.compress_presets)) or '(none defined)'}"
-                )
-            base = dict(self.compress_presets[preset])
-        base.update({k: v for k, v in overrides.items() if v is not None})
-        return base
+        return _layer_preset(self.compress_presets, "compress", preset, overrides)
+
+    def resolve_enhance_settings(self, preset: str | None, overrides: dict) -> dict:
+        """Same layering as resolve_compress_settings, for enhance presets."""
+        return _layer_preset(self.enhance_presets, "enhance", preset, overrides)
+
+
+def _layer_preset(presets: dict[str, dict], kind: str, preset: str | None, overrides: dict) -> dict:
+    base: dict = {}
+    if preset is not None:
+        if preset not in presets:
+            raise MysuiteConfigError(
+                f"unknown {kind} preset {preset!r}; available presets: "
+                f"{', '.join(sorted(presets)) or '(none defined)'}"
+            )
+        base = dict(presets[preset])
+    base.update({k: v for k, v in overrides.items() if v is not None})
+    return base
 
 
 def _find_config_path(explicit: Path | None) -> Path | None:
@@ -167,8 +179,9 @@ def load_config(explicit_path: Path | None = None) -> Config:
 
     presets = {**BUILT_IN_PRESETS, **data.get("presets", {})}
     compress_presets = {**BUILT_IN_COMPRESS_PRESETS, **data.get("compress_presets", {})}
+    enhance_presets = {**BUILT_IN_ENHANCE_PRESETS, **data.get("enhance_presets", {})}
 
     return Config(
         export=export_settings, tools=tool_paths, presets=presets,
-        compress_presets=compress_presets,
+        compress_presets=compress_presets, enhance_presets=enhance_presets,
     )

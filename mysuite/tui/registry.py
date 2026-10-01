@@ -51,6 +51,12 @@ def _metadata_screen_factory() -> Screen:
     return MetadataScreen()
 
 
+def _enhance_screen_factory() -> Screen:
+    from mysuite.tui.screens.enhance_screen import EnhanceScreen
+
+    return EnhanceScreen()
+
+
 def _compress_screen_factory() -> Screen:
     from mysuite.tui.screens.compress_screen import CompressScreen
 
@@ -99,5 +105,12 @@ TOOL_REGISTRY: list[ToolSpec] = [
         description="Re-encode via a best-in-class codec (mozjpeg/webp/avif/oxipng/pngquant/gifsicle), with sharpening.",
         screen_factory=_compress_screen_factory,
         accent="#FDE047",  # amber-gold
+    ),
+    ToolSpec(
+        key="enhance",
+        label="Enhance",
+        description="Upscale and restore photos locally — denoise, sharpen, scratch removal, color.",
+        screen_factory=_enhance_screen_factory,
+        accent="#F9A8D4",  # rose
     ),
 ]

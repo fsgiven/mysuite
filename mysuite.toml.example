@@ -72,3 +72,15 @@ variant = "negative"
 [presets.negative.recolor]
 "#2b6cb0" = "#000000"
 "#f6ad55" = "#ffffff"
+
+# `mysuite compress --preset my-web-jpeg` — a codec plus its settings (see `compress --list-presets`).
+# [compress_presets.my-web-jpeg]
+# codec = "mozjpeg"
+# quality = 80
+
+# `mysuite enhance run photo.jpg --preset my-scan` — see `mysuite enhance presets` for the fields.
+# [enhance_presets.my-scan]
+# scale = 2
+# denoise = 0.4
+# restore_scratches = true
+# output_format = "png"

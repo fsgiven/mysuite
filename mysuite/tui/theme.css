@@ -13,6 +13,7 @@
      accent — watermark       #5EEAD4  (teal)
      accent — metadata        #93C5FD  (periwinkle)
      accent — compress        #FDE047  (amber-gold)
+     accent — enhance         #F9A8D4  (rose)
      success                  #4ADE80
      warning                  #FBBF24
      error                    #F87171
@@ -192,6 +193,10 @@ CompressScreen .field-group {
     border-title-color: #FDE047;
 }
 
+EnhanceScreen .field-group {
+    border-title-color: #F9A8D4;
+}
+
 ExportScreen Button:focus {
     border: tall #7DD3FC;
 }
@@ -214,6 +219,10 @@ MetadataScreen Button:focus {
 
 CompressScreen Button:focus {
     border: tall #FDE047;
+}
+
+EnhanceScreen Button:focus {
+    border: tall #F9A8D4;
 }
 
 /* Home screen */

@@ -16,6 +16,7 @@ _BROWSE_BUTTONS = [
     ("watermark", "browse-input-files"),
     ("watermark", "browse-logo"),
     ("compress", "browse-input-files"),
+    ("enhance", "browse-input-files"),
     ("export", "browse-input-svg"),
     ("export", "browse-out-dir"),
 ]

@@ -7,6 +7,7 @@ from mysuite.config import load_config
 from mysuite.convert.cli import convert as convert_command
 from mysuite.cutout.cli import cutout as cutout_command
 from mysuite.doctor import run_doctor
+from mysuite.enhance.cli import app as enhance_app
 from mysuite.export.cli import export as export_command
 from mysuite.metadata.cli import app as metadata_app
 from mysuite.preset_cli import app as preset_app
@@ -34,6 +35,7 @@ app.command("compress", help="Re-encode image(s) via a best-in-class codec (mozj
 )
 app.add_typer(preset_app, name="preset")
 app.add_typer(metadata_app, name="metadata")
+app.add_typer(enhance_app, name="enhance")
 
 
 @app.command("doctor", help="Check that required tools (rsvg-convert, gs, magick, mysuite-cutout, exiftool, c2patool, codec encoders) are installed.")

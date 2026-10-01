@@ -11,12 +11,13 @@ telemetry.
 | `cutout` | Isolate a photo's subject onto a transparent background (macOS Vision) |
 | `watermark` | Stamp a logo onto images as a visible, scalable overlay |
 | `metadata` | **strip** all metadata, **randomize** it into a plausible decoy camera, or **credit** with a C2PA provenance record |
+| `enhance` | Upscale and restore photos locally: denoise, sharpen, scratch removal, color, optional AI backend |
 | `compress` | Re-encode with the same best-in-class codecs Squoosh uses (mozjpeg, WebP, AVIF, oxipng, pngquant, gifsicle), plus sharpening |
 
 Outputs are always written **beside the source** with a suffix (`_cutout`, `_stripped`, `_compressed`,
 ...). mysuite never overwrites without `--overwrite` and never modifies your original.
 
-Developed and tested on macOS (Apple Silicon, Homebrew). `cutout` and `icns` export are macOS-only.
+Developed and tested on macOS (Apple Silicon, Homebrew). `cutout` and `icns` export are macOS-only (`enhance` is plain Python and has no such limit).
 The rest wraps standard command-line tools, so it should work elsewhere, but that's untested.
 
 ## Setup
@@ -385,6 +386,66 @@ handing off to the codec — resize is deliberately out of scope here, Export/Co
 that.
 `--overwrite`/`--recursive`/`--dry-run`/`--config` work the same way as the other tools.
 
+## Enhance
+
+Upscales and restores photos entirely on your machine — no uploads, no credits, no watermark. A
+classical pipeline (Pillow + NumPy) always works with zero extra setup; an optional neural backend
+adds real AI upscaling and face restoration.
+
+```bash
+mysuite enhance run photo.jpg                          # gentle preset: 2x -> photo_enhanced.png
+mysuite enhance run ./scans/ --preset old-photo        # denoise + color + scratch removal
+mysuite enhance run photo.jpg --preset prime --scale 3 --format jpg --quality 92
+mysuite enhance presets                                # list presets + whether the AI backend is installed
+```
+
+Writes `photo_enhanced.<ext>` beside the source (never touches the original); `--overwrite`,
+`--recursive`, `--dry-run`, `--config` and `--quiet` work like the other tools. Presets (`prime`,
+`gentle`, `old-photo`, `ai-art`, `portrait`) are starting points: any flag you also pass overrides that
+field, and you can add your own under `[enhance_presets.NAME]` in `mysuite.toml`.
+Fields: `--scale 1-8`, `--denoise`/`--sharpen` (0-1), `--saturation`/`--contrast`/`--gamma`,
+`--auto-white-balance`, `--face-enhance`, `--restore-scratches`, `--format png|jpg|webp`, `--quality`.
+
+Pipeline order: scratch removal (at native resolution, where thin lines are crispest) → upscale +
+denoise + sharpen → color (white balance, saturation, contrast) → gamma.
+
+**Handled for you:** EXIF rotation is applied to the pixels, since the output carries no EXIF and a
+rotation flag would be lost; wide-gamut sources (Display P3, Adobe RGB) are converted to sRGB instead
+of being tagged-then-stripped, which would wash the colors out; transparency is kept for PNG/WebP and
+flattened to white for JPEG. **The output has no metadata at all** — no EXIF, XMP or color profile.
+
+**Honest about its limits**
+- The classical backend is Lanczos resampling plus an unsharp mask. It makes a sharper, cleaner large
+  image, but it cannot invent detail the way a neural upscaler does — expect a clear difference from
+  services like Let's Enhance on small, soft sources.
+- **Face enhancement does nothing without the AI backend**, and says so in the output rather than
+  silently skipping it. The `prime`, `old-photo` and `portrait` presets turn it on.
+- **Scratch removal** (`--restore-scratches`, on in `old-photo` only) fills thin, straight, high-contrast
+  lines from their clean surroundings; nothing else is touched. It was tuned on real photos so it
+  doesn't fire on door frames or hair, which means **faint scratches (below roughly +30 luminance) and
+  short ones (under 25px) are left alone**. It isn't generative inpainting: torn or wide damage stays,
+  and a real power line or railing can be partly filled in, so leave it off for ordinary photos.
+- Output is capped at 250 megapixels; a larger result needs a smaller `--scale`.
+
+**Optional AI backend (Real-ESRGAN upscaling, GFPGAN faces).** Not installed by default — it pulls in
+PyTorch (hundreds of MB). To enable it:
+
+```bash
+pip install ".[ai]"
+mkdir -p ~/.cache/mysuite/models     # or set MYSUITE_CACHE_DIR
+# download RealESRGAN_x4plus.pth (Real-ESRGAN releases) and GFPGANv1.4.pth (GFPGAN releases) into it
+mysuite enhance presets              # should now report the AI backend as available
+```
+
+`--backend auto` (the default) uses it when present and falls back to classical otherwise;
+`--backend realesrgan` fails clearly if it's missing. This path is ported from a standalone prototype
+and has **not** been exercised against real model weights yet.
+
+**Job history is off by default.** `--record-history` logs each job (paths, sizes, timing) to a local
+SQLite file (`~/.local/share/mysuite/enhance-history.db`, or `MYSUITE_DATA_DIR`) so
+`mysuite enhance history` can list it and `--clear` can delete it. It's opt-in because a log of
+which files you processed is itself a trace.
+
 ## Terminal dashboard
 
 ```bash
@@ -392,7 +453,7 @@ mysuite tui
 ```
 
 Opens an interactive home screen listing the available tools — **Export**, **Convert**, **Cutout**,
-**Watermark**, **Metadata**, **Compress** today, each with its own accent color so it's obvious
+**Watermark**, **Metadata**, **Compress**, **Enhance** today, each with its own accent color so it's obvious
 which one you're in; more (`palette`, `sort`) will show up here as they're added, no navigation
 changes needed. Press a number key to jump straight to a tool, or arrow keys + Enter. The Export
 screen mirrors every CLI flag as a two-column form, fields grouped into titled panels (Source,
@@ -402,7 +463,7 @@ typing the suffix every time, and a **Recolor** section with dedicated FROM/TO f
 or CSS color names) plus +/− buttons, rather than one syntax-heavy text field. Convert/Cutout/
 Watermark use the same form/run shape, scaled down to what each actually needs (no
 sizes/formats/quality concepts for Cutout, for instance); Metadata adds a **Mode** toggle
-(Strip/Credit) that shows or hides the Author/Copyright/Generator fields depending which mode is
+(Strip/Randomize/Credit) that shows or hides the Author/Copyright/Generator fields depending which mode is
 selected; Compress adds a **Codec** dropdown that shows only the six mozjpeg/webp/avif/oxipng/
 pngquant/gifsicle option groups relevant to whichever codec is selected.
 Keyboard shortcuts are shown in the footer: **Ctrl+R** run, **Ctrl+S** save the
