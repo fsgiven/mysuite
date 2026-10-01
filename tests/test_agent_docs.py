@@ -15,7 +15,7 @@ from mysuite.cli import app
 from tests.helpers import SIMPLE_SVG, runner
 
 ROOT = Path(__file__).resolve().parent.parent
-need = pytest.mark.skipif(not all(shutil.which(t) for t in ("rsvg-convert", "gs", "magick", "exiftool")), reason="needs tools")
+need = pytest.mark.skipif(not all(shutil.which(t) for t in ("rsvg-convert", "gs", "magick", "exiftool", "c2patool", "oxipng")), reason="needs tools")
 
 
 def doctest_lines() -> list[str]:
@@ -36,6 +36,8 @@ def test_every_agents_md_example_runs(line, tmp_path, monkeypatch):
     (tmp_path / "logo.svg").write_text(SIMPLE_SVG)
     subprocess.run(["magick", "-size", "40x30", "xc:#dd0000", f"PNG24:{tmp_path / 'pic.png'}"], check=True)
     subprocess.run(["magick", "-size", "40x30", "xc:#336699", str(tmp_path / "photo.jpg")], check=True)
+    toml_block = re.search(r"```toml\n(.*?)```", (ROOT / "AGENTS.md").read_text(), re.S).group(1)
+    (tmp_path / "release.toml").write_text(toml_block)               # the pipeline example from the doc
     monkeypatch.chdir(tmp_path)
     argv = shlex.split(line)
     assert argv[0] == "mysuite", line

@@ -55,6 +55,7 @@ mysuite export logo.svg --formats pdf --profiles cmyk --cmyk-mode clean --sizes 
 mysuite convert pic.png --to webp --json
 mysuite metadata strip photo.jpg --json
 mysuite --allow . convert pic.png --to jpeg --overwrite --json
+mysuite pipeline run release.toml --json
 ```
 
 A refusal looks like this (exit code 3, nothing written):
@@ -62,6 +63,44 @@ A refusal looks like this (exit code 3, nothing written):
 ```bash
 mysuite --allow ./work export logo.svg --out /somewhere/else --json
 ```
+
+## Several tools in one go: pipelines
+
+For "export, then strip metadata, then compress" write a pipeline file instead of running three commands.
+Option names are the CLI flags with underscores (`cmyk_mode` = `--cmyk-mode`); a typo is rejected before
+anything runs. Each step takes the previous step's outputs (`only` filters by extension, `from = "inputs"` or a
+step `id` picks another source). Relative paths are relative to the pipeline file. Steps run as ordinary
+`mysuite … --json` commands, so the sandbox applies; a failing step skips the rest (unless
+`continue_on_error = true`); nothing is overwritten unless `overwrite = true`.
+
+```toml
+name = "release"
+inputs = ["logo.svg"]
+
+[[step]]
+tool = "export"
+formats = ["png"]
+sizes = [64, 512]
+out = "dist"
+
+[[step]]
+tool = "metadata"
+action = "credit"            # strip | randomize | credit
+author = "Acme"
+only = ["png"]
+
+[[step]]
+tool = "compress"
+codec = "oxipng"
+only = ["png"]
+```
+
+```bash
+mysuite pipeline run release.toml --dry-run --json   # step 1 planned exactly; later steps listed symbolically
+mysuite pipeline run release.toml --json
+```
+
+The result has one item per step (`status`, `outputs`, and the step's own `result` document).
 
 ## Reading the result
 

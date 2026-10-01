@@ -290,6 +290,15 @@ Strip all EXIF/IPTC/XMP/ICC metadata, writing a new file beside the source.
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite pipeline run`
+
+Run a pipeline file (TOML or JSON). Steps run in order; each takes the previous step's outputs.
+
+- argument `file` (file, required) Pipeline file (.toml or .json).
+- `--dry-run` (boolean) Validate everything and show the plan. Step 1 is planned exactly; later steps that consume earlier outputs are listed symbolically (their file names exist only after the run).
+- `--config / -c` (path) Explicit path to mysuite.toml, passed to every step.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite preset list`
 
 List available presets (built-in and from mysuite.toml).

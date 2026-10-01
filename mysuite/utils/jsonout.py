@@ -11,9 +11,11 @@ Exit codes: 0 ok · 1 some item failed · 2 bad usage · 3 refused by policy/san
 from __future__ import annotations
 
 import json
+import os
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterator
 
 import typer
@@ -81,6 +83,8 @@ def _jsonable(value: Any) -> Any:
         return [_jsonable(v) for v in value]
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
+    if isinstance(value, Path):
+        return os.path.abspath(value)       # agents get absolute paths, whatever the user typed
     return str(value)
 
 
