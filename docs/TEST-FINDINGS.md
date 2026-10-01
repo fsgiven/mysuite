@@ -4,7 +4,7 @@ In-depth testing of every tool, **no fixes made**. Each finding below is pinned 
 `xfail(strict=True)` test, so the suite stays green today and fails loudly the day a bug is fixed
 (that is your cue to delete the marker). Run `pytest -rx` to list them with their reasons.
 
-**Suite now:** 275 passed, 21 expected failures (the findings), stable across repeated runs.
+**Suite now:** 275 passed, 22 expected failures (the findings), stable across repeated runs.
 Before this pass the suite had 142 tests and covered none of export, convert, watermark, cutout or
 `metadata credit`.
 
@@ -16,6 +16,7 @@ CMYK, by decompressing the PDF content stream and reading the ink numbers it act
 
 | ID | Sev | Tool | What is wrong | Evidence | Proposed fix (phase) |
 | --- | --- | --- | --- | --- | --- |
+| D1 | **High** | export, convert, watermark, metadata | These commands refuse to run (they print the doctor table and do nothing) unless **every** tool is installed, including the macOS-only `mysuite-cutout` Swift helper and `c2patool`. A fresh clone that follows the README without building the helper cannot export a single file; it is also why CI failed on first run | Simulated config pointing those two at missing binaries: export prints "Install the missing tool(s)" and writes nothing | Check only the tools each command needs (compress already does) (quick win) |
 | C1 | **High** | export | CMYK differs by format: PDF/EPS use Ghostscript, TIFF uses ImageMagick | `#dd0000` → PDF **C6 M100 Y100 K1**, TIFF **C0 M100 Y100 K34** | One CMYK engine for all formats (1) |
 | C2 | **High** | export | Neutral grey becomes a noisy "rich" mix | `#222222` → PDF **69/66/65/72**; TIFF gets clean K87 | Keep greys K-only; engine (1) |
 | C3 | Med-High | export | No ICC profile / output intent in CMYK PDFs, so the numbers have no defined meaning for a printer | no `OutputIntent`/`ICCBased` in the file | Embed a chosen profile (1) |
@@ -72,7 +73,7 @@ CMYK, by decompressing the PDF content stream and reading the ink numbers it act
 ## Suggested order for fixing
 
 1. **Phase 1 (colour engine):** C1, C2, C3, R1–R5 (one design solves all eight).
-2. **Quick wins, no design needed:** V1 (+litter), W1, W2, V2, V4, Q2, E1, E2, K2.
+2. **Quick wins, no design needed:** **D1 first (it blocks other people's use today)**, then V1 (+litter), W1, W2, V2, V4, Q2, E1, E2, K2.
 3. **Decisions for you:** K1 (should cutout keep any metadata by default?) and S2 (reject `..` outright, or
    confine to the output root?).
 4. **Phase 3/5:** S2 as part of profiles and the agent sandbox.
