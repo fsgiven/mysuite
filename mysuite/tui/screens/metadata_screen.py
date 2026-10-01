@@ -18,8 +18,10 @@ from textual.widgets import (
     Select,
     Static,
 )
+from rich.markup import escape
 from textual.worker import get_current_worker
 
+from mysuite.utils.paths import show_path
 from mysuite.config import Config, load_config
 from mysuite.convert._parsing import InvalidInputError, SOURCE_EXTENSIONS, resolve_input_files
 from mysuite.metadata.metadata import MetadataOutcome, credit_file, randomize_file, strip_file
@@ -141,7 +143,7 @@ class MetadataScreen(Screen):
         field = self.query_one(field_id, Input)
         field.add_class("field-error")
         field.focus()
-        self._log(f"[#F87171]✗[/#F87171] {message}")
+        self._log(f"[#F87171]✗[/#F87171] {escape(message)}")
 
     def _resolve_form(
         self,
@@ -235,11 +237,11 @@ class MetadataScreen(Screen):
     ) -> None:
         self.query_one("#run-progress", ProgressBar).advance(1)
         if error is not None:
-            self._log(f"[#F87171]✗[/#F87171] {input_path}: {error}")
+            self._log(f"[#F87171]✗[/#F87171] {show_path(input_path)}: {escape(error)}")
         elif outcome is not None and outcome.status == "skipped_existing":
-            self._log(f"[dim]— exists, skipped: {outcome.output_path}[/dim]")
+            self._log(f"[dim]— exists, skipped: {show_path(outcome.output_path)}[/dim]")
         elif outcome is not None:
-            self._log(f"[#4ADE80]✓[/#4ADE80] {outcome.output_path}")
+            self._log(f"[#4ADE80]✓[/#4ADE80] {show_path(outcome.output_path)}")
 
     def _on_run_complete(self, written: int, skipped: int, failed: int) -> None:
         self.query_one("#run-btn", Button).disabled = False

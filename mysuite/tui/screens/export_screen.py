@@ -20,8 +20,10 @@ from textual.widgets import (
     SelectionList,
     Static,
 )
+from rich.markup import escape
 from textual.worker import get_current_worker
 
+from mysuite.utils.paths import show_path
 from mysuite.config import (
     DEFAULT_NAMING_TEMPLATE,
     DEFAULT_PATH_TEMPLATE,
@@ -370,7 +372,7 @@ class ExportScreen(Screen):
     def _flash_error_widget(self, field: Input, message: str) -> None:
         field.add_class("field-error")
         field.focus()
-        self._log(f"[#F87171]✗[/#F87171] {message}")
+        self._log(f"[#F87171]✗[/#F87171] {escape(message)}")
 
     def _flash_error(self, field_id: str, message: str) -> None:
         self._flash_error_widget(self.query_one(field_id, Input), message)
@@ -562,7 +564,7 @@ class ExportScreen(Screen):
                     strict=strict,
                 )
             except MysuitePlannerError as exc:
-                self._log(f"[#F87171]✗[/#F87171] {input_svg}: {exc}")
+                self._log(f"[#F87171]✗[/#F87171] {escape(str(input_svg))}: {escape(str(exc))}")
                 return None
             plans.append((input_svg, plan))
 
@@ -576,7 +578,7 @@ class ExportScreen(Screen):
         total = sum(len(p.jobs) + len(p.bundle_jobs) for _, p in plans)
         for _, plan in plans:
             for skip in plan.skips:
-                self._log(f"[#FBBF24]⚠ skipping[/#FBBF24] {skip.format}/{skip.colorspace} — {skip.reason}")
+                self._log(f"[#FBBF24]⚠ skipping[/#FBBF24] {skip.format}/{skip.colorspace} — {escape(skip.reason)}")
 
         if self.query_one("#dry-run", Checkbox).value:
             self._log(f"[dim]dry run — {total} file(s) would be written, 0 written[/dim]")
@@ -658,9 +660,9 @@ class ExportScreen(Screen):
     def _on_job_done_ui(self, job: ExportJob, skipped: bool) -> None:
         self.query_one("#run-progress", ProgressBar).advance(1)
         if skipped:
-            self._log(f"[dim]— exists, skipped: {job.output_path}[/dim]")
+            self._log(f"[dim]— exists, skipped: {show_path(job.output_path)}[/dim]")
         else:
-            self._log(f"[#4ADE80]✓[/#4ADE80] {job.output_path}")
+            self._log(f"[#4ADE80]✓[/#4ADE80] {show_path(job.output_path)}")
 
     def _on_run_complete(self, result: ExecutionResult) -> None:
         self.query_one("#run-btn", Button).disabled = False

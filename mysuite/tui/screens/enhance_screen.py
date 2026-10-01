@@ -19,8 +19,10 @@ from textual.widgets import (
     Select,
     Static,
 )
+from rich.markup import escape
 from textual.worker import get_current_worker
 
+from mysuite.utils.paths import show_path
 from mysuite.config import Config, MysuiteConfigError, load_config
 from mysuite.enhance._parsing import (
     ENHANCE_EXTENSIONS,
@@ -180,7 +182,7 @@ class EnhanceScreen(Screen):
         field = self.query_one(field_id, Input)
         field.add_class("field-error")
         field.focus()
-        self._log(f"[#F87171]✗[/#F87171] {message}")
+        self._log(f"[#F87171]✗[/#F87171] {escape(message)}")
 
     @staticmethod
     def _widget_id(key: str) -> str:
@@ -299,16 +301,16 @@ class EnhanceScreen(Screen):
     def _on_item_done(self, outcome: EnhanceOutcome | None, error: str | None, input_path: Path) -> None:
         self.query_one("#run-progress", ProgressBar).advance(1)
         if error is not None:
-            self._log(f"[#F87171]✗[/#F87171] {input_path}: {error}")
+            self._log(f"[#F87171]✗[/#F87171] {show_path(input_path)}: {escape(error)}")
         elif outcome is not None and outcome.status == "skipped_existing":
-            self._log(f"[dim]— exists, skipped: {outcome.output_path}[/dim]")
+            self._log(f"[dim]— exists, skipped: {show_path(outcome.output_path)}[/dim]")
         elif outcome is not None:
             self._log(
-                f"[#4ADE80]✓[/#4ADE80] {outcome.output_path} [dim]{outcome.input_size[0]}x{outcome.input_size[1]}"
+                f"[#4ADE80]✓[/#4ADE80] {show_path(outcome.output_path)} [dim]{outcome.input_size[0]}x{outcome.input_size[1]}"
                 f" -> {outcome.output_size[0]}x{outcome.output_size[1]}, {outcome.backend_used}[/dim]"
             )
             for note in outcome.notes:
-                self._log(f"[#FBBF24]⚠[/#FBBF24] {note}")
+                self._log(f"[#FBBF24]⚠[/#FBBF24] {escape(note)}")
 
     def _on_run_complete(self, written: int, skipped: int, failed: int) -> None:
         self.query_one("#run-btn", Button).disabled = False

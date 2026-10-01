@@ -7,6 +7,7 @@ from typing import List, Optional
 import typer
 from rich.tree import Tree
 
+from rich.markup import escape
 from mysuite.config import DEFAULT_NAMING_TEMPLATE, DEFAULT_PATH_TEMPLATE, MysuiteConfigError, load_config
 from mysuite.doctor import missing_tools, run_doctor
 from mysuite.export._parsing import (
@@ -64,7 +65,7 @@ def _build_tree(name: str, jobs, skips, bundle_jobs) -> Tree:
             fmt_branch.add(f"[magenta]{colorspace}[/magenta]  (contains {sizes_str})")
 
     for skip in skips:
-        tree.add(f"[#FBBF24]⚠ skipped {skip.format}/{skip.colorspace}[/#FBBF24] — {skip.reason}")
+        tree.add(f"[#FBBF24]⚠ skipped {skip.format}/{skip.colorspace}[/#FBBF24] — {escape(skip.reason)}")
 
     return tree
 
@@ -236,7 +237,7 @@ def export(
                 parse_padding(side_value, reference_px=100)  # syntax check only; actual
                 # px is resolved per-size at render time since "%" depends on each size.
             except InvalidPaddingError as exc:
-                log_error(f"{side_name}: {exc}")
+                log_error(f"{side_name}: {escape(str(exc))}")
                 raise typer.Exit(1) from exc
 
     unknown_formats = set(resolved_formats) - VALID_FORMATS
@@ -296,12 +297,12 @@ def export(
                 strict=resolved_strict,
             )
         except MysuitePlannerError as exc:
-            log_error(f"{input_svg}: {exc}")
+            log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
             raise typer.Exit(1) from exc
 
         if not quiet:
             if batch:
-                console.print(f"\n[bold]=== {input_svg} ===[/bold]")
+                console.print(f"\n[bold]=== {escape(str(input_svg))} ===[/bold]")
             console.print(_build_tree(resolved_name, plan.jobs, plan.skips, plan.bundle_jobs))
 
         file_total = len(plan.jobs) + len(plan.bundle_jobs)
@@ -315,13 +316,13 @@ def export(
         for skip in plan.skips:
             if quiet:
                 continue
-            log_skip(f"{skip.format}/{skip.colorspace} — {skip.reason}")
+            log_skip(f"{skip.format}/{skip.colorspace} — {escape(skip.reason)}")
 
         def on_job_done(job, skipped: bool) -> None:
             if quiet:
                 return
             if skipped:
-                console.print(f"[dim]— exists, skipped: {job.output_path}[/dim]")
+                console.print(f"[dim]— exists, skipped: {escape(str(job.output_path))}[/dim]")
             else:
                 log_step(str(job.output_path))
 

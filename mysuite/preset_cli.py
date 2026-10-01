@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
+from rich.markup import escape
 from rich.table import Table
 
 from mysuite.config import BUILT_IN_PRESETS, MysuiteConfigError, load_config
@@ -126,4 +127,4 @@ def save(
 
     target = config_path or (Path.cwd() / "mysuite.toml")
     save_preset(target, name, settings)
-    console.print(f"[bold green]saved[/bold green] preset {name!r} to {target}")
+    console.print(f"[bold green]saved[/bold green] preset {name!r} to {escape(str(target))}")

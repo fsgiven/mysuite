@@ -6,6 +6,7 @@ from typing import List, Optional
 
 import typer
 
+from rich.markup import escape
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.enhance import history
 from mysuite.enhance._parsing import (
@@ -86,7 +87,7 @@ def run(
     if dry_run:
         for f in files:
             if not quiet:
-                console.print(f"[dim]{f} -> {output_path_for(f, settings.output_format)}[/dim]")
+                console.print(f"[dim]{escape(str(f))} -> {escape(str(output_path_for(f, settings.output_format)))}[/dim]")
         if not quiet:
             console.print(f"\n[dim]dry run — {len(files)} photo(s) planned, 0 written[/dim]")
         return
@@ -97,7 +98,7 @@ def run(
             outcome = enhance_file(f, settings, backend=backend, overwrite=overwrite)
         except EnhanceError as exc:
             failed += 1
-            log_error(f"{f}: {exc}")
+            log_error(f"{escape(str(f))}: {escape(str(exc))}")
             if record_history:
                 history.record(input_path=str(f), output_path=None, preset=preset or "gentle",
                                backend=backend, status="failed", error=str(exc))
@@ -106,12 +107,12 @@ def run(
         if outcome.status == "skipped_existing":
             skipped += 1
             if not quiet:
-                console.print(f"[dim]— exists, skipped: {outcome.output_path}[/dim]")
+                console.print(f"[dim]— exists, skipped: {escape(str(outcome.output_path))}[/dim]")
             continue
 
         written += 1
         if not quiet:
-            log_step(f"{outcome.output_path}  [dim]{outcome.input_size[0]}x{outcome.input_size[1]} -> "
+            log_step(f"{escape(str(outcome.output_path))}  [dim]{outcome.input_size[0]}x{outcome.input_size[1]} -> "
                      f"{outcome.output_size[0]}x{outcome.output_size[1]}, {outcome.backend_used}, "
                      f"{outcome.duration_seconds:.1f}s[/dim]")
             for note in outcome.notes:
@@ -167,4 +168,4 @@ def show_history(
     for r in rows:
         when = datetime.fromtimestamp(r.created_at).strftime("%Y-%m-%d %H:%M")
         out = Path(r.output_path).name if r.output_path else "-"
-        console.print(f"#{r.id:<4} {when}  {r.status:<7} {r.preset or '-':<10} {Path(r.input_path).name} -> {out}")
+        console.print(f"#{r.id:<4} {when}  {r.status:<7} {r.preset or '-':<10} {escape(Path(r.input_path).name)} -> {escape(out)}")

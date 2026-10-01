@@ -5,6 +5,7 @@ from typing import List, Optional
 
 import typer
 
+from rich.markup import escape
 from mysuite.compress._parsing import (
     CODECS,
     InvalidCompressInputError,
@@ -193,7 +194,7 @@ def compress(
         for input_path in input_files:
             output_path = output_path_for(input_path, resolved_codec)
             if not quiet:
-                console.print(f"[dim]{input_path} -> {output_path}[/dim]")
+                console.print(f"[dim]{escape(str(input_path))} -> {escape(str(output_path))}[/dim]")
         if not quiet:
             console.print(f"\n[dim]dry run — {len(input_files)} compression(s) planned, 0 written[/dim]")
         return
@@ -211,17 +212,17 @@ def compress(
         except (CompressError, MysuiteToolError) as exc:
             failures.append((input_path, str(exc)))
             if not quiet:
-                log_error(f"{input_path}: {exc}")
+                log_error(f"{escape(str(input_path))}: {escape(str(exc))}")
             continue
 
         if outcome.status == "skipped_existing":
             total_skipped += 1
             if not quiet:
-                console.print(f"[dim]— exists, skipped: {outcome.output_path}[/dim]")
+                console.print(f"[dim]— exists, skipped: {escape(str(outcome.output_path))}[/dim]")
         else:
             total_written += 1
             if not quiet:
-                log_step(str(outcome.output_path))
+                log_step(escape(str(outcome.output_path)))
 
     if not quiet:
         console.print(
