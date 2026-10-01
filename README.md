@@ -59,6 +59,12 @@ silently skips hidden `.pth` files, which is exactly what editable installs rely
 changing code under `mysuite/`, re-run `pip install .` before using the `mysuite` command again
 (`pytest` doesn't need this — it imports the live source directly).
 
+### Security
+
+mysuite hands your files to exiftool, ImageMagick, Ghostscript and similar tools, so only run it on
+files and folders you trust, and keep those tools updated. See [SECURITY.md](SECURITY.md) for how to
+report a vulnerability.
+
 ## Usage
 
 ```bash
