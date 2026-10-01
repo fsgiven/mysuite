@@ -34,16 +34,20 @@ The rest wraps standard command-line tools, so it should work elsewhere, but tha
 
 mysuite is a young personal project, released as-is. Please read this before relying on it.
 
-| Tool | Automated tests | What else was checked | Known gaps |
-| --- | --- | --- | --- |
-| `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | Scratch detector measured on 8 real camera photos (0 false positives) | The optional AI backend has **never been run with real model weights**; face enhancement therefore only exists on paper |
-| `metadata` strip / randomize | Yes, against JPEG, PNG, WebP and TIFF seeded with EXIF, GPS, IPTC, XMP | Raw-byte search of the outputs for leftovers | `credit` (C2PA) has **no automated tests**: embedded and read back by hand with c2patool's built-in *test* certificate |
-| `compress` | Yes: all six codecs, presets, CLI, TUI | | |
-| `export` | **None** (an earlier suite was removed) | Exercised by hand while building it: SVG to PNG/PDF/EPS/SVG/ICO/ICNS, CMYK, presets, recoloring | Behaviour on unusual SVGs is untested |
-| `convert` | **None** | Exercised by hand | |
-| `watermark` | **None** | Exercised by hand | |
-| `cutout` | **None** | Checked by hand on a few photos | Needs macOS 14+ and a locally built helper; verified on one Mac only |
-| Terminal dashboard | Yes for Compress, Metadata, Enhance and the file picker | The other screens were opened and used by hand | Drag-and-drop depends on your terminal emulator |
+| Tool | Automated tests | Known problems |
+| --- | --- | --- |
+| `export` | Yes: every format and colourspace, CMYK values read back from the PDF, the recolor matrix, unusual and hostile SVGs, naming and path safety | **CMYK is inconsistent between PDF/EPS and TIFF**, greys come out as rich blacks, no ICC profile is embedded, and recolor misses `#d00`, `rgb()` and `hsl()` colours |
+| `convert` | Yes: the full source × target matrix and edge cases | animated GIF → PNG crashes and leaves temp files; multipage PDF keeps only page 1; ICO fails above 256 px |
+| `watermark` | Yes: all 9 positions, opacity, scale, SVG logos | a colour logo on a grayscale photo turns white; EXIF-rotated photos get the logo in the wrong corner |
+| `cutout` | Yes (needs the macOS helper, so skipped on CI): real Vision runs | misses the subject on ~15% of clean synthetic images and still reports success; copies all source metadata |
+| `metadata` | Yes: strip, randomize and **credit** (embed and read back as JPG/PNG/WebP/TIFF) | `credit` uses c2patool's built-in *test* certificate |
+| `compress` | Yes: all six codecs, presets, odd colour modes | `--codec webp` fails on CMYK TIFF |
+| `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | the optional AI backend has **never been run with real model weights**; 16-bit sources become 8-bit |
+| Terminal dashboard | Yes for all screens except the file-picker edge cases | Drag-and-drop depends on your terminal emulator |
+
+**Important:** `export`, `convert`, `watermark` and `metadata` currently **refuse to run unless every tool is
+installed, including the macOS-only cutout helper and `c2patool`** (finding D1). Full details, severity and
+proposed fixes for all 22 findings are in [docs/TEST-FINDINGS.md](docs/TEST-FINDINGS.md).
 
 **What was run on:** one machine, macOS 26 (Apple Silicon), Homebrew, Python 3.11, with ImageMagick
 7.1.2, exiftool 13.55, c2patool 0.27.15, Ghostscript 10.07, librsvg 2.62, mozjpeg 4.1.5, libwebp 1.6,
@@ -540,9 +544,9 @@ pytest                 # everything that can run on this machine
 pytest -m "not slow"   # skips the tests that call real external tools (exiftool, ImageMagick, codecs)
 ```
 
-The suite covers `enhance`, `compress`, `metadata` (strip and randomize), the file picker, path
-handling and the Compress/Metadata/Enhance screens. **`export`, `convert`, `watermark`, `cutout` and
-`metadata credit` have no automated tests**; see [Status](#status-what-is-and-isnt-tested). Tests that
+The suite covers every tool, the file picker, path
+handling and the dashboard screens. Known bugs are pinned with `xfail(strict=True)` and listed in
+[docs/TEST-FINDINGS.md](docs/TEST-FINDINGS.md); see also [Status](#status-what-is-and-isnt-tested). Tests that
 need an external tool skip with a reason when it isn't installed, rather than failing.
 
 ## License
