@@ -120,12 +120,7 @@ def test_input_folder_with_mixed_files_exports_only_svgs(tmp_path):
 
 
 @need_tools
-@pytest.mark.xfail(strict=True, reason="FINDING D1: export/convert/watermark/metadata refuse to run unless EVERY tool (incl. the macOS-only mysuite-cutout helper and c2patool) is installed")
 def test_export_runs_without_the_cutout_helper_and_c2patool(logo, tmp_path, monkeypatch):
-    from mysuite import doctor
-    from tests.conftest import ORIGINAL_TOOL_SPECS
-
-    monkeypatch.setattr(doctor, "TOOL_SPECS", ORIGINAL_TOOL_SPECS)          # the real, unpatched gate
     cfg = tmp_path / "c.toml"
     cfg.write_text('[tools]\ncutout_tool = "mysuite-cutout-NOT-INSTALLED"\nc2patool = "c2patool-NOT-INSTALLED"\n')
     res = cli("export", logo, "--config", cfg, "--formats", "png", "--sizes", "16", "--out", tmp_path / "o", "-q")

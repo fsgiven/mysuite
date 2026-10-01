@@ -8,7 +8,7 @@ import typer
 from rich.markup import escape
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
-from mysuite.doctor import missing_tools, run_doctor
+from mysuite.doctor import NEEDS, missing_tools, run_doctor
 from mysuite.metadata._parsing import output_path_for
 from mysuite.metadata.metadata import credit_file, randomize_file, strip_file
 from mysuite.utils.console import console, log_error, log_step
@@ -89,9 +89,9 @@ def strip(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools)
+    missing = missing_tools(config.tools, NEEDS["metadata-strip"])
     if missing:
-        run_doctor(config.tools)
+        run_doctor(config.tools, NEEDS["metadata-strip"])
         raise typer.Exit(1)
 
     _run_batch(
@@ -137,9 +137,9 @@ def credit(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools)
+    missing = missing_tools(config.tools, NEEDS["metadata-credit"])
     if missing:
-        run_doctor(config.tools)
+        run_doctor(config.tools, NEEDS["metadata-credit"])
         raise typer.Exit(1)
 
     _run_batch(
@@ -182,9 +182,9 @@ def randomize(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools)
+    missing = missing_tools(config.tools, NEEDS["metadata-randomize"])
     if missing:
-        run_doctor(config.tools)
+        run_doctor(config.tools, NEEDS["metadata-randomize"])
         raise typer.Exit(1)
 
     _run_batch(

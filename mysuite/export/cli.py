@@ -9,7 +9,7 @@ from rich.tree import Tree
 
 from rich.markup import escape
 from mysuite.config import DEFAULT_NAMING_TEMPLATE, DEFAULT_PATH_TEMPLATE, MysuiteConfigError, load_config
-from mysuite.doctor import missing_tools, run_doctor
+from mysuite.doctor import NEEDS, missing_tools, run_doctor
 from mysuite.export._parsing import (
     VALID_FORMATS,
     VALID_PROFILES,
@@ -249,9 +249,9 @@ def export(
         log_error(f"unknown profile(s): {', '.join(sorted(unknown_profiles))}")
         raise typer.Exit(1)
 
-    missing = missing_tools(config.tools)
+    missing = missing_tools(config.tools, NEEDS["export"])
     if missing:
-        run_doctor(config.tools)
+        run_doctor(config.tools, NEEDS["export"])
         raise typer.Exit(1)
 
     if "icns" in resolved_formats and shutil.which(config.tools.iconutil) is None:

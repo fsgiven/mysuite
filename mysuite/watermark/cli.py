@@ -8,7 +8,7 @@ import typer
 from rich.markup import escape
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, detect_source_format, resolve_input_files
-from mysuite.doctor import missing_tools, run_doctor
+from mysuite.doctor import NEEDS, missing_tools, run_doctor
 from mysuite.utils.console import console, log_error, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 from mysuite.watermark._parsing import output_path_for
@@ -73,9 +73,9 @@ def watermark(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools)
+    missing = missing_tools(config.tools, NEEDS["watermark"])
     if missing:
-        run_doctor(config.tools)
+        run_doctor(config.tools, NEEDS["watermark"])
         raise typer.Exit(1)
 
     if dry_run:

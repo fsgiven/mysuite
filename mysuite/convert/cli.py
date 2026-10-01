@@ -15,7 +15,7 @@ from mysuite.convert._parsing import (
     resolve_input_files,
 )
 from mysuite.convert.converter import ConversionError, convert_file
-from mysuite.doctor import missing_tools, run_doctor
+from mysuite.doctor import NEEDS, missing_tools, run_doctor
 from mysuite.export._parsing import parse_csv
 from mysuite.utils.console import console, log_error, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
@@ -78,9 +78,9 @@ def convert(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools)
+    missing = missing_tools(config.tools, NEEDS["convert"])
     if missing:
-        run_doctor(config.tools)
+        run_doctor(config.tools, NEEDS["convert"])
         raise typer.Exit(1)
 
     for target_format in target_formats:

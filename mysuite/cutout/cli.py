@@ -10,7 +10,7 @@ from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.cutout._parsing import output_path_for
 from mysuite.cutout.cutout import CutoutError, cutout_file
-from mysuite.doctor import missing_tools, run_doctor
+from mysuite.doctor import NEEDS, missing_tools, run_doctor
 from mysuite.utils.console import console, log_error, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
@@ -48,9 +48,9 @@ def cutout(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    missing = missing_tools(config.tools)
+    missing = missing_tools(config.tools, NEEDS["cutout"])
     if missing:
-        run_doctor(config.tools)
+        run_doctor(config.tools, NEEDS["cutout"])
         raise typer.Exit(1)
 
     if dry_run:

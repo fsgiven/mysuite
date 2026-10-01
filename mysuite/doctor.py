@@ -59,13 +59,30 @@ def check_tools(tools: ToolPaths) -> dict[str, str | None]:
     return {spec.attr: shutil.which(getattr(tools, spec.attr)) for spec in TOOL_SPECS}
 
 
-def missing_tools(tools: ToolPaths) -> list[str]:
+# What each command actually shells out to. A command only refuses to run when ITS
+# tools are missing — previously every command required every tool, including the
+# macOS-only cutout helper, so a fresh clone couldn't export a single file.
+NEEDS: dict[str, tuple[str, ...]] = {
+    "export": ("rsvg_convert", "gs", "magick"),
+    "convert": ("rsvg_convert", "gs", "magick"),
+    "watermark": ("rsvg_convert", "gs", "magick"),
+    "cutout": ("cutout_tool", "rsvg_convert", "gs", "magick"),
+    "metadata-strip": ("exiftool", "magick"),
+    "metadata-randomize": ("exiftool", "magick"),
+    "metadata-credit": ("c2patool",),
+}
+
+
+def missing_tools(tools: ToolPaths, needed: tuple[str, ...] | None = None) -> list[str]:
+    """Missing tools; restricted to `needed` (attr names) when given."""
     resolved = check_tools(tools)
-    return [name for name, path in resolved.items() if path is None]
+    return [name for name, path in resolved.items() if path is None and (needed is None or name in needed)]
 
 
-def run_doctor(tools: ToolPaths) -> bool:
-    """Prints a status table. Returns True if all required tools are present."""
+def run_doctor(tools: ToolPaths, needed: tuple[str, ...] | None = None) -> bool:
+    """Prints a status table. Returns True if all required tools are present. With
+    `needed`, only those tools count as required: others missing are shown as
+    optional and get no install nag."""
     resolved = check_tools(tools)
 
     table = Table(title="mysuite doctor")
@@ -77,8 +94,11 @@ def run_doctor(tools: ToolPaths) -> bool:
     all_ok = True
     for attr, path in resolved.items():
         if path is None:
-            all_ok = False
-            table.add_row(attr, "[#F87171]missing[/#F87171]", "-")
+            if needed is None or attr in needed:
+                all_ok = False
+                table.add_row(attr, "[#F87171]missing[/#F87171]", "-")
+            else:
+                table.add_row(attr, "[dim]not installed (optional here)[/dim]", "-")
         else:
             version = _resolved_version(path, version_flags_by_attr[attr])
             table.add_row(attr, "[#4ADE80]ok[/#4ADE80]", f"{path}\n{version}")
@@ -89,7 +109,7 @@ def run_doctor(tools: ToolPaths) -> bool:
         hints_by_attr = {spec.attr: spec.install_hint for spec in TOOL_SPECS}
         console.print(f"\n[#FBBF24]Install the missing tool(s):[/#FBBF24]")
         for attr in resolved:
-            if resolved[attr] is None:
+            if resolved[attr] is None and (needed is None or attr in needed):
                 console.print(f"  {attr}: {hints_by_attr[attr]}")
 
     return all_ok
