@@ -1,0 +1,384 @@
+/* Palette reference (Textual CSS has no variables here — kept as literal hex,
+   matching the rest of this file — this block is just documentation):
+     background (screen)     #10121A
+     background (panel/input) #161822
+     background (deepest/log) #0D0E14
+     text (primary)           #E8E8E8
+     text (secondary/label)   #8B93A7
+     text (dim/hint)          #6B7280
+     border (neutral)         #2A2E3F
+     accent — export          #7DD3FC  (cyan)
+     accent — convert         #C4B5FD  (violet)
+     accent — cutout          #FCA5A5  (coral)
+     accent — watermark       #5EEAD4  (teal)
+     accent — metadata        #93C5FD  (periwinkle)
+     accent — compress        #FDE047  (amber-gold)
+     success                  #4ADE80
+     warning                  #FBBF24
+     error                    #F87171
+   Each tool's accent doubles as its screen's identity color — see the
+   "<ScreenClass> .field-group" rules below — so it's obvious at a glance
+   which tool is open. A new tool should pick an unused hue from this same
+   family (bright, desaturated pastel, reads clearly on #10121A) rather than
+   reusing an existing tool's color or the warning/error/success hues. */
+
+Screen {
+    background: #10121A;
+    color: #E8E8E8;
+}
+
+Header {
+    background: #161822;
+    color: #E8E8E8;
+}
+
+Footer {
+    background: #161822;
+}
+
+.section-title {
+    color: #7DD3FC;
+    text-style: bold;
+    margin: 0 0 1 0;
+}
+
+Label {
+    color: #8B93A7;
+    margin: 1 0 0 0;
+}
+
+Button {
+    background: #1B1E2B;
+    color: #E8E8E8;
+    border: tall #2A2E3F;
+    min-width: 12;
+}
+
+Button:hover {
+    background: #2A2E3F;
+}
+
+Button:focus {
+    border: tall #7DD3FC;
+}
+
+Button.-primary {
+    background: #1B4B3A;
+    color: #E8E8E8;
+}
+
+Button.-primary:focus {
+    border: tall #4ADE80;
+}
+
+Input {
+    border: none;
+    background: #161822;
+    color: #E8E8E8;
+    padding: 0 1;
+}
+
+Input:focus {
+    background: #1B1E2B;
+    border: none;
+}
+
+Input.field-error {
+    background: #2A1616;
+    color: #F87171;
+}
+
+Input.field-warning {
+    background: #2A2210;
+    color: #FBBF24;
+}
+
+Select {
+    border: none;
+    background: #161822;
+}
+
+SelectCurrent {
+    border: none;
+    background: #161822;
+}
+
+Select:focus > SelectCurrent {
+    background: #1B1E2B;
+}
+
+SelectionList {
+    border: none;
+    background: #161822;
+    height: auto;
+    max-height: 10;
+}
+
+ToggleButton, Checkbox {
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0 0 0 0;
+}
+
+ToggleButton:focus, Checkbox:focus {
+    background: #1B1E2B;
+}
+
+/* Titled field groups */
+.field-group {
+    border: round #2A2E3F;
+    border-title-color: #7DD3FC;
+    border-title-background: #10121A;
+    border-title-style: bold;
+    padding: 0 1 1 1;
+    margin-bottom: 1;
+    height: auto;
+}
+
+.field-half {
+    width: 1fr;
+    height: auto;
+    margin-right: 1;
+}
+
+.recolor-row {
+    margin-bottom: 1;
+}
+
+.recolor-row Label {
+    width: auto;
+    margin: 0 1;
+}
+
+.recolor-remove-btn {
+    min-width: 3;
+    width: 3;
+    margin-left: 1;
+}
+
+#recolor-rows {
+    height: auto;
+}
+
+#recolor-add-btn {
+    margin-top: 1;
+    width: auto;
+}
+
+/* Per-tool identity color — overrides .field-group's default accent above for
+   each tool's own screen (see the palette reference comment at the top). */
+ExportScreen .field-group {
+    border-title-color: #7DD3FC;
+}
+
+ConvertScreen .field-group {
+    border-title-color: #C4B5FD;
+}
+
+CutoutScreen .field-group {
+    border-title-color: #FCA5A5;
+}
+
+WatermarkScreen .field-group {
+    border-title-color: #5EEAD4;
+}
+
+MetadataScreen .field-group {
+    border-title-color: #93C5FD;
+}
+
+CompressScreen .field-group {
+    border-title-color: #FDE047;
+}
+
+ExportScreen Button:focus {
+    border: tall #7DD3FC;
+}
+
+ConvertScreen Button:focus {
+    border: tall #C4B5FD;
+}
+
+CutoutScreen Button:focus {
+    border: tall #FCA5A5;
+}
+
+WatermarkScreen Button:focus {
+    border: tall #5EEAD4;
+}
+
+MetadataScreen Button:focus {
+    border: tall #93C5FD;
+}
+
+CompressScreen Button:focus {
+    border: tall #FDE047;
+}
+
+/* Home screen */
+
+#tool-list-container {
+    padding: 1 2;
+}
+
+#tool-list {
+    border: round #2A2E3F;
+    border-title-color: #7DD3FC;
+    border-title-background: #10121A;
+    border-title-style: bold;
+    background: #161822;
+    height: auto;
+    max-height: 20;
+}
+
+ListItem {
+    padding: 0 1;
+}
+
+ListView > ListItem.-highlight {
+    background: #1B4B3A !important;
+}
+
+ListView > ListItem.-highlight Label {
+    color: #E8E8E8 !important;
+}
+
+#hint-bar {
+    color: #6B7280;
+    margin-top: 1;
+}
+
+/* Export screen */
+
+#form-pane {
+    width: 3fr;
+    padding: 1 2;
+    border-right: solid #2A2E3F;
+}
+
+#form-columns {
+    height: auto;
+}
+
+.form-col {
+    width: 1fr;
+    height: auto;
+    max-height: 40;
+    padding: 0 1;
+}
+
+#form-col-left {
+    border-right: solid #1B1E2B;
+}
+
+.field-row {
+    height: auto;
+    align: left middle;
+}
+
+.field-row Input {
+    width: 1fr;
+}
+
+.field-row Button {
+    width: auto;
+    margin-left: 1;
+}
+
+.field-row Select {
+    width: 14;
+    margin-left: 1;
+}
+
+#action-row {
+    margin-top: 1;
+    align: left middle;
+}
+
+#action-row Button {
+    margin-right: 1;
+}
+
+#results-pane {
+    width: 2fr;
+    padding: 1 2;
+    height: 100%;
+}
+
+#group-svg-preview {
+    height: auto;
+    max-height: 14;
+}
+
+#svg-thumb-strip {
+    height: auto;
+}
+
+.svg-thumbnail {
+    width: auto;
+    height: auto;
+    margin-right: 2;
+}
+
+#thumb-label {
+    color: #8B93A7;
+    text-align: center;
+    margin: 0;
+}
+
+#group-preview {
+    height: 1fr;
+}
+
+#group-run {
+    height: 1fr;
+}
+
+#plan-tree {
+    border: none;
+    background: #0D0E14;
+    height: 1fr;
+}
+
+#preview-list {
+    background: #0D0E14;
+    border: none;
+    color: #C8C8C8;
+    height: 1fr;
+}
+
+#run-log {
+    background: #0D0E14;
+    border: none;
+    color: #C8C8C8;
+    height: 1fr;
+}
+
+ProgressBar {
+    margin-bottom: 1;
+}
+
+ProgressBar Bar > .bar--complete {
+    color: #4ADE80;
+}
+
+#run-summary {
+    margin-top: 1;
+}
+
+#picker-dialog {
+    background: #10121A;
+    border: thick #2A2E3F;
+    border-title-color: #7DD3FC;
+    width: 80%;
+    height: 80%;
+    margin: 2 4;
+    padding: 1 2;
+}
+
+#picker-tree {
+    height: 1fr;
+    border: none;
+    background: #161822;
+}

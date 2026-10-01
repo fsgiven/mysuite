@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mysuite"
+version = "0.1.0"
+description = "A CLI suite of tools for repetitive design/asset work — starting with batch logo/asset export."
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "textual>=2.0",
+    "tomlkit>=0.13",
+    "pillow",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+mysuite = "mysuite.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mysuite"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: requires real rendering binaries (rsvg-convert/gs/magick)",
+]
+asyncio_mode = "auto"

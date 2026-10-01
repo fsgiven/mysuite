@@ -1,0 +1,74 @@
+[export]
+out_dir = "exports"
+# Plain numbers are pixels; suffix with mm/cm/in for physical sizes (e.g. "5cm", "2in").
+sizes = [16, 32, 64, 128, 256, 512, 1024]
+# png, pdf, eps, svg, jpeg, webp, tiff, ico, icns — ico/icns bundle every size
+# into one file instead of one file per size.
+formats = ["png", "pdf"]
+profiles = ["rgb"]
+# Pixels/dots per inch used to convert mm/cm/in sizes to pixels. Doesn't affect plain-pixel sizes.
+dpi = 300
+# Unit assumed for a size with no explicit suffix — px, mm, cm, or in. A size like "5cm"
+# still means 5cm regardless of this setting; only bare numbers are affected.
+default_unit = "px"
+naming_template = "{name}_{size}{ext}"
+path_template = "{format}/{colorspace}/{naming}"
+bundle_naming_template = "{name}{ext}"
+strict = false
+normalize_png = true
+overwrite = false
+# background = "white"     # flatten transparency onto a color (jpeg defaults to white if unset)
+# quality = 85              # jpeg/webp compression quality, 0-100
+# padding = "10%"           # uniform margin baseline (safe space), raster formats only.
+#                            # Stays transparent unless background is also set above.
+# margin_top = "5px"        # each optional; overrides the padding baseline for just that side
+# margin_right = "10%"
+# margin_bottom = "10%"
+# margin_left = "10%"
+# png_compression = 9       # PNG zlib level, 0-9 (lossless either way)
+date_stamp = false          # insert today's date (YYYYMMDD) into filenames using the default
+                             # naming templates above — a naming_template you edit yourself is
+                             # left alone; use the {date} token in it directly instead.
+# variant = "negative"      # nests under exports/<name>/<variant>/... instead of a top-level folder
+# [export.recolor]           # exact hex swaps applied to the SVG source before rendering
+# "#2b6cb0" = "#000000"
+# "#f6ad55" = "#ffffff"
+
+[tools]
+rsvg_convert = "rsvg-convert"
+gs = "gs"
+magick = "magick"
+iconutil = "iconutil"
+
+# Reusable flag bundles, selected with `mysuite export logo.svg --preset web`.
+# "favicon" and "macos-icon" are also always available even without this file —
+# see README.md. A preset here with the same name overrides the built-in one.
+[presets.web]
+sizes = [16, 32, 64, 128, 256, 512]
+formats = ["png", "svg"]
+profiles = ["rgb"]
+out_dir = "exports/web"
+
+[presets.print]
+sizes = ["5cm", "10cm", "2in"]
+dpi = 300
+formats = ["pdf", "eps", "tiff"]
+profiles = ["rgb", "cmyk"]
+out_dir = "exports/print"
+
+[presets.social]
+sizes = [400]
+formats = ["jpeg"]
+profiles = ["rgb"]
+background = "white"
+quality = 90
+padding = "8%"
+out_dir = "exports/social"
+
+# A brand's negative/inverted colorset — nests under exports/<name>/negative/...
+# alongside the primary export. `mysuite export logo.svg --preset negative`
+[presets.negative]
+variant = "negative"
+[presets.negative.recolor]
+"#2b6cb0" = "#000000"
+"#f6ad55" = "#ffffff"
