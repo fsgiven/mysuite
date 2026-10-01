@@ -23,6 +23,10 @@ telemetry.
 | `metadata` | **strip** all metadata, **randomize** it into a plausible decoy camera, or **credit** with a C2PA provenance record |
 | `enhance` | Upscale and restore photos locally: denoise, sharpen, scratch removal, color, optional AI backend |
 | `compress` | Re-encode with the same best-in-class codecs Squoosh uses (mozjpeg, WebP, AVIF, oxipng, pngquant, gifsicle), plus sharpening |
+| `transform` | Quick edits: trim, crop (box or aspect), rotate, flip, resize, pad, round corners, background — in a fixed, predictable order |
+| `inspect` | Facts about a file (size, colour mode, transparency, palette, sharpness, GPS…) as numbers — for agents and humans |
+| `pipeline` | Several tools in one declarative file (export → metadata → compress…) |
+| `mcp` | An MCP server so Claude Desktop, Cursor, Claude Code or a local-model client can drive all of this |
 
 Outputs are always written **beside the source** with a suffix (`_cutout`, `_stripped`, `_compressed`,
 ...). mysuite never overwrites without `--overwrite` and never modifies your original.
@@ -30,7 +34,9 @@ Outputs are always written **beside the source** with a suffix (`_cutout`, `_str
 Developed and tested on macOS (Apple Silicon, Homebrew). `cutout` and `icns` export are macOS-only (`enhance` is plain Python and has no such limit).
 The rest wraps standard command-line tools, so it should work elsewhere, but that's untested.
 
-Running `mysuite` with no arguments opens a front page (a suitcase mascot with tips), then the tool overview; press any key to continue.
+`mysuite tui` opens the dashboard: a front page (a suitcase mascot in a top hat, with tips), then the tool overview; press any key to continue.
+
+**Using it from an AI agent?** Every command has `--json`, there is a sandbox, a pipeline format and an MCP server. Start with [AGENTS.md](AGENTS.md) (rules, which command to use, tested examples) and [docs/agents/COMMANDS.md](docs/agents/COMMANDS.md).
 
 ## Status: what is and isn't tested
 
@@ -45,6 +51,9 @@ mysuite is a young personal project, released as-is. Please read this before rel
 | `metadata` | Yes: strip, randomize and **credit** (embed and read back as JPG/PNG/WebP/TIFF) | `credit` uses c2patool's built-in *test* certificate |
 | `compress` | Yes: all six codecs, presets, odd colour modes | none known |
 | `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | the optional AI backend has **never been run with real model weights**; 16-bit sources become 8-bit (now reported) |
+| `transform` | Yes: every operation checked on pixels (resize modes, crop, trim, rotate, flip, pad, round, flatten), fixed order, EXIF handling, safety | no preview exists in a terminal, so judge the result by opening the file; animated sources keep only the first frame (and say so) |
+| `inspect` | Yes: CMYK/alpha/gray, EXIF orientation/GPS/serial, blank/blurry, multipage, SVG facts, thumbnails | the "blurry" flag is a heuristic (variance of the Laplacian), not a verdict |
+| `--json`, sandbox, `pipeline`, `mcp` | Yes: one JSON document on stdout, exit codes 0–4, escape attempts (`..`, absolute paths, symlinks), pipelines end to end, the MCP server through a real MCP client | the sandbox is off unless you ask for it (the MCP server always uses it); pipelines are unproven beyond the examples; MCP tested with the Python SDK, **not yet with Claude Desktop or Cursor** |
 | Terminal dashboard | Yes for all screens except the file-picker edge cases | Drag-and-drop depends on your terminal emulator |
 
 All 22 findings from the first test pass are fixed and the suite has no expected failures. Details are in

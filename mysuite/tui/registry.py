@@ -63,6 +63,12 @@ def _compress_screen_factory() -> Screen:
     return CompressScreen()
 
 
+def _transform_screen_factory() -> Screen:
+    from mysuite.tui.screens.transform_screen import TransformScreen
+
+    return TransformScreen()
+
+
 TOOL_REGISTRY: list[ToolSpec] = [
     ToolSpec(
         key="export",
@@ -112,5 +118,12 @@ TOOL_REGISTRY: list[ToolSpec] = [
         description="Upscale and restore photos locally — denoise, sharpen, scratch removal, color.",
         screen_factory=_enhance_screen_factory,
         accent="#F9A8D4",  # rose
+    ),
+    ToolSpec(
+        key="transform",
+        label="Transform",
+        description="Quick edits: trim, crop, rotate, flip, resize, pad, round corners, background.",
+        screen_factory=_transform_screen_factory,
+        accent="#FDBA74",  # orange
     ),
 ]

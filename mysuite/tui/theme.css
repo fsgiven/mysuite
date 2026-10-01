@@ -197,6 +197,10 @@ EnhanceScreen .field-group {
     border-title-color: #F9A8D4;
 }
 
+TransformScreen .field-group {
+    border-title-color: #FDBA74;
+}
+
 ExportScreen Button:focus {
     border: tall #7DD3FC;
 }
@@ -219,6 +223,10 @@ MetadataScreen Button:focus {
 
 CompressScreen Button:focus {
     border: tall #FDE047;
+}
+
+TransformScreen Button:focus {
+    border: tall #FDBA74;
 }
 
 EnhanceScreen Button:focus {
