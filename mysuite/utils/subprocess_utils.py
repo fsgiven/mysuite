@@ -40,6 +40,9 @@ def atomic_write_via(output_path: Path, write_fn, *, preserve_extension: bool = 
     external tools (iconutil, c2patool) infer the output format from the
     file's real extension and fail or misbehave if it ends in something else
     like ".tmp"."""
+    from mysuite import sandbox
+
+    sandbox.check_write(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if preserve_extension:
         tmp_path = output_path.with_name(output_path.stem + ".tmp" + output_path.suffix)

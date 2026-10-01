@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from mysuite import sandbox
+
 import os
 from pathlib import Path
 from typing import Optional
@@ -61,6 +63,7 @@ def resolve_input_files(inputs: list[Path], *, recursive: bool = False) -> list[
             "rename one or process them in separate runs"
         )
 
+    sandbox.check_inputs(resolved)
     return resolved
 
 

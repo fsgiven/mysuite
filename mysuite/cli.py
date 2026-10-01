@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import List, Optional
+
 import typer
+
+from mysuite import sandbox
 
 from mysuite.compress.cli import compress as compress_command
 from mysuite.config import load_config
@@ -18,6 +23,27 @@ app = typer.Typer(
     help="mysuite — a CLI suite of tools for repetitive design/asset work.",
     no_args_is_help=True,
 )
+
+
+@app.callback()
+def _global_options(
+    allow: Optional[List[Path]] = typer.Option(
+        None, "--allow",
+        help="Sandbox: only read/write inside this folder (repeatable). Also set by MYSUITE_ROOTS. "
+        "A path outside is refused with exit code 3. Meant for agents.",
+    ),
+    sandbox_here: bool = typer.Option(
+        False, "--sandbox", help="Sandbox: allow only the current folder (same as --allow .)."
+    ),
+) -> None:
+    roots = list(allow or [])
+    if sandbox_here:
+        roots.append(Path.cwd())
+    env_policy = sandbox.from_environment()
+    if roots:
+        sandbox.configure(sandbox.Policy(roots, env_policy.max_files if env_policy else sandbox.DEFAULT_MAX_FILES))
+    else:
+        sandbox.configure(env_policy)
 
 app.command("export", help="Batch-export an SVG into multiple sizes, formats, and color profiles.")(
     export_command

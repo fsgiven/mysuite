@@ -95,7 +95,7 @@ def session(enabled: bool, command: str) -> Iterator[Report | None]:
         return
     report = Report(command)
     previous, _current = _current, report
-    real_file = console.file
+    real_file = console._file  # None = 'whatever sys.stdout is now'; never pin a captured stream
     console.file = sys.stderr
     try:
         try:
@@ -114,7 +114,7 @@ def session(enabled: bool, command: str) -> Iterator[Report | None]:
                 report.exit_code = EXIT_FAILED
                 raise typer.Exit(EXIT_FAILED)
     finally:
-        console.file = real_file
+        console._file = real_file
         _current = previous
         sys.stdout.write(json.dumps(report.to_dict(), indent=2, ensure_ascii=False) + "\n")
         sys.stdout.flush()
