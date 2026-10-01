@@ -1,5 +1,7 @@
 # mysuite
 
+[![CI](https://github.com/fsgiven/mysuite/actions/workflows/ci.yml/badge.svg)](https://github.com/fsgiven/mysuite/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A free, local toolkit for repetitive image and design-asset work — a command-line suite plus an
 interactive terminal dashboard. Everything runs on your own machine: no uploads, no accounts, no
 telemetry.
@@ -45,7 +47,8 @@ mysuite is a young personal project, released as-is. Please read this before rel
 
 **What was run on:** one machine, macOS 26 (Apple Silicon), Homebrew, Python 3.11, with ImageMagick
 7.1.2, exiftool 13.55, c2patool 0.27.15, Ghostscript 10.07, librsvg 2.62, mozjpeg 4.1.5, libwebp 1.6,
-libavif 1.4, oxipng 10.2, pngquant 3.0, gifsicle 1.96.
+libavif 1.4, oxipng 10.2, pngquant 3.0, gifsicle 1.96. The automated suite also runs on every push on a clean
+GitHub macOS runner ([CI](.github/workflows/ci.yml)), where all of it passes with nothing skipped.
 
 **Not tested at all:** Linux, Windows, Intel Macs, macOS older than 14 (`cutout`), other Python
 versions, other terminal emulators, very large or unusual inputs (CMYK or 16-bit sources into
