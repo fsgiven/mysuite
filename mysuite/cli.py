@@ -15,6 +15,7 @@ from mysuite.doctor import TOOL_SPECS, check_tools, run_doctor
 from mysuite.utils import jsonout
 from mysuite.enhance.cli import app as enhance_app
 from mysuite.export.cli import export as export_command
+from mysuite.inspect.cli import inspect_command
 from mysuite.metadata.cli import app as metadata_app
 from mysuite.preset_cli import app as preset_app
 from mysuite.watermark.cli import watermark as watermark_command
@@ -60,6 +61,9 @@ app.command("watermark", help="Stamp a logo onto image(s) as a visible, scalable
 app.command("compress", help="Re-encode image(s) via a best-in-class codec (mozjpeg/webp/avif/oxipng/pngquant/gifsicle), with optional sharpening.")(
     compress_command
 )
+app.command("inspect", help="Report facts about image/vector files (size, colour mode, transparency, palette, sharpness, GPS...) - for agents and humans.")(
+    inspect_command
+)
 app.add_typer(preset_app, name="preset")
 app.add_typer(metadata_app, name="metadata")
 app.add_typer(enhance_app, name="enhance")
@@ -83,6 +87,22 @@ def tui() -> None:
     from mysuite.tui.app import MysuiteApp  # lazy import — keeps `export`/`doctor` startup fast
 
     MysuiteApp(show_welcome=True).run()
+
+
+@app.command("schema", help="Describe every command's options, the --json result and exit codes (for agents).")
+def schema(
+    command: Optional[List[str]] = typer.Argument(None, help="Limit to one command, e.g. `export` or `metadata strip`."),
+    markdown: bool = typer.Option(False, "--markdown", help="Print the command reference as Markdown instead of JSON."),
+) -> None:
+    import json
+
+    from mysuite import schema as schema_module
+
+    data = schema_module.build(command)
+    if command and not data["commands"]:
+        typer.echo(f"unknown command: {' '.join(command)}", err=True)
+        raise typer.Exit(2)
+    typer.echo(schema_module.markdown(data) if markdown else json.dumps(data, indent=2, ensure_ascii=False))
 
 
 def main() -> None:
