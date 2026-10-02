@@ -137,5 +137,6 @@ in `AGENTS.md` and exercised by a doc-test.
   `FileTarget`), Metadata (strip / randomize / credit / declare / apply), Compress (codec groups, preset fills the form,
   explicit values in the command), Enhance (`--preset` + changes only). The old Browse boxes, drop inputs and the SVG
   thumbnail strip are gone (the preview is the plan, the command and the progress bar).
-- Still open here: the generated screens (`AutoToolScreen`, used by kit/pdf/…) still use the older form layout; moving them onto
-  `ToolScreen` would give them plan/command/remembered settings too.
+- The generated screens (`AutoToolScreen`: kits, pdf, exact, helpers, tokens, profiles, protect, parts) now sit on the same shell:
+  files via `FileTarget`, the "Preview only" box and Plan where the command has `--dry-run`, the live Command, streamed progress,
+  and values remembered per action (options only; files are never remembered).

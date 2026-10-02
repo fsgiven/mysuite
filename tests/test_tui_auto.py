@@ -73,7 +73,7 @@ async def test_kits_card_makes_a_favicon_set(tmp_path):
         screen.query_one(f"#{next(w for w, (k, e) in screen._fields.items() if e['name'] == 'out')}", Input).value = str(tmp_path / "k")
         screen.action_run()
         await finish(pilot)
-        assert screen.last_summary_text == "done"
+        assert screen.last_summary_text.startswith("done")
     assert Image.open(tmp_path / "k" / "brand" / "favicon" / "favicon-32x32.png").size == (32, 32)
 
 
@@ -93,7 +93,7 @@ async def test_pdf_card_switches_action_and_runs_it(tmp_path):
         screen.query_one(f"#{ids['pages']}", Input).value = "2-3"
         screen.action_run()
         await finish(pilot)
-        assert screen.last_summary_text == "done" and "doc_pages.pdf" in screen.last_output
+        assert screen.last_summary_text.startswith("done") and "doc_pages.pdf" in screen.last_output
     from pypdf import PdfReader
 
     assert len(PdfReader(str(tmp_path / "doc_pages.pdf")).pages) == 2
@@ -141,7 +141,7 @@ async def test_helpers_contrast_runs_without_files():
         screen.query_one(f"#{ids['background']}", Input).value = "#ffffff"
         screen.action_run()
         await finish(pilot)
-        assert screen.last_summary_text == "done" and "21.0:1" in screen.last_output
+        assert screen.last_summary_text.startswith("done") and "21.0:1" in screen.last_output
 
 
 @pytest.mark.asyncio
@@ -154,10 +154,10 @@ async def test_boolean_options_become_checkboxes_and_pass_their_flag(tmp_path):
         screen.query_one("#action", Select).value = "Output at an exact size (px / cm / in)"
         await pilot.pause(0.3)
         ids = {e["name"]: w for w, (k, e) in screen._fields.items()}
-        assert isinstance(screen.query_one(f"#{ids['dry_run']}"), Checkbox)
         screen.query_one(f"#{ids['inputs']}", Input).value = str(src)
         screen.query_one(f"#{ids['size']}", Input).value = "50x50"
-        screen.query_one(f"#{ids['dry_run']}", Checkbox).value = True
+        assert "dry_run" not in ids                                       # the shell's own "Preview only" box does this
+        screen.query_one("#dry-run", Checkbox).value = True
         screen.action_run()
         await finish(pilot)
         assert "50x50" in screen.last_output and not (tmp_path / "a_print.png").exists()          # preview only: nothing written
@@ -172,3 +172,41 @@ async def test_help_works_on_a_generated_screen():
         await pilot.pause(1.2)
         helper = app.screen
         assert type(helper).__name__ == "HelperScreen" and "Kits" in str(helper.query_one("#helper-title").render())
+
+
+@pytest.mark.asyncio
+async def test_generated_screens_have_plan_command_and_remembered_values(tmp_path, monkeypatch):
+    import json, shlex
+    from mysuite.tui import ui_state
+    from mysuite.tui.widgets.command_line import CommandLine
+    from tests.helpers import cli
+
+    monkeypatch.setenv("MYSUITE_UI_STATE", str(tmp_path / "state.json"))
+    monkeypatch.delenv("MYSUITE_NO_UI_STATE")
+    src = tmp_path / "a.png"
+    Image.new("RGB", (20, 20), "red").save(src)
+    async with MysuiteApp().run_test(size=(150, 60)) as pilot:
+        screen = await open_tool(pilot, "exact")
+        screen.query_one("#action", Select).value = "Output at an exact size (px / cm / in)"
+        await pilot.pause(0.3)
+        ids = {e["name"]: w for w, (k, e) in screen._fields.items()}
+        screen.query_one(f"#{ids['inputs']}", Input).value = str(src)
+        screen.query_one(f"#{ids['size']}", Input).value = "50x50"
+        await pilot.pause(0.6)
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        parts = shlex.split(screen.query_one(CommandLine).command)[1:]
+        assert parts[0] == "print" and "--size" in parts
+        doc = json.loads(cli(*parts, "--dry-run", "--json").stdout)           # the shown command is valid CLI
+        assert doc["ok"] and "planned" in str(screen.query_one("#plan").render())
+        screen.action_run()
+        await finish(pilot)
+    saved = ui_state.tool_values("exact")
+    assert saved["action"] == "Output at an exact size (px / cm / in)" and saved["cmds"]["print"]["size"] == "50x50"
+    async with MysuiteApp().run_test(size=(150, 60)) as pilot:                # comes back on the same action, same values
+        screen = await open_tool(pilot, "exact")
+        await pilot.pause(0.3)
+        assert screen._command == ("print",)
+        ids = {e["name"]: w for w, (k, e) in screen._fields.items()}
+        assert screen.query_one(f"#{ids['size']}", Input).value == "50x50"
+        assert screen.query_one(f"#{ids['inputs']}", Input).value == ""        # files never remembered

@@ -634,7 +634,7 @@ mysuite tui
 Opens an interactive home screen listing the available tools as cards, each with its own accent colour.
 Press a number key to jump straight to a tool, or arrow keys + Enter; **h** / **F1** explains the screen you are on.
 
-The seven single-tool screens — **Export, Convert, Cutout, Watermark, Metadata, Compress, Enhance** — share one layout.
+The seven single-tool screens — **Export, Convert, Cutout, Watermark, Metadata, Compress, Enhance** — and the generated screens (Kits, PDF, Exact, Helpers, Tokens, Profiles, Protect, Parts; built from each command's own options) share one layout.
 Each form is a front end for the real `mysuite <tool> …` command, so the screen and the CLI can never disagree:
 
 - **Form on the left, results on the right.** One-line inputs, short labels, the common choices up front (files, sizes + unit

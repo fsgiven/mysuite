@@ -130,6 +130,10 @@ class ToolScreen(Screen):
         items = report.get("items", [])
         return f"{len(items)} output(s) planned" if items else "nothing to do"
 
+    def idle_plan_text(self) -> str:
+        """What the Plan box says when this command cannot preview itself (no --dry-run)."""
+        return ""
+
     def save_preset_hook(self) -> None:
         self.app.notify("Presets are not available for this tool yet", severity="warning")
 
@@ -296,7 +300,10 @@ class ToolScreen(Screen):
             self._planned = 0
             return
         command.show(argv)
-        if self.PLAN_FLAG is None or self._busy:
+        if self.PLAN_FLAG is None:
+            plan.update(f"[dim]{escape(self.idle_plan_text())}[/dim]" if self.idle_plan_text() else "")
+            return
+        if self._busy:
             return
         plan.update("[dim]planning…[/dim]")
         self._plan_worker([*argv, self.PLAN_FLAG, "--json"])
@@ -491,8 +498,11 @@ class ToolScreen(Screen):
             items = report.get("items") or []
             if items and any(i.get("status") == "failed" for i in items):
                 summary = self.summary_text(report, code, dry)         # some files worked, some did not
+            elif errors:
+                summary = str(errors[0])
             else:
-                summary = str(errors[0]) if errors else f"failed (exit {code}) — see Output"
+                last = next((l for l in reversed(output.splitlines()) if l.strip()), "")
+                summary = f"failed (exit {code}) — {tilde(last.strip())}" if last else f"failed (exit {code})"
             color = "#F87171"
         self.last_summary_text = summary
         self.query_one("#run-summary", Static).update(Text(summary, style=color))
