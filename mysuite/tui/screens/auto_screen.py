@@ -306,8 +306,11 @@ class AutoToolScreen(ToolScreen):
             return f"failed (exit {code}) — {failed} of {len(items)} failed"
         text = "done"
         written = sum(1 for i in items if i.get("status") in ("written", "ok"))
+        existed = sum(1 for i in items if i.get("status") == "skipped_existing")
         if written:
             text += f" — {written} written"
+        if existed:
+            text += f"{' —' if not written else ','} {existed} already existed (tick Replace/overwrite to redo)"
         return text
 
     def _finished(self, report: dict[str, Any], code: int, output: str, dry: bool) -> None:

@@ -210,3 +210,20 @@ async def test_generated_screens_have_plan_command_and_remembered_values(tmp_pat
         ids = {e["name"]: w for w, (k, e) in screen._fields.items()}
         assert screen.query_one(f"#{ids['size']}", Input).value == "50x50"
         assert screen.query_one(f"#{ids['inputs']}", Input).value == ""        # files never remembered
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_only_skipped_existing_files_says_so(tmp_path):
+    src = tmp_path / "a.png"
+    Image.new("RGB", (20, 20), "red").save(src)
+    (tmp_path / "a_print.png").write_bytes(b"already here")
+    async with MysuiteApp().run_test(size=(150, 60)) as pilot:
+        screen = await open_tool(pilot, "exact")
+        screen.query_one("#action", Select).value = "Output at an exact size (px / cm / in)"
+        await pilot.pause(0.3)
+        ids = {e["name"]: w for w, (k, e) in screen._fields.items()}
+        screen.query_one(f"#{ids['inputs']}", Input).value = str(src)
+        screen.query_one(f"#{ids['size']}", Input).value = "50x50"
+        screen.action_run()
+        await finish(pilot)
+        assert "already existed" in screen.last_summary_text and "written" not in screen.last_summary_text
