@@ -289,6 +289,16 @@ Report facts about image/vector files (size, colour mode, transparency, palette,
 - `--config / -c` (path) Explicit path to mysuite.toml.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite install`
+
+Fetch the heavier parts once, when needed (helpers, the shield environment). mysuite itself stays small.
+
+- argument `name` (str) Component to install (see the list). Leave out to list them.
+- `--yes / -y` (boolean) Go ahead without asking (required when there is no terminal, and with --json).
+- `--remove` (boolean) Delete the component again.
+- `--dry-run` (boolean) Show what would be fetched/built and where, change nothing.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite kit list`
 
 List the available kits and what each one makes.
@@ -756,6 +766,21 @@ Contact sheet: many pictures on one labelled page.
 - `--recursive / -r` (boolean) 
 - `--overwrite / --no-overwrite` (boolean) 
 - `--config / -c` (path) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite shield`
+
+EXPERIMENTAL: make images resist AI image editing (PhotoGuard-style). Needs `mysuite install shield`.
+
+- argument `inputs` (path, required, repeatable) Images to protect (PNG/JPEG/WebP/TIFF).
+- `--strength` (str, default `standard`) light, standard, strong: stronger = more disruption, more visible pattern, slower.
+- `--steps` (int) Optimisation steps (5-400); overrides the strength's default.
+- `--epsilon` (int) Largest allowed change per pixel, out of 255 (1-32); overrides the strength's default.
+- `--device` (str) cpu, mps or cuda (default: the best available).
+- `--seed` (int) Random start (same seed = same result).
+- `--recursive / -r` (boolean) 
+- `--overwrite / --no-overwrite` (boolean) 
+- `--dry-run` (boolean) Show the files and a time estimate, change nothing.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
 ## `mysuite tokens check`

@@ -95,3 +95,14 @@ in `AGENTS.md` and exercised by a doc-test.
 - Later (asked for): bring the hand-built screens (Export, Convert, Cutout, Watermark, Metadata, Compress, Enhance) in line with
   the new visuals (cards, helper, colours) and clean them up; they are unchanged for now.
 - Still open: presets rework into one subsystem, `.ai` import, SVG optimise, relight depth model, `mysuite agent`.
+
+## Update 2026-10-02 (on-demand parts, shield)
+
+- Lightweight install: `mysuite install [NAME] [--yes|--remove|--dry-run]` with components `tools` (brew, only what is missing),
+  `vision`/`cutout` (build the Swift helpers), `shield` (private venv + pinned VAE weights); everything under `~/.cache/mysuite`
+  (`MYSUITE_HOME`), `bin/` on PATH for mysuite, no implicit downloads, exit 4 + `missing_components` when a part is missing.
+- `mysuite shield` (experimental, PhotoGuard-style encoder attack) with measured results in docs/SHIELD.md: disrupts SD 1.5
+  img2img edits (also after JPEG q85) but is largely removed by a half-size round trip.
+- Next (agreed): the solid part of protection - a "no AI training/mining" declaration (IPTC PLUS DataMining + C2PA
+  training-mining assertion) in `metadata credit/apply`, and an invisible ownership watermark that survives resize/JPEG;
+  then the hand-built screens get the new visuals.

@@ -269,6 +269,15 @@ class MysuiteServer:
             return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
                     "errors": ["action must be list, or show/check with a name"]}
 
+        @mcp.tool(description="EXPERIMENTAL image protection against AI editing (PhotoGuard-style): writes <name>_shielded.png. strength light|standard|strong. Slow (about a minute per 512 px tile) and needs a one-time component (~1.4 GB): if it is missing the result has exit_code 4 and missing_components - ASK THE USER before installing. Does not guarantee protection (see docs/SHIELD.md). dry_run estimates the time.")
+        def mysuite_shield(inputs: list[str], strength: str | None = None, steps: int | None = None, dry_run: bool = False,
+                           overwrite: bool = False) -> dict[str, Any]:
+            return self._call(["shield"], inputs, {"strength": strength, "steps": steps}, dry_run=dry_run, overwrite=overwrite)
+
+        @mcp.tool(description="List the on-demand components (helpers, the shield environment): size, what they need, installed or not. Read only: installing downloads gigabytes, so it is deliberately not offered here - tell the user to run `mysuite install NAME`.")
+        def mysuite_components() -> dict[str, Any]:
+            return self._run(["install", "--json"])
+
         @mcp.tool(description="Which external tools are installed (and how to install the missing ones).")
         def mysuite_doctor() -> dict[str, Any]:
             return self._run(["doctor", "--json"])

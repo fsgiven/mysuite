@@ -9,16 +9,10 @@ from rich.table import Table
 from mysuite.config import ToolPaths
 from mysuite.utils.console import console
 
-_NATIVE_BUILD_HINT = (
-    "mysuite/native/cutout/build.sh — this one isn't brew-installable, it's built from "
-    "source (requires macOS 14+ and the Xcode Command Line Tools)"
-)
+_NATIVE_BUILD_HINT = "mysuite install cutout --yes  (builds the helper from source; macOS 14+ and the Xcode Command Line Tools)"
 
 
-_VISION_BUILD_HINT = (
-    "mysuite/native/vision/build.sh /opt/homebrew/bin — text recognition (ocr) and QR reading; built from source "
-    "(macOS 13+, Xcode Command Line Tools). Optional: only `ocr` and `qr read` need it"
-)
+_VISION_BUILD_HINT = "mysuite install vision --yes  (builds the helper from source; macOS 13+ and the Xcode Command Line Tools). Optional: only `ocr` and `qr read` need it"
 
 
 @dataclass(frozen=True)

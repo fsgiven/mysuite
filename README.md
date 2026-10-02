@@ -29,6 +29,8 @@ telemetry.
 | `rename`, `sheet`, `profile` | Rename by pattern (`{n:3}`, `{date}`…; copies by default), contact sheets (PNG/PDF), colour profiles (to sRGB, or RGB → CMYK with the export engine) |
 | `ocr`, `qr`, `dupes`, `diff`, `contrast` | Read text and QR codes (macOS Vision), make QR codes, find duplicate/look-alike pictures, compare two images, WCAG contrast checks |
 | `profiles` | Company profiles in `mysuite.toml`: tokens, brand, variants, export defaults, metadata policy (`metadata apply`), allowed folders; `--profile NAME` everywhere |
+| `shield` | **Experimental** image protection against AI editing (PhotoGuard-style encoder attack); read [docs/SHIELD.md](docs/SHIELD.md) first |
+| `install` | Fetch the heavier parts once, on demand (`tools`, `vision`, `cutout`, `shield`), into `~/.cache/mysuite` |
 | `tokens`, `variants` | Design tokens (CSS variables, W3C JSON, pinned git repo, Figma): list/show/check a logo's colours, `token:NAME` recolors, and logo variants (negative/on-dark from the tokens' dark theme, mono, invert, grayscale) |
 | `transform` | Quick edits: trim, crop (box or aspect), rotate, flip, resize, pad, round corners, background — in a fixed, predictable order |
 | `relight` | *Experimental, classical (no AI model):* re-shade a cut-out/product/logo as if lit from another direction, with presets (key-left, dramatic, golden-hour…) |
@@ -62,6 +64,7 @@ mysuite is a young personal project, released as-is. Please read this before rel
 | `transform` | Yes: every operation checked on pixels (resize modes, crop, trim, rotate, flip, pad, round, flatten), fixed order, EXIF handling, safety | no preview exists in a terminal, so judge the result by opening the file; animated sources keep only the first frame (and say so) |
 | `relight` | Yes: the lit side is brighter for every direction, flat areas unchanged, alpha kept, tint, presets, bad values, safety | **experimental**: it fakes depth from the picture's own brightness and an alpha-mask dome, so it is a lighting nudge, not a true relight; faces and busy photos will not look right. A depth-model backend is planned |
 | `profiles` | Yes: validation of every key, layering (flags > preset > profile > file), env/flag selection, sandbox from `allow`, compress/enhance presets, metadata policy chains (strip → randomize → credit), save/list/show/delete/check, pipelines and MCP | relative paths in a profile are relative to where you run mysuite; `check` does not fetch remote token sources unless you pass `--online` |
+| `shield`, `install` | Yes: the install plan/consent/cleanup/removal logic, size and alpha preservation and the pixel budget with the real worker, tiling, errors; effect measured by hand against Stable Diffusion 1.5 (docs/SHIELD.md) | **not a guarantee**: it targets the SD 1.x/2.x encoder, my half-size-and-back test removed most of the protection, it is slow (~1 min per 512 px tile on an Apple GPU), and the effect on other models and services is untested |
 | `tokens`, `variants` | Yes: CSS parsing (aliases across files, fallbacks, cycles, brands, light/dark, `@media`), W3C JSON, Figma response parsing, a pinned git source (cached, refreshable), matching, every variant on pixels, export integration; also run by hand against a real design system (Axis, not included) | the **negative** variant is only as good as the tokens: when several tokens share a colour but differ in dark mode it picks the majority and says so (`--negative-map` settles it); logo colours with no token stay as they were; Figma is **untested against a live file** (the Variables API is Enterprise-only); you can't preview, so read the warnings |
 | `kit` | Yes: every PNG of every kit has exactly the specified pixels, ICO contents, manifest and Contents.json match the files, opaque iOS icons, backgrounds, padding, overwrite and safety | the specs follow the platforms' published sizes today; platforms change them, so check before shipping an app |
 | `pdf` | Yes: page ranges, merge/split/extract/rotate/resize/strip/number/stamp/render/images/from-images/compress, corrupt and password-protected files, sandbox | encrypted PDFs are refused, not opened; stamps and numbers use rsvg-convert's fonts (Helvetica/Arial fallback); `compress` can make a small PDF bigger (it says so) |
@@ -101,6 +104,22 @@ damaged "old scan" and a generated logo). File paths are shown as `~/…`.
 | ![Convert screen](docs/images/screen-convert.png)<br>**Convert** | ![Watermark screen](docs/images/screen-watermark.png)<br>**Watermark** |
 | ![Cutout screen](docs/images/screen-cutout.png)<br>**Cutout** (macOS) | ![PDF screen generated from the CLI](docs/images/screen-pdf.png)<br>**PDF** — a screen generated from the command's own options |
 | ![Animated front page with the suitcase mascot](docs/images/screen-welcome.png)<br>**Front page** — drifting file-type tags, the suitcase blinks and talks | |
+
+## A small install, big parts on demand
+
+`pip install mysuite` stays small (Python only: Typer, Rich, Textual, Pillow, NumPy, pypdf, segno). Heavier parts are **not
+installed up front**; they are fetched once, only when you ask, and live in one removable folder (`~/.cache/mysuite`):
+
+```bash
+mysuite install                 # list the parts, their size and whether they are installed
+mysuite install tools --yes     # the command-line tools via Homebrew (only the ones you're missing)
+mysuite install vision --yes    # build the macOS text-recognition/QR helper (needs Xcode command line tools)
+mysuite install shield --yes    # a private PyTorch environment + weights for `mysuite shield` (~1.4 GB)
+mysuite install shield --remove
+```
+
+Nothing is downloaded implicitly, `--dry-run` shows the plan, and a command that needs a missing part tells you which
+`install` to run (exit code 4).
 
 ## Setup
 

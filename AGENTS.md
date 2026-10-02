@@ -40,6 +40,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | to change the lighting direction/tint of a cut-out, product or logo (experimental) | `mysuite relight FILE --preset golden-hour --json` or `--direction left --height 30` |
 | to use the company's defaults (tokens, brand, variants, sizes, CMYK, metadata policy, allowed folders) | `mysuite --profile acme export logo.svg --json` (see `mysuite profiles list --json`) |
 | to strip the old metadata and credit the company in one go | `mysuite --profile acme metadata apply photo.jpg --json` (or `--policy strip,credit --author "Acme"`) |
+| to protect an image against AI editing (experimental; slow, needs a one-time ~1.4 GB component) | `mysuite shield photo.png --json` (exit 4 + `missing_components` if not installed: ask the user before running `mysuite install shield --yes`). Read docs/SHIELD.md and do not promise protection |
 | a whole set of files from one logo (favicon, iOS/Android app icons, social images, retina) | `mysuite kit make logo.svg --kit favicon --json` (`mysuite kit list --json` shows all kits) |
 | to merge / split / extract / rotate / resize / number / stamp / strip / compress a PDF, or turn pages into images and images into a PDF | `mysuite pdf merge a.pdf b.pdf --json`, `mysuite pdf extract doc.pdf --pages 1,3-5 --json` … (`mysuite pdf --help`) |
 | an image at an exact size or print size (500 px, 10x15cm at 300 dpi), dpi stored in the file | `mysuite print photo.jpg --size 10x15cm --dpi 300 --fit cover --json` |
@@ -77,6 +78,8 @@ mysuite tokens list tokens.css --json
 mysuite variants make logo.svg --variants negative,mono-white --tokens tokens.css --json
 mysuite export logo.svg --formats png --sizes 64 --variants default,negative,invert --tokens tokens.css --out out_var --json
 mysuite profiles list --json
+mysuite install --json
+mysuite shield pic.png --dry-run --json
 mysuite profiles save acme --tokens tokens.css --brand x --formats png --sizes 64 --policy strip --json
 mysuite kit list --json
 mysuite kit make logo.svg --kit favicon --out kits --json
@@ -145,6 +148,14 @@ invalid profile is an error (exit 1), never silently ignored. Manage them with `
 `metadata apply` runs the profile's policy: each step works on the previous step's output (`strip` then `credit` gives
 `name_stripped_credited.jpg`).
 
+## On-demand components (mysuite stays small)
+
+Heavy parts are not installed with mysuite. `mysuite install --json` lists them (size, what they need, installed or not);
+`mysuite install shield --yes` fetches the shield environment once (~1.4 GB, private venv + weights under `~/.cache/mysuite`);
+`mysuite install vision --yes` / `cutout --yes` build the macOS helpers; `--remove` deletes them; `--dry-run` shows the plan.
+**Downloads are the user's decision**: never pass `--yes` without asking. A command that needs a missing component exits 4
+with `missing_components[].install`. Nothing is fetched implicitly.
+
 ## Exact jobs: "ask for 500, get 500"
 
 `print`, `kit`, `pdf` and `profile` are deterministic one-shot jobs: the output has exactly the size/spec asked for, so
@@ -207,7 +218,7 @@ Claude Desktop / Cursor (`mcpServers` in their config JSON):
 
 Tools: `mysuite_inspect`, `mysuite_export`, `mysuite_convert`, `mysuite_cutout`, `mysuite_watermark`,
 `mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_relight`, `mysuite_kit`, `mysuite_pdf`,
-`mysuite_tokens`, `mysuite_variants`, `mysuite_profiles`, `mysuite_print`, `mysuite_rename`, `mysuite_sheet`, `mysuite_profile`, `mysuite_ocr`, `mysuite_qr`, `mysuite_dupes`, `mysuite_diff`, `mysuite_contrast`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
+`mysuite_tokens`, `mysuite_variants`, `mysuite_profiles`, `mysuite_shield`, `mysuite_components`, `mysuite_print`, `mysuite_rename`, `mysuite_sheet`, `mysuite_profile`, `mysuite_ocr`, `mysuite_qr`, `mysuite_dupes`, `mysuite_diff`, `mysuite_contrast`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
 `mysuite_schema`; resources `mysuite://guide`, `mysuite://schema`, `mysuite://allowed-folders`. They run the same
 commands as the CLI and return the same JSON, always sandboxed, never overwriting unless `overwrite=true`.
 Without `--allow` the server only sees the folder it was started in. With a local model (Ollama, LM Studio, …)

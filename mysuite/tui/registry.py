@@ -283,4 +283,34 @@ TOOL_REGISTRY: list[ToolSpec] = [
         ),
         cli="mysuite profiles save acme --tokens tokens/ --brand acme --policy strip,credit --author \"Acme\"",
     ),
+    ToolSpec(
+        key="shield",
+        label="Shield",
+        description="Experimental: make an image resist AI editing. Slow, needs a one-time download.",
+        screen_factory=_auto_factory("shield"),
+        accent="#C7D2FE",  # periwinkle-white
+        commands=(("Protect images against AI editing", ("shield",)),),
+        help=(
+            "Adds a small invisible-ish pattern that confuses the image encoder behind Stable Diffusion-style editors, so an AI "
+            "'edit' of your picture turns into something else. Output is a lossless PNG (_shielded). It takes about a minute per "
+            "512 px tile, needs the shield component (Parts card, ~1.4 GB, fetched once), and is NOT a guarantee: resizing or "
+            "denoising can remove it, and it targets one model family. Tick 'dry run' first for a time estimate. See docs/SHIELD.md."
+        ),
+        cli="mysuite shield photo.png --strength standard",
+    ),
+    ToolSpec(
+        key="parts",
+        label="Parts",
+        description="Heavier parts, fetched once when you need them: helpers, shield environment.",
+        screen_factory=_auto_factory("parts"),
+        accent="#BAE6FD",  # ice
+        commands=(("Install or list parts", ("install",)),),
+        help=(
+            "mysuite itself stays small. Bigger parts are downloaded or built only when you ask: 'shield' (about 1.4 GB: PyTorch in a "
+            "private environment + model weights), and the macOS helpers 'vision' and 'cutout' (built from source with Xcode tools). "
+            "Leave the name empty to list what is installed. Tick 'yes' to confirm an install, 'remove' to delete a part again. "
+            "Everything lives in ~/.cache/mysuite."
+        ),
+        cli="mysuite install shield --yes",
+    ),
 ]
