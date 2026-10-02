@@ -89,6 +89,7 @@ class ToolPaths:
     vision_tool: str = "mysuite-vision"
     exiftool: str = "exiftool"
     c2patool: str = "c2patool"
+    pdftocairo: str = "pdftocairo"
     cjpeg: str = "/opt/homebrew/opt/mozjpeg/bin/cjpeg"
     """mozjpeg is keg-only — a bare "cjpeg" on PATH resolves to plain
     jpeg-turbo's weaker encoder instead, so this defaults to mozjpeg's own

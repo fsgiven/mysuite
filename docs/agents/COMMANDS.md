@@ -239,7 +239,7 @@ Enhance photo(s), writing <name>_enhanced.<ext> beside each source.
 
 Batch-export an SVG into multiple sizes, formats, and color profiles.
 
-- argument `inputs` (path, required, repeatable) One or more SVG files, and/or directories of SVGs (non-recursive unless --recursive).
+- argument `inputs` (path, required, repeatable) One or more SVG files (also .svgz, PDF, Illustrator .ai and EPS: converted to SVG first), and/or directories of SVGs (non-recursive unless --recursive).
 - `--sizes / -s` (str) Comma-separated sizes: plain numbers are pixels, or suffix with mm/cm/in (e.g. 16,32,5cm,2in).
 - `--formats / -f` (str) Comma-separated: png,pdf,eps,svg,jpeg,webp,tiff,ico,icns (ico/icns bundle multiple sizes into one file).
 - `--profiles / -p` (str) Comma-separated: rgb,cmyk
@@ -825,6 +825,41 @@ EXPERIMENTAL: make images resist AI image editing (PhotoGuard-style). Needs `mys
 - `--recursive / -r` (boolean) 
 - `--overwrite / --no-overwrite` (boolean) 
 - `--dry-run` (boolean) Show the files and a time estimate, change nothing.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite svg import`
+
+Bring PDF, Illustrator (.ai), EPS or SVGZ files in as plain SVG (text becomes outlines). Then recolor, tokens and variants work on them.
+
+- argument `inputs` (path, required, repeatable) PDF / .ai / .eps / .svgz files and/or folders.
+- `--page` (int range, default `1`) Which page to import.
+- `--all-pages` (boolean) Import every page, as <name>-1.svg, <name>-2.svg, …
+- `--crop / --no-crop` (boolean, default `True`) Trim to the drawn content instead of keeping the whole page (a logo on an A4 sheet).
+- `--optimise / --no-optimise` (boolean, default `True`) Tidy the result: colours as plain hex, numbers rounded, no leftovers.
+- `--out / -o` (path) Output folder (default: beside each source).
+- `--recursive / -r` (boolean) Recurse into subdirectories.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing files.
+- `--dry-run` (boolean) List what would be written.
+- `--config / -c` (path) Explicit path to mysuite.toml.
+- `--quiet / -q` (boolean) Print only the summary.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite svg optimise`
+
+Make SVGs smaller without changing how they look: no editor leftovers, tidy colours, rounded numbers. Checked by rendering both versions.
+
+- argument `inputs` (path, required, repeatable) SVG / .svgz files and/or folders.
+- `--precision` (int range, default `3`) Decimals kept in coordinates (3 is invisible at normal sizes; small viewBoxes automatically keep 2 more).
+- `--keep-ids` (boolean) Keep every id (needed if scripts or other files point into the SVG).
+- `--remove-title` (boolean) Also drop <title> and <desc> (they help screen readers).
+- `--verify / --no-verify` (boolean, default `True`) Render before and after and refuse to write a file that looks different.
+- `--svgz` (boolean) Write gzip-compressed .svgz instead of .svg.
+- `--out / -o` (path) Output folder (default: beside each source, as <name>.min.svg).
+- `--recursive / -r` (boolean) Recurse into subdirectories.
+- `--overwrite / --no-overwrite` (boolean) Overwrite existing files.
+- `--dry-run` (boolean) Report the savings, write nothing.
+- `--config / -c` (path) Explicit path to mysuite.toml.
+- `--quiet / -q` (boolean) Print only the summary.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
 ## `mysuite testcases list`

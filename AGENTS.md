@@ -45,6 +45,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | to protect an image against AI editing (experimental; slow, needs a one-time ~1.4 GB component) | `mysuite shield photo.png --json` (exit 4 + `missing_components` if not installed: ask the user before running `mysuite install shield --yes`). Read docs/SHIELD.md and do not promise protection |
 | files to try the tools on (an agent trial, a demo) | `mysuite testcases make --out DIR --json` writes ~60 generated, CC0 files with a README saying what each one exercises |
 | a whole set of files from one logo (favicon, iOS/Android app icons, social images, retina) | `mysuite kit make logo.svg --kit favicon --json` (`mysuite kit list --json` shows all kits) |
+| a logo that arrives as PDF / Illustrator .ai / EPS / SVGZ, or to shrink an SVG | `mysuite svg import logo.ai --json` (also: `mysuite export logo.ai …` takes them directly) · `mysuite svg optimise logo.svg --json` (renders before/after and refuses a file that would look different; needs poppler for `.ai`/PDF/EPS: `mysuite install tools --yes`) |
 | to merge / split / extract / rotate / resize / number / stamp / strip / compress a PDF, or turn pages into images and images into a PDF | `mysuite pdf merge a.pdf b.pdf --json`, `mysuite pdf extract doc.pdf --pages 1,3-5 --json` … (`mysuite pdf --help`) |
 | an image at an exact size or print size (500 px, 10x15cm at 300 dpi), dpi stored in the file | `mysuite print photo.jpg --size 10x15cm --dpi 300 --fit cover --json` |
 | to rename many files by a pattern | `mysuite rename DIR --pattern "trip_{n:3}{ext}" --dry-run --json` (copies by default; `--move` renames in place) |
@@ -222,7 +223,7 @@ Claude Desktop / Cursor (`mcpServers` in their config JSON):
 ```
 
 Tools: `mysuite_inspect`, `mysuite_export`, `mysuite_convert`, `mysuite_cutout`, `mysuite_watermark`,
-`mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_relight`, `mysuite_kit`, `mysuite_pdf`,
+`mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_relight`, `mysuite_kit`, `mysuite_pdf`, `mysuite_svg`,
 `mysuite_tokens`, `mysuite_variants`, `mysuite_profiles`, `mysuite_shield`, `mysuite_mark`, `mysuite_components`, `mysuite_print`, `mysuite_rename`, `mysuite_sheet`, `mysuite_profile`, `mysuite_ocr`, `mysuite_qr`, `mysuite_dupes`, `mysuite_diff`, `mysuite_contrast`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
 `mysuite_schema`; resources `mysuite://guide`, `mysuite://schema`, `mysuite://allowed-folders`. They run the same
 commands as the CLI and return the same JSON, always sandboxed, never overwriting unless `overwrite=true`.

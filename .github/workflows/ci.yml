@@ -35,7 +35,7 @@ jobs:
       - name: Install external tools
         run: >
           brew install exiftool imagemagick librsvg ghostscript
-          webp libavif oxipng pngquant gifsicle mozjpeg c2patool
+          webp libavif oxipng pngquant gifsicle mozjpeg c2patool poppler
 
       - name: Install mysuite
         run: pip install ".[dev,mcp]"

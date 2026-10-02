@@ -51,7 +51,7 @@ async def test_lists_every_tool_with_descriptions(work):
     async with server(work) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert {"mysuite_inspect", "mysuite_export", "mysuite_convert", "mysuite_cutout", "mysuite_watermark",
-            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_relight", "mysuite_metadata", "mysuite_kit", "mysuite_pdf", "mysuite_ocr", "mysuite_qr", "mysuite_dupes", "mysuite_diff", "mysuite_contrast", "mysuite_print", "mysuite_rename", "mysuite_sheet", "mysuite_profile", "mysuite_tokens", "mysuite_variants", "mysuite_profiles", "mysuite_shield", "mysuite_mark", "mysuite_components", "mysuite_pipeline_run", "mysuite_doctor",
+            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_relight", "mysuite_metadata", "mysuite_kit", "mysuite_pdf", "mysuite_svg", "mysuite_ocr", "mysuite_qr", "mysuite_dupes", "mysuite_diff", "mysuite_contrast", "mysuite_print", "mysuite_rename", "mysuite_sheet", "mysuite_profile", "mysuite_tokens", "mysuite_variants", "mysuite_profiles", "mysuite_shield", "mysuite_mark", "mysuite_components", "mysuite_pipeline_run", "mysuite_doctor",
             "mysuite_schema"} <= set(tools)
     assert all(t.description for t in tools.values())
     assert "dry_run" in tools["mysuite_export"].input_schema["properties"]
@@ -223,6 +223,9 @@ async def test_new_tools_through_mcp(work):
         assert bad["exit_code"] == 2
         wrong = await call(c, "mysuite_pdf", action="rotate", inputs=[str(work / "d.pdf")], options={"nope": 1})
         assert wrong["exit_code"] == 2 and "nope" in wrong["errors"][0]
+        svg = await call(c, "mysuite_svg", action="optimise", inputs=[str(work / "logo.svg")], options={"verify": False})
+        assert svg["ok"] and svg["items"][0]["output"].endswith("logo.min.svg") and (work / "logo.min.svg").exists()
+        assert (await call(c, "mysuite_svg", action="explode", inputs=[str(work / "logo.svg")]))["exit_code"] == 2
         outside = await call(c, "mysuite_qr", action="make", text="x", out=str(work.parent / "escape.png"))
         assert outside["exit_code"] == 3 and not (work.parent / "escape.png").exists()
 

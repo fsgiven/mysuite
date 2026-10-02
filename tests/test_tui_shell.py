@@ -92,7 +92,12 @@ async def test_file_target_shows_status_live(tmp_path):
         target = sc.query_one(FileTarget)
         sc.query_one("#input-svg", Input).value = str(svg)
         await pilot.pause()
-        assert "1 SVG" in str(sc.query_one("#input-svg-status", Static).render())
+        assert "1 logo" in str(sc.query_one("#input-svg-status", Static).render())
+        ai = tmp_path / "brand.ai"
+        ai.write_bytes(b"%PDF-1.4")
+        sc.query_one("#input-svg", Input).value = str(ai)                       # Illustrator/PDF/EPS files are accepted too
+        await pilot.pause()
+        assert "1 logo" in str(sc.query_one("#input-svg-status", Static).render())
         sc.query_one("#input-svg", Input).value = str(tmp_path / "nope.svg")
         await pilot.pause()
         assert "not found" in str(sc.query_one("#input-svg-status", Static).render())

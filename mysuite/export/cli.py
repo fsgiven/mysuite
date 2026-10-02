@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import atexit
 import shutil
+import tempfile
 from pathlib import Path
 from typing import List, Optional
 
@@ -40,6 +42,7 @@ from mysuite.export.units import (
 )
 from mysuite.utils.subprocess_utils import MysuiteToolError
 from mysuite.utils import jsonout
+from mysuite.vector import imports as imp
 from mysuite.utils.console import console, log_error, log_skip, log_step
 
 
@@ -84,7 +87,7 @@ def _build_tree(name: str, jobs, skips, bundle_jobs) -> Tree:
 def export(
     inputs: List[Path] = typer.Argument(
         ..., exists=True, readable=True,
-        help="One or more SVG files, and/or directories of SVGs (non-recursive unless --recursive).",
+        help="One or more SVG files (also .svgz, PDF, Illustrator .ai and EPS: converted to SVG first), and/or directories of SVGs (non-recursive unless --recursive).",
     ),
     sizes: Optional[str] = typer.Option(
         None, "--sizes", "-s",
@@ -386,6 +389,8 @@ def export(
     total_skipped_existing = 0
     total_planned = 0
 
+    converted: dict[Path, Path] = {}
+    import_dir: Path | None = None
     for input_svg in input_files:
         resolved_name = name or input_svg.stem
         for variant_name in variant_names:
@@ -448,7 +453,21 @@ def export(
                 else:
                     log_step(str(job.output_path))
 
-            render_svg, is_temp = apply_recolor(input_svg, resolved_recolor_map, resolved_recolor_tolerance)
+            if input_svg.suffix.lower() in imp.IMPORT_EXTENSIONS:          # PDF / AI / EPS / SVGZ: converted to SVG once, then treated as one
+                if input_svg not in converted:
+                    try:
+                        if import_dir is None:
+                            import_dir = Path(tempfile.mkdtemp(prefix="mysuite-export-import-"))
+                            atexit.register(shutil.rmtree, import_dir, True)
+                        require_tools(config.tools, "svg-import") if input_svg.suffix.lower() != ".svgz" else None
+                        converted[input_svg] = imp.to_svg(input_svg, import_dir / str(len(converted)), tools=config.tools).svg
+                    except (imp.ImportError_, MysuiteToolError) as exc:
+                        log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+                        raise typer.Exit(1) from exc
+                source_svg = converted[input_svg]
+            else:
+                source_svg = input_svg
+            render_svg, is_temp = apply_recolor(source_svg, resolved_recolor_map, resolved_recolor_tolerance)
             if variant_name != "default":
                 try:
                     render_svg, is_temp, variant_notes = make_variant_svg(render_svg, is_temp, variant_name, token_view, overrides=negative_overrides, tolerance=negative_tolerance)

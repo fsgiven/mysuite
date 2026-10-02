@@ -31,7 +31,7 @@ CMYK_MODES = ["exact", "clean", "clean:10", "tokens"]
 assert set(UNIT_OPTIONS) == VALID_UNITS
 assert set(FORMAT_OPTIONS) == set(VALID_FORMATS)
 
-_SVG = frozenset({".svg"})
+_SVG = frozenset({".svg", ".svgz", ".pdf", ".ai", ".eps"})     # the last four are converted to SVG on the way in
 _BLANK = (None, Select.BLANK, Select.NULL)
 
 
@@ -60,10 +60,10 @@ class ExportScreen(ToolScreen):
 
     # ---------------------------------------------------------------------------- form
     def compose_form(self) -> ComposeResult:
-        yield Label("SVG files", classes="section")
+        yield Label("Logo files", classes="section")
         yield FileTarget(
-            input_id="input-svg", browse_id="browse-input-svg", extensions=_SVG, noun="SVG",
-            placeholder="logo.svg, a folder, or a glob like brand/*.svg",
+            input_id="input-svg", browse_id="browse-input-svg", extensions=_SVG, noun="logo",
+            placeholder="logo.svg (or .ai, .pdf, .eps), a folder, or a glob like brand/*.svg",
         )
         yield Checkbox("Include subfolders", id="recursive")
 
@@ -177,7 +177,7 @@ class ExportScreen(ToolScreen):
     def argv(self) -> list[str]:
         res = self.query_one(FileTarget).resolve()
         if res.empty:
-            raise FormError("choose at least one SVG — paste a path, drop a file, or use Files… / Folder…", "input-svg")
+            raise FormError("choose at least one logo — paste a path, drop a file, or use Files… / Folder…", "input-svg")
         if res.missing or res.unsupported or res.empty_folders:
             bad = (res.missing or [str(p) for p in res.unsupported] or [str(p) for p in res.empty_folders])[0]
             raise FormError(f"not usable: {bad}" if res.missing or res.unsupported else f"no SVG files in {bad}", "input-svg")
@@ -251,7 +251,7 @@ class ExportScreen(ToolScreen):
         formats = Counter(f"{i.get('format')}{'/cmyk' if i.get('colorspace') == 'cmyk' else ''}" for i in items)
         folder = show_path(self.output_dir()) if self.output_dir() else ""
         by_format = ", ".join(f"{name} ×{n}" for name, n in formats.most_common())
-        return f"{len(items)} file(s) from {len(sources)} SVG(s) → {folder}\n{by_format}"
+        return f"{len(items)} file(s) from {len(sources)} logo(s) → {folder}\n{by_format}"
 
     # ------------------------------------------------------------------------- events
     def on_button_pressed(self, event: Button.Pressed) -> None:

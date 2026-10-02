@@ -189,6 +189,14 @@ class MysuiteServer:
                         "errors": [f"action must be one of {sorted(engine.PDF_ACTIONS)}"]}
             return self._call(["pdf", action], inputs, dict(options or {}), overwrite=overwrite)
 
+        @mcp.tool(description="SVG files. action 'import': bring PDF, Illustrator (.ai), EPS or SVGZ files in as plain SVG (text becomes outlines; options: page, all_pages, crop, optimise, out). action 'optimise': make SVGs smaller without changing how they look (options: precision, keep_ids, remove_title, verify, svgz, out); the result is checked by rendering both versions. Originals are never modified; results land beside them (<name>.svg / <name>.min.svg) unless out is given.")
+        def mysuite_svg(action: str, inputs: list[str], options: dict[str, Any] | None = None, dry_run: bool = False,
+                        overwrite: bool = False) -> dict[str, Any]:
+            if action not in engine.SVG_ACTIONS:
+                return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
+                        "errors": [f"action must be one of {sorted(engine.SVG_ACTIONS)}"]}
+            return self._call(["svg", action], inputs, dict(options or {}), dry_run=dry_run, overwrite=overwrite)
+
         @mcp.tool(description="Read the text in images (macOS Vision helper required). Returns text plus each line with its box. save=true also writes <name>.txt.")
         def mysuite_ocr(inputs: list[str], languages: str | None = None, fast: bool = False, save: bool = False,
                         overwrite: bool = False) -> dict[str, Any]:

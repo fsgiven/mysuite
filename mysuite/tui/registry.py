@@ -209,6 +209,25 @@ TOOL_REGISTRY: list[ToolSpec] = [
         cli="mysuite pdf extract doc.pdf --pages 1,3-5",
     ),
     ToolSpec(
+        key="svg",
+        label="SVG",
+        description="Bring PDF, Illustrator and EPS logos in as SVG; make SVGs smaller.",
+        screen_factory=_auto_factory("svg"),
+        accent="#C9A27E",  # tan
+        commands=(
+            ("Bring a PDF / AI / EPS in as SVG", ("svg", "import")),
+            ("Make an SVG smaller", ("svg", "optimise")),
+        ),
+        help=(
+            "Import: choose Illustrator (.ai), PDF, EPS or SVGZ files. Each becomes a plain SVG next to the original, trimmed "
+            "to the drawing; text turns into outlines, so no fonts are needed. Colours become tidy hex, so recolor, tokens and "
+            "variants work on them (Export also takes these files directly).\n"
+            "Smaller: removes editor leftovers, unused definitions and extra decimals, then renders both versions and refuses "
+            "to write a file that looks different. Results are <name>.min.svg; originals are never touched."
+        ),
+        cli="mysuite svg import logo.ai   ·   mysuite svg optimise logo.svg",
+    ),
+    ToolSpec(
         key="exact",
         label="Exact",
         description="Exact sizes and specs: print size, rename, contact sheet, colour profile.",

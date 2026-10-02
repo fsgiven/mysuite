@@ -140,3 +140,13 @@ in `AGENTS.md` and exercised by a doc-test.
 - The generated screens (`AutoToolScreen`: kits, pdf, exact, helpers, tokens, profiles, protect, parts) now sit on the same shell:
   files via `FileTarget`, the "Preview only" box and Plan where the command has `--dry-run`, the live Command, streamed progress,
   and values remembered per action (options only; files are never remembered).
+
+## Update 2026-10-02 (vector import + SVG optimise)
+
+- Shipped: `mysuite svg import` (PDF / `.ai` / EPS / SVGZ -> SVG via poppler `pdftocairo`, Ghostscript for PostScript sources, trim to
+  content, `--page/--all-pages`, colours normalised to hex), `mysuite svg optimise` (pure Python, render-verified, `.min.svg`/`.svgz`),
+  Export accepting those files directly (converted once, recolor/variants/CMYK all work on them), pipeline step `tool = "svg"`,
+  MCP tool `mysuite_svg`, an SVG card in the dashboard, `pdftocairo` in `doctor` and in `mysuite install tools`, poppler in CI.
+- Dropped from the open list: `.ai`/PDF-to-SVG import and SVG optimise. Still open and non-AI: a curated real CC0 photo set.
+- Not done on purpose: CorelDRAW `.cdr`, `.emf/.wmf`, Sketch/Figma files (would need Inkscape); folders passed to `export` still pick up
+  only `*.svg` (pass the `.ai`/`.pdf` files explicitly).

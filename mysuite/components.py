@@ -169,7 +169,7 @@ _shield = Component(
 # ------------------------------------------------------------------------------ the command-line tools (Homebrew)
 BREW_TOOLS = {  # binary -> formula
     "rsvg-convert": "librsvg", "gs": "ghostscript", "magick": "imagemagick", "exiftool": "exiftool", "c2patool": "c2patool",
-    "cwebp": "webp", "avifenc": "libavif", "oxipng": "oxipng", "pngquant": "pngquant", "gifsicle": "gifsicle",
+    "pdftocairo": "poppler", "cwebp": "webp", "avifenc": "libavif", "oxipng": "oxipng", "pngquant": "pngquant", "gifsicle": "gifsicle",
 }
 
 
@@ -187,7 +187,7 @@ def _tools_install(log: Callable[[str], None]) -> None:
 
 _tools = Component(
     name="tools", title="command-line tools",
-    description="The command-line tools mysuite drives (rsvg-convert, Ghostscript, ImageMagick, exiftool, c2patool, WebP/AVIF/oxipng/pngquant/gifsicle), via Homebrew - only the ones you are missing.",
+    description="The command-line tools mysuite drives (rsvg-convert, Ghostscript, ImageMagick, exiftool, c2patool, poppler for PDF/AI-to-SVG, WebP/AVIF/oxipng/pngquant/gifsicle), via Homebrew - only the ones you are missing.",
     size="about 300-600 MB for all of them; only missing ones are installed",
     needs="Homebrew (https://brew.sh) and internet access once", platforms=("Darwin", "Linux"),
     steps=["brew install <the missing ones among: " + ", ".join(sorted(set(BREW_TOOLS.values()))) + ">"],

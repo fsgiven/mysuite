@@ -24,6 +24,7 @@ telemetry.
 | `enhance` | Upscale and restore photos locally: denoise, sharpen, scratch removal, color, optional AI backend |
 | `compress` | Re-encode with the same best-in-class codecs Squoosh uses (mozjpeg, WebP, AVIF, oxipng, pngquant, gifsicle), plus sharpening |
 | `kit` | A whole set from one logo with exact specs: favicon set (ico, PNGs, Apple/Android icons, manifest), iOS `AppIcon.appiconset`, Android mipmaps, social images (Open Graph, Twitter, LinkedIn, YouTube, Instagram), retina @1x/@2x/@3x |
+| `svg` | Bring PDF / Illustrator `.ai` / EPS / SVGZ in as plain SVG (text becomes outlines, colours tidy hex, trimmed to the drawing), and make SVGs smaller with a render-checked optimiser |
 | `pdf` | PDF toolbox: merge, split, extract pages, rotate, fit to a paper size, page numbers, stamp text/logo, strip metadata, compress, pages ⇄ images |
 | `print` | Output at an exact size: `10x15cm` at 300 dpi is exactly 1181×1772 px, dpi stored in the file; contain/cover/stretch, bleed |
 | `rename`, `sheet`, `profile` | Rename by pattern (`{n:3}`, `{date}`…; copies by default), contact sheets (PNG/PDF), colour profiles (to sRGB, or RGB → CMYK with the export engine) |
@@ -71,6 +72,7 @@ mysuite is a young personal project, released as-is. Please read this before rel
 | `shield`, `install` | Yes: the install plan/consent/cleanup/removal logic, size and alpha preservation and the pixel budget with the real worker, tiling, errors; effect measured by hand against Stable Diffusion 1.5 (docs/SHIELD.md) | **not a guarantee**: it targets the SD 1.x/2.x encoder, my half-size-and-back test removed most of the protection, it is slow (~1 min per 512 px tile on an Apple GPU), and the effect on other models and services is untested |
 | `tokens`, `variants` | Yes: CSS parsing (aliases across files, fallbacks, cycles, brands, light/dark, `@media`), W3C JSON, Figma response parsing, a pinned git source (cached, refreshable), matching, every variant on pixels, export integration; also run by hand against a real design system (Axis, not included) | the **negative** variant is only as good as the tokens: when several tokens share a colour but differ in dark mode it picks the majority and says so (`--negative-map` settles it); logo colours with no token stay as they were; Figma is **untested against a live file** (the Variables API is Enterprise-only); you can't preview, so read the warnings |
 | `kit` | Yes: every PNG of every kit has exactly the specified pixels, ICO contents, manifest and Contents.json match the files, opaque iOS icons, backgrounds, padding, overwrite and safety | the specs follow the platforms' published sizes today; platforms change them, so check before shipping an app |
+| `svg` | Yes: PDF/AI/EPS/SVGZ import renders like the original, trimming, page selection, hostile input, optimiser verified by rendering before/after, export takes these files directly, pipeline and MCP | import needs poppler (`mysuite install tools --yes`); live text becomes outlines; gradient meshes, effects and overprint are whatever the PDF flattened them to; legacy PostScript `.ai` goes through Ghostscript and is only as good as that; not verified against files from every Illustrator version |
 | `pdf` | Yes: page ranges, merge/split/extract/rotate/resize/strip/number/stamp/render/images/from-images/compress, corrupt and password-protected files, sandbox | encrypted PDFs are refused, not opened; stamps and numbers use rsvg-convert's fonts (Helvetica/Arial fallback); `compress` can make a small PDF bigger (it says so) |
 | `print`, `rename`, `sheet`, `profile` | Yes: exact pixels and dpi for cm/in/mm/px, fit modes, bleed, rename safety (collisions, swaps, existing files), contact sheets, sRGB and CMYK conversion | colour conversion honours embedded ICC profiles but cannot replace a calibrated print workflow; `rename --move` changes your originals, so use `--dry-run` first |
 | `ocr`, `qr`, `dupes`, `diff`, `contrast` | Yes (`ocr` and `qr read` need the macOS `mysuite-vision` helper, so they are skipped on CI): real Vision runs, QR round trip, duplicates (identical, resized, recompressed), diff metrics, WCAG ratios | OCR quality is whatever Apple's model gives; duplicate detection is a perceptual hash, so very similar but different pictures can be grouped (nothing is ever deleted) |
@@ -413,6 +415,25 @@ mysuite export logo.svg --preset mybrand
 ```
 
 A same-named preset in your own `mysuite.toml` overrides the built-in one.
+
+## SVG: import and optimise
+
+```bash
+mysuite svg import logo.ai                 # also .pdf, .eps, .svgz -> logo.svg beside it
+mysuite svg import brand.pdf --all-pages --out svgs/
+mysuite svg optimise logo.svg              # -> logo.min.svg, checked by rendering both versions
+mysuite export logo.ai --formats png,pdf --sizes 64,512 --recolor "#dd0000=#00aa00"   # export takes them directly
+```
+
+`import` reads Illustrator files saved with PDF compatibility (everything since CS) as PDFs; older PostScript-based `.ai` and EPS
+go through Ghostscript first; poppler's `pdftocairo` writes the SVG (`mysuite install tools --yes` fetches poppler). The page is
+trimmed to the drawn content (`--no-crop` keeps the whole sheet), text becomes outlines so no fonts are needed, colours become plain
+hex (so `--recolor`, tokens and variants work), and a note says when the file contains embedded pictures (they stay pixels).
+
+`optimise` removes comments, editor leftovers (Inkscape, Illustrator, Sketch), `<metadata>`, empty or attribute-less groups, unused
+`<defs>` and unreferenced ids, shortens colours and rounds numbers (`--precision`, default 3 decimals; small viewBoxes keep two more).
+Paths that use arcs are left exact because their flags can be packed digit by digit. It then renders the original and the result
+and **refuses to write a file that looks different**; files with `<script>` or entity declarations are left alone or refused.
 
 ## Convert
 

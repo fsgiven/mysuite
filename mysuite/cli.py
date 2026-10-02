@@ -30,6 +30,7 @@ from mysuite.preset_cli import app as preset_app
 from mysuite.testcases.cli import app as testcases_app
 from mysuite.shield.cli import shield as shield_command
 from mysuite.profiles_cli import app as profiles_app
+from mysuite.vector.cli import app as svg_app
 from mysuite.tokens.cli import app as tokens_app
 from mysuite.specs.cli import print_command, profile_command, rename_command, sheet_command
 from mysuite.relight.cli import relight as relight_command
@@ -120,6 +121,7 @@ app.add_typer(testcases_app, name="testcases")
 app.add_typer(variants_app, name="variants")
 app.add_typer(profiles_app, name="profiles")
 app.add_typer(pdf_app, name="pdf")
+app.add_typer(svg_app, name="svg")
 app.add_typer(pipeline_app, name="pipeline")
 app.add_typer(preset_app, name="preset")
 app.add_typer(metadata_app, name="metadata")

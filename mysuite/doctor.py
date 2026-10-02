@@ -30,6 +30,7 @@ TOOL_SPECS: list[ToolSpec] = [
     ToolSpec("vision_tool", _VISION_BUILD_HINT),
     ToolSpec("exiftool", "brew install exiftool", version_flag="-ver"),
     ToolSpec("c2patool", "brew install c2patool"),
+    ToolSpec("pdftocairo", "brew install poppler  (or: mysuite install tools --yes). Optional: only PDF/AI/EPS-to-SVG import needs it", version_flag="-v"),
     ToolSpec(
         "cjpeg",
         "brew install mozjpeg (keg-only — this tool points at its keg path directly, "
@@ -74,6 +75,8 @@ NEEDS: dict[str, tuple[str, ...]] = {
     "metadata-randomize": ("exiftool", "magick"),
     "metadata-credit": ("c2patool",),
     "metadata-declare": ("exiftool",),
+    "svg-import": ("pdftocairo", "gs"),
+    "svg-optimise": ("rsvg_convert",),
     "compress-mozjpeg": ("cjpeg",),
     "compress-webp": ("cwebp",),
     "compress-avif": ("avifenc",),
