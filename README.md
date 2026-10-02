@@ -76,7 +76,7 @@ mysuite is a young personal project, released as-is. Please read this before rel
 | `ocr`, `qr`, `dupes`, `diff`, `contrast` | Yes (`ocr` and `qr read` need the macOS `mysuite-vision` helper, so they are skipped on CI): real Vision runs, QR round trip, duplicates (identical, resized, recompressed), diff metrics, WCAG ratios | OCR quality is whatever Apple's model gives; duplicate detection is a perceptual hash, so very similar but different pictures can be grouped (nothing is ever deleted) |
 | `inspect` | Yes: CMYK/alpha/gray, EXIF orientation/GPS/serial, blank/blurry, multipage, SVG facts, thumbnails | the "blurry" flag is a heuristic (variance of the Laplacian), not a verdict |
 | `--json`, sandbox, `pipeline`, `mcp` | Yes: one JSON document on stdout, exit codes 0–4, escape attempts (`..`, absolute paths, symlinks), pipelines end to end, the MCP server through a real MCP client | the sandbox is off unless you ask for it (the MCP server always uses it); pipelines are unproven beyond the examples; MCP tested with the Python SDK, **not yet with Claude Desktop or Cursor** |
-| Terminal dashboard | Yes for all screens except the file-picker edge cases | Drag-and-drop depends on your terminal emulator |
+| Terminal dashboard | Yes: every screen has pilot tests, and the commands the forms show are run against the real CLI in tests | Drag-and-drop depends on your terminal emulator |
 
 All 22 findings from the first test pass are fixed and the suite has no expected failures. Details are in
 [docs/TEST-FINDINGS.md](docs/TEST-FINDINGS.md).
@@ -634,8 +634,8 @@ mysuite tui
 Opens an interactive home screen listing the available tools as cards, each with its own accent colour.
 Press a number key to jump straight to a tool, or arrow keys + Enter; **h** / **F1** explains the screen you are on.
 
-**Export** is the first screen rebuilt on the new single-tool layout (Convert, Cutout, Watermark, Metadata, Compress and
-Enhance follow one by one). The form is a front end for the real `mysuite export …` command, so the two can never disagree:
+The seven single-tool screens — **Export, Convert, Cutout, Watermark, Metadata, Compress, Enhance** — share one layout.
+Each form is a front end for the real `mysuite <tool> …` command, so the screen and the CLI can never disagree:
 
 - **Form on the left, results on the right.** One-line inputs, short labels, the common choices up front (files, sizes + unit
   + DPI, formats, RGB/CMYK and the CMYK number mode, colour variants, output folder, preset, company profile) and the rest
@@ -648,15 +648,16 @@ Enhance follow one by one). The form is a front end for the real `mysuite export
 - **Remembers your last settings per tool** (sizes, formats, output folder, switches…) in `~/.cache/mysuite/ui-state.json` —
   values and paths only, never file contents. *Reset* forgets a tool's settings; `MYSUITE_NO_UI_STATE=1` turns the memory off.
 
-**Choosing files** works the same everywhere the new layout is used: type or paste a path, a folder, a comma-separated list or
+**Choosing files** works the same on every one of those screens: type or paste a path, a folder, a comma-separated list or
 a glob (`~/Pictures/*.png`); drop files onto the terminal; use **Files…** / **Folder…**; or pick from **Recent**. Press → to
 accept the grey path completion. A status line under the box says at once what it found ("✓ 3 SVGs · a.svg, b.svg, c.svg",
 "✗ not found: …", "not a supported type"), so a bad path shows up before you run.
 
-The other screens keep their current form/run shape until their turn: Convert/Cutout/Watermark are scaled-down versions of
-the same idea; Metadata has a **Mode** toggle (Strip/Randomize/Credit); Compress shows only the option groups of the chosen
-codec. Keyboard shortcuts are in the footer: **Ctrl+R** run, **Ctrl+S** save the Export form as a named preset (writes
-into `mysuite.toml`). The old screens' **Browse** pickers start in your home folder, so any file anywhere is reachable.
+Per tool: Export has CMYK mode, colour variants, company profile and design tokens; Convert takes several target formats at
+once; Metadata has Strip / Randomize / Credit / Declare ("no AI training") / Apply-policy modes that show only their own
+fields; Compress shows only the chosen codec's options and a preset fills the form; Enhance lists `--preset` plus whatever
+you changed on top. Keyboard shortcuts are in the footer: **Ctrl+R** run, **Ctrl+S** save the Export form as a named
+preset (writes into `mysuite.toml`).
 The equivalent CLI commands keep working unchanged for scripting — the TUI is additive, not a replacement.
 
 ## Tests

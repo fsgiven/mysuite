@@ -34,6 +34,12 @@ from mysuite.utils import jsonout
 DEBOUNCE_SECONDS = 0.35
 
 
+def tilde(text: str) -> str:
+    """Show the home folder as ~ (display only — the copyable command keeps real paths)."""
+    home = str(Path.home())
+    return text.replace(home, "~") if home and home != "/" else text
+
+
 class FormError(Exception):
     """A form value that cannot be turned into a command; `widget_id` is the field to point at."""
 
@@ -75,7 +81,7 @@ def field(label: str, widget, *, classes: str = "") -> Vertical:
 
 
 class ToolScreen(Screen):
-    """Subclasses set TOOL_KEY / CLI / TITLE and implement `compose_form`, `argv`; the rest is here."""
+    """Subclasses set TOOL_KEY / CLI / HEADING and implement `compose_form`, `argv`; the rest is here."""
 
     TOOL_KEY = ""
     CLI: tuple[str, ...] = ()
@@ -112,6 +118,10 @@ class ToolScreen(Screen):
     def output_dir(self) -> Path | None:
         return None
 
+    def command_words(self) -> tuple[str, ...]:
+        """The command (and sub-command) this form runs; override when one screen covers several sub-commands."""
+        return self.CLI
+
     def global_argv(self) -> list[str]:
         """Options that go before the command name (e.g. --profile NAME)."""
         return []
@@ -147,6 +157,7 @@ class ToolScreen(Screen):
 
     def on_mount(self) -> None:
         self.app.sub_title = self.HEADING
+        self._apply_accent()
         self.query_one("#plan", Static).border_title = "Plan"
         self.query_one("#command", CommandLine).border_title = "Command"
         self.query_one("#run-log", RichLog).border_title = "Output"
@@ -157,6 +168,18 @@ class ToolScreen(Screen):
         self.query_one("#run-progress", ProgressBar).update(total=100, progress=0)
         self._schedule_preview()
         self._focus_first()
+
+    def _apply_accent(self) -> None:
+        """Each tool keeps its colour from the registry (the same one its card uses)."""
+        from mysuite.tui.registry import TOOL_REGISTRY
+
+        spec = next((t for t in TOOL_REGISTRY if t.key == self.TOOL_KEY), None)
+        if spec is None:
+            return
+        for widget in self.query(".section"):
+            widget.styles.color = spec.accent
+        for selector in ("#plan", "#run-log", "#command"):
+            self.query_one(selector).styles.border_title_color = spec.accent
 
     def _focus_first(self) -> None:
         try:
@@ -266,7 +289,7 @@ class ToolScreen(Screen):
         command = self.query_one("#command", CommandLine)
         plan = self.query_one("#plan", Static)
         try:
-            argv = [*self.global_argv(), *self.CLI, *self._display_argv()]
+            argv = [*self.global_argv(), *self.command_words(), *self._display_argv()]
         except FormError as exc:
             command.show(None, "complete the form to see the command")
             plan.update(f"[dim]{escape(str(exc))}[/dim]")
@@ -286,10 +309,7 @@ class ToolScreen(Screen):
 
     def _child(self, argv: list[str], *, events: bool = False) -> subprocess.Popen:
         env = engine._child_env()
-        try:
-            env["COLUMNS"] = str(max(60, self.query_one("#run-log").size.width - 4))
-        except Exception:  # noqa: BLE001
-            env["COLUMNS"] = "100"
+        env["COLUMNS"] = "400"          # the child must not wrap paths; the log wraps for display
         env["NO_COLOR"] = "1"
         if events:
             env["MYSUITE_EVENTS"] = "1"
@@ -322,7 +342,7 @@ class ToolScreen(Screen):
             self._planned = 0
             return
         self._planned = len([i for i in report.get("items", []) if i.get("status") == "planned"])
-        text = f"[bold]{escape(self.plan_text(report))}[/bold]"
+        text = f"[bold]{escape(tilde(self.plan_text(report)))}[/bold]"
         warnings = report.get("warnings") or []
         if warnings:
             text += "\n" + "\n".join(f"[#FBBF24]⚠ {escape(str(w))}[/#FBBF24]" for w in warnings[:3])
@@ -388,7 +408,7 @@ class ToolScreen(Screen):
         self.query_one("#run-summary", Static).update("running…")
         bar = self.query_one("#run-progress", ProgressBar)
         bar.update(total=self._planned or None, progress=0)
-        self._run_worker([*self.global_argv(), *self.CLI, *argv, "--json"], dry)
+        self._run_worker([*self.global_argv(), *self.command_words(), *argv, "--json"], dry)
 
     @work(thread=True, exclusive=True, group="run")
     def _run_worker(self, argv: list[str], dry: bool) -> None:
@@ -413,7 +433,7 @@ class ToolScreen(Screen):
                 self.app.call_from_thread(self._on_item, item)
                 continue
             stderr_lines.append(line)
-            self.app.call_from_thread(self.write_log, escape(line))
+            self.app.call_from_thread(self.write_log, escape(tilde(line)))
         code = proc.wait()
         reader.join(timeout=5)
         try:
@@ -468,7 +488,12 @@ class ToolScreen(Screen):
             summary, color = "stopped", "#FBBF24"
         else:
             errors = report.get("errors") or []
-            summary, color = (str(errors[0]) if errors else f"failed (exit {code}) — see Output"), "#F87171"
+            items = report.get("items") or []
+            if items and any(i.get("status") == "failed" for i in items):
+                summary = self.summary_text(report, code, dry)         # some files worked, some did not
+            else:
+                summary = str(errors[0]) if errors else f"failed (exit {code}) — see Output"
+            color = "#F87171"
         self.last_summary_text = summary
         self.query_one("#run-summary", Static).update(Text(summary, style=color))
         self._schedule_preview()

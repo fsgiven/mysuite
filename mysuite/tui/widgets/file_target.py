@@ -192,6 +192,7 @@ class FileTarget(Vertical):
         placeholder: str = "path, folder, or glob",
         recent_kind: str = "files",
         recursive: bool = False,
+        folders: bool = True,
         id: str | None = None,
     ) -> None:
         super().__init__(id=id, classes="file-target")
@@ -202,13 +203,15 @@ class FileTarget(Vertical):
         self._placeholder = placeholder
         self._recent_kind = recent_kind
         self.recursive = recursive
+        self.folders = folders
         self.resolution = Resolution()
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="field-row"):
             yield DropInput(placeholder=self._placeholder, id=self._input_id, extensions=self.extensions, suggester=PathSuggester())
             yield Button("Files…", id=self._browse_id, classes="mini")
-            yield Button("Folder…", id=f"{self._browse_id}-folder", classes="mini")
+            if self.folders:
+                yield Button("Folder…", id=f"{self._browse_id}-folder", classes="mini")
             yield Button("Recent", id=f"{self._browse_id}-recent", classes="mini")
         yield Static("", id=f"{self._input_id}-status", classes="target-status")
 

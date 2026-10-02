@@ -143,87 +143,8 @@ ToggleButton:focus, Checkbox:focus {
     margin-right: 1;
 }
 
-.recolor-row {
-    margin-bottom: 1;
-}
-
-.recolor-row Label {
-    width: auto;
-    margin: 0 1;
-}
-
-.recolor-remove-btn {
-    min-width: 3;
-    width: 3;
-    margin-left: 1;
-}
-
-#recolor-rows {
-    height: auto;
-}
-
-#recolor-add-btn {
-    margin-top: 1;
-    width: auto;
-}
-
 /* Per-tool identity color — overrides .field-group's default accent above for
    each tool's own screen (see the palette reference comment at the top). */
-ExportScreen .field-group {
-    border-title-color: #7DD3FC;
-}
-
-ConvertScreen .field-group {
-    border-title-color: #C4B5FD;
-}
-
-CutoutScreen .field-group {
-    border-title-color: #FCA5A5;
-}
-
-WatermarkScreen .field-group {
-    border-title-color: #5EEAD4;
-}
-
-MetadataScreen .field-group {
-    border-title-color: #93C5FD;
-}
-
-CompressScreen .field-group {
-    border-title-color: #FDE047;
-}
-
-EnhanceScreen .field-group {
-    border-title-color: #F9A8D4;
-}
-
-ExportScreen Button:focus {
-    border: tall #7DD3FC;
-}
-
-ConvertScreen Button:focus {
-    border: tall #C4B5FD;
-}
-
-CutoutScreen Button:focus {
-    border: tall #FCA5A5;
-}
-
-WatermarkScreen Button:focus {
-    border: tall #5EEAD4;
-}
-
-MetadataScreen Button:focus {
-    border: tall #93C5FD;
-}
-
-CompressScreen Button:focus {
-    border: tall #FDE047;
-}
-
-EnhanceScreen Button:focus {
-    border: tall #F9A8D4;
-}
 
 /* Home screen: cards + helper bar */
 
@@ -272,21 +193,6 @@ EnhanceScreen Button:focus {
     border-right: solid #2A2E3F;
 }
 
-#form-columns {
-    height: auto;
-}
-
-.form-col {
-    width: 1fr;
-    height: auto;
-    max-height: 40;
-    padding: 0 1;
-}
-
-#form-col-left {
-    border-right: solid #1B1E2B;
-}
-
 .field-row {
     height: auto;
     align: left middle;
@@ -319,27 +225,6 @@ EnhanceScreen Button:focus {
     width: 2fr;
     padding: 1 2;
     height: 100%;
-}
-
-#group-svg-preview {
-    height: auto;
-    max-height: 14;
-}
-
-#svg-thumb-strip {
-    height: auto;
-}
-
-.svg-thumbnail {
-    width: auto;
-    height: auto;
-    margin-right: 2;
-}
-
-#thumb-label {
-    color: #8B93A7;
-    text-align: center;
-    margin: 0;
 }
 
 #group-run {
@@ -552,3 +437,7 @@ ToolScreen #after-run Button { margin-left: 0; }
 ToolScreen .recolor-row { margin-bottom: 0; height: 1; }
 ToolScreen .recolor-row Input { width: 1fr; }
 ToolScreen .recolor-remove-btn { width: 3; min-width: 3; height: 1; border: none; padding: 0 1; margin-left: 1; background: #1B1E2B; }
+ToolScreen .recolor-row Label { width: auto; margin: 0 1; }
+ToolScreen #run-log { overflow-x: hidden; }
+ToolScreen #form > Vertical { height: auto; }
+ToolScreen .hint { height: auto; color: #6B7280; margin: 1 0 0 0; }

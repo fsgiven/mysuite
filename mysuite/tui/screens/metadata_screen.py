@@ -1,251 +1,173 @@
+"""Metadata: strip, replace with a decoy, credit, declare "no AI training", or apply a company policy — copies, originals untouched.
+
+A form over `mysuite metadata <mode> …`; see mysuite.tui.shell. Stable ids: `#input-files`, `#mode`, `#author`,
+`#copyright`, `#generator`, `#group-credit` (shown for credit / apply).
+"""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from textual import events, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
-from textual.widgets import (
-    Button,
-    Checkbox,
-    Footer,
-    Header,
-    Input,
-    Label,
-    ProgressBar,
-    RichLog,
-    Select,
-    Static,
-)
-from rich.markup import escape
-from textual.worker import get_current_worker
+from textual.widgets import Checkbox, Collapsible, Input, Label, Select, Static
 
-from mysuite.utils.paths import show_path
-from mysuite.config import Config, load_config
-from mysuite.convert._parsing import InvalidInputError, SOURCE_EXTENSIONS, resolve_input_files
-from mysuite.metadata.metadata import MetadataOutcome, credit_file, randomize_file, strip_file
-from mysuite.tui.dragdrop import merge_paths_into_input, parse_dropped_paths, parse_input_files_field
-from mysuite.tui.screens.file_picker import FilePickerScreen
-from mysuite.utils.subprocess_utils import MysuiteToolError
+from mysuite.config import load_config
+from mysuite.convert._parsing import SOURCE_EXTENSIONS
+from mysuite.metadata.metadata import DATA_MINING
+from mysuite.tui.shell import FormError, ToolScreen, field
+from mysuite.tui.widgets.file_target import FileTarget
 
-_DROP_EXTENSIONS = frozenset(SOURCE_EXTENSIONS)
-
-
-class MetadataDropInput(Input):
-    """Same drag-drop mechanism as ConvertDropInput/CutoutDropInput/SvgDropInput
-    — see export_screen.SvgDropInput's docstring for why _on_paste needs
-    event.prevent_default(), not just event.stop()."""
-
-    def _on_paste(self, event: events.Paste) -> None:
-        dropped = parse_dropped_paths(event.text, extensions=_DROP_EXTENSIONS)
-        if dropped:
-            self.value = merge_paths_into_input(self.value, dropped)
-            event.stop()
-            event.prevent_default()
+_SOURCES = frozenset(SOURCE_EXTENSIONS)
+_BLANK = (None, Select.BLANK, Select.NULL)
+MODES = [
+    ("Strip — remove all metadata", "strip"),
+    ("Randomize — strip, then write a plausible decoy camera", "randomize"),
+    ("Credit — embed your name and rights", "credit"),
+    ("Declare — say 'no AI training' in the file", "declare"),
+    ("Apply policy — run a set of steps in one go", "apply"),
+]
+_DESCRIPTION = {
+    "strip": "Removes EXIF, GPS, camera serials, XMP and comments. Result: <name>_stripped.",
+    "randomize": "Strips everything, then writes a believable decoy camera identity. Result: <name>_randomized.",
+    "credit": "Embeds author and copyright (EXIF/XMP and a signed-style manifest). Result: <name>_credited.",
+    "declare": "Writes a machine-readable 'AI training / data mining not allowed' notice. Honoured by good-faith crawlers only.",
+    "apply": "Runs the steps of a policy in order (default: the selected company profile's). E.g. strip,credit.",
+}
 
 
-class MetadataScreen(Screen):
+class MetadataScreen(ToolScreen):
     TOOL_KEY = "metadata"
+    CLI = ("metadata",)
+    HEADING = "Metadata"
+    PERSIST = (
+        "mode", "author", "copyright", "generator", "no-ai", "declare-policy", "owner", "terms-url", "apply-policy",
+        "profile", "overwrite", "recursive",
+    )
 
-    BINDINGS = [
-        ("escape", "go_back", "Back"),
-        ("ctrl+r", "run", "Run"),
-    ]
+    def compose_form(self) -> ComposeResult:
+        yield Label("Files", classes="section")
+        yield FileTarget(
+            input_id="input-files", browse_id="browse-input-files", extensions=_SOURCES, noun="file",
+            placeholder="photo.jpg, a folder, or a glob like ~/Pictures/*.jpg",
+        )
+        yield Checkbox("Include subfolders", id="recursive")
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config: Config | None = None
-        self.last_summary_text: str = ""
+        yield Label("What to do", classes="section")
+        yield field("Mode", Select[str](MODES, id="mode", allow_blank=False, value="strip"))
+        yield Static("", id="mode-help", classes="hint")
 
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Horizontal():
-            with Vertical(id="form-pane"):
-                with Vertical(id="group-source", classes="field-group"):
-                    yield Label(
-                        "File(s), a folder, or comma-separated — "
-                        "click here, then drag a file in to add it"
-                    )
-                    with Horizontal(classes="field-row"):
-                        yield MetadataDropInput(placeholder="path/to/photo or a folder", id="input-files")
-                        yield Button("Browse", id="browse-input-files")
+        with Vertical(id="group-credit"):
+            with Horizontal(classes="pair"):
+                yield field("Author", Input(placeholder="Jane Doe", id="author"))
+                yield field("Copyright notice (optional)", Input(placeholder="© 2026 Jane Doe", id="copyright"))
+        with Vertical(id="group-credit-extra"):
+            with Horizontal(classes="pair"):
+                yield field("Generator", Input(placeholder="mysuite", id="generator"))
+            yield Checkbox("Also record: no AI training / data mining", id="no-ai")
+        with Vertical(id="group-declare"):
+            yield field(
+                "What is not allowed",
+                Select[str]([(label, key) for key, label in DATA_MINING.items()], id="declare-policy", prompt="prohibited"),
+            )
+            with Horizontal(classes="pair"):
+                yield field("Owner", Input(placeholder="Jane Doe", id="owner"))
+                yield field("Terms URL", Input(placeholder="https://example.com/terms", id="terms-url"))
+        with Vertical(id="group-apply"):
+            yield field("Steps, in order (blank = the profile's policy)", Input(placeholder="strip,credit", id="apply-policy"))
 
-                    yield Label("Mode")
-                    yield Select[str](
-                        [
-                            ("Strip — remove all metadata", "strip"),
-                            ("Randomize — strip, then write a plausible decoy camera", "randomize"),
-                            ("Credit — embed provenance", "credit"),
-                        ],
-                        id="mode", allow_blank=False, value="strip",
-                    )
+        yield Label("Company profile", classes="section")
+        yield field("Profile (fills author, policy, …)", Select[str]([], id="profile", prompt="none"))
+        with Collapsible(title="Safety", collapsed=True, id="adv-safety"):
+            yield Checkbox("Replace files that already exist", id="overwrite")
 
-                with Vertical(id="group-credit", classes="field-group"):
-                    yield Label("Author")
-                    yield Input(placeholder="Jane Doe", id="author")
-                    yield Label("Copyright notice (optional)")
-                    yield Input(placeholder="© 2026 Jane Doe", id="copyright")
-                    yield Label("Generator")
-                    yield Input(placeholder="mysuite", id="generator")
+    def prepare(self) -> None:
+        self.query_one("#profile", Select).set_options([(n, n) for n in sorted(load_config().profiles)])
 
-                with Vertical(id="group-options", classes="field-group"):
-                    yield Checkbox("Overwrite existing files", id="overwrite")
-                    yield Checkbox("Recursive (for folder inputs)", id="recursive")
-
-                with Horizontal(classes="field-row", id="action-row"):
-                    yield Button("Run  [ctrl+r]", id="run-btn", variant="primary")
-
-            with Vertical(id="results-pane"):
-                with Vertical(id="group-run", classes="field-group"):
-                    yield ProgressBar(id="run-progress", total=100)
-                    yield RichLog(id="run-log", markup=True, wrap=True)
-                    yield Static("", id="run-summary")
-        yield Footer()
-
-    def on_mount(self) -> None:
-        self.app.sub_title = "Metadata"
-        self.query_one("#group-source", Vertical).border_title = "Source"
-        self.query_one("#group-credit", Vertical).border_title = "Crediting"
-        self.query_one("#group-options", Vertical).border_title = "Options"
-        self.query_one("#group-run", Vertical).border_title = "Progress"
-
-        self._config = load_config()
-        self._update_mode_visibility()
-        self.query_one("#input-files", Input).focus()
-
-    def _update_mode_visibility(self) -> None:
-        mode = self.query_one("#mode", Select).value
-        self.query_one("#group-credit", Vertical).display = mode == "credit"
-
-    def action_go_back(self) -> None:
-        self.app.pop_screen()
+    def on_mount(self) -> None:          # Textual also runs ToolScreen.on_mount; no super() call needed
+        self._update_mode()
 
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "mode":
-            self._update_mode_visibility()
+            self._update_mode()
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "browse-input-files":
-            self._browse_input_files()
-        elif event.button.id == "run-btn":
-            self.action_run()
+    def _mode(self) -> str:
+        value = self.query_one("#mode", Select).value
+        return "strip" if value in _BLANK else str(value)
 
-    def _browse_input_files(self) -> None:
-        def apply(path: Path | None) -> None:
-            if path is not None:
-                self.query_one("#input-files", Input).value = str(path)
+    def _update_mode(self) -> None:
+        mode = self._mode()
+        self.query_one("#group-credit").display = mode in ("credit", "apply")
+        self.query_one("#group-credit-extra").display = mode == "credit"
+        self.query_one("#group-declare").display = mode == "declare"
+        self.query_one("#group-apply").display = mode == "apply"
+        self.query_one("#mode-help", Static).update(_DESCRIPTION[mode])
 
-        self.app.push_screen(FilePickerScreen(title="Choose input file"), apply)
+    def command_words(self) -> tuple[str, ...]:
+        return ("metadata", self._mode())
 
-    def _log(self, message: str) -> None:
-        self.query_one("#run-log", RichLog).write(message)
+    def global_argv(self) -> list[str]:
+        profile = self.query_one("#profile", Select).value
+        return [] if profile in _BLANK else ["--profile", str(profile)]
 
-    def _flash_error(self, field_id: str, message: str) -> None:
-        field = self.query_one(field_id, Input)
-        field.add_class("field-error")
-        field.focus()
-        self._log(f"[#F87171]✗[/#F87171] {escape(message)}")
+    def _text(self, wid: str) -> str:
+        return self.query_one(f"#{wid}", Input).value.strip()
 
-    def _resolve_form(
-        self,
-    ) -> tuple[list[Path], str, str, str | None, str, bool] | None:
-        for field_id in ("#input-files", "#author"):
-            self.query_one(field_id, Input).remove_class("field-error")
+    def argv(self) -> list[str]:
+        res = self.query_one(FileTarget).resolve()
+        if res.empty:
+            raise FormError("choose at least one file — paste a path, drop a file, or use Files… / Folder…", "input-files")
+        if res.missing or res.unsupported or res.empty_folders:
+            bad = (res.missing or [str(p) for p in res.unsupported] or [str(p) for p in res.empty_folders])[0]
+            raise FormError(f"not usable: {bad}" if res.missing or res.unsupported else f"no files in {bad}", "input-files")
+        mode = self._mode()
+        out: list[str] = []
 
-        value = self.query_one("#input-files", Input).value.strip()
-        if not value:
-            self._flash_error(
-                "#input-files", "enter an input file path, folder, or comma-separated list"
-            )
-            return None
-        raw_inputs = parse_input_files_field(value)
-        recursive = self.query_one("#recursive", Checkbox).value
-        try:
-            files = resolve_input_files(raw_inputs, recursive=recursive)
-        except InvalidInputError as exc:
-            self._flash_error("#input-files", str(exc))
-            return None
+        def opt(flag: str, value: str | None) -> None:
+            if value:
+                out.extend([flag, value])
 
-        mode = self.query_one("#mode", Select).value
-        if mode in (None, Select.BLANK, Select.NULL):
-            mode = "strip"
+        has_profile = bool(self.global_argv())
+        if mode == "credit":
+            if not self._text("author") and not has_profile:
+                raise FormError("enter an author name for Credit (or pick a company profile that has one)", "author")
+            opt("--author", self._text("author"))
+            opt("--copyright", self._text("copyright"))
+            opt("--generator", self._text("generator"))
+            if self.query_one("#no-ai", Checkbox).value:
+                out.append("--no-ai")
+        elif mode == "declare":
+            policy = self.query_one("#declare-policy", Select).value
+            if policy not in _BLANK:
+                opt("--policy", str(policy))
+            opt("--owner", self._text("owner"))
+            opt("--terms-url", self._text("terms-url"))
+        elif mode == "apply":
+            if not self._text("apply-policy") and not has_profile:
+                raise FormError("list the steps (for example strip,credit) or pick a company profile with a policy", "apply-policy")
+            opt("--policy", self._text("apply-policy"))
+            opt("--author", self._text("author"))
+            opt("--copyright", self._text("copyright"))
+        if self.query_one("#recursive", Checkbox).value:
+            out.append("--recursive")
+        if self.query_one("#overwrite", Checkbox).value:
+            out.append("--overwrite")
+        if any(a.startswith("-") for a in res.args):
+            return [*out, "--", *res.args]
+        return [*res.args, *out]
 
-        author = self.query_one("#author", Input).value.strip()
-        if mode == "credit" and not author:
-            self._flash_error("#author", "enter an author name for Credit mode")
-            return None
+    def output_dir(self) -> Path | None:
+        for item in self.last_report.get("items", []):
+            if item.get("output"):
+                return Path(item["output"]).parent
+        return None
 
-        copyright_notice = self.query_one("#copyright", Input).value.strip() or None
-        generator = self.query_one("#generator", Input).value.strip() or "mysuite"
-        overwrite = self.query_one("#overwrite", Checkbox).value
-
-        return files, mode, author, copyright_notice, generator, overwrite
-
-    def action_run(self) -> None:
-        resolved = self._resolve_form()
-        if resolved is None:
-            return
-        files, mode, author, copyright_notice, generator, overwrite = resolved
-
-        assert self._config is not None
-        self.query_one("#run-btn", Button).disabled = True
-        self.query_one("#run-progress", ProgressBar).update(total=len(files), progress=0)
-        self.query_one("#run-summary", Static).update("")
-
-        self._run_metadata_worker(files, mode, author, copyright_notice, generator, overwrite)
-
-    @work(thread=True, exclusive=True, group="metadata-run")
-    def _run_metadata_worker(
-        self,
-        files: list[Path],
-        mode: str,
-        author: str,
-        copyright_notice: str | None,
-        generator: str,
-        overwrite: bool,
-    ) -> None:
-        worker = get_current_worker()
-        assert self._config is not None
-        written = 0
-        skipped = 0
-        failed = 0
-        for input_path in files:
-            if worker.is_cancelled:
-                break
-            try:
-                if mode == "randomize":
-                    outcome = randomize_file(input_path, tools=self._config.tools, overwrite=overwrite)
-                elif mode == "credit":
-                    outcome = credit_file(
-                        input_path, author=author, copyright_notice=copyright_notice,
-                        generator=generator, tools=self._config.tools, overwrite=overwrite,
-                    )
-                else:
-                    outcome = strip_file(input_path, tools=self._config.tools, overwrite=overwrite)
-            except MysuiteToolError as exc:
-                failed += 1
-                self.app.call_from_thread(self._on_item_done, None, str(exc), input_path)
-                continue
-            if outcome.status == "skipped_existing":
-                skipped += 1
-            else:
-                written += 1
-            self.app.call_from_thread(self._on_item_done, outcome, None, input_path)
-        self.app.call_from_thread(self._on_run_complete, written, skipped, failed)
-
-    def _on_item_done(
-        self, outcome: MetadataOutcome | None, error: str | None, input_path: Path
-    ) -> None:
-        self.query_one("#run-progress", ProgressBar).advance(1)
-        if error is not None:
-            self._log(f"[#F87171]✗[/#F87171] {show_path(input_path)}: {escape(error)}")
-        elif outcome is not None and outcome.status == "skipped_existing":
-            self._log(f"[dim]— exists, skipped: {show_path(outcome.output_path)}[/dim]")
-        elif outcome is not None:
-            self._log(f"[#4ADE80]✓[/#4ADE80] {show_path(outcome.output_path)}")
-
-    def _on_run_complete(self, written: int, skipped: int, failed: int) -> None:
-        self.query_one("#run-btn", Button).disabled = False
-        self.last_summary_text = f"done — {written} written, {skipped} already existed, {failed} failed"
-        self.query_one("#run-summary", Static).update(self.last_summary_text)
+    def plan_text(self, report: dict[str, Any]) -> str:
+        items = [i for i in report.get("items", []) if i.get("output")]
+        if not items:
+            return "nothing to do"
+        lines = [f"{len(items)} file(s) — copies are written beside the originals"]
+        lines += [f"{Path(i['input']).name} → {Path(i['output']).name}" for i in items[:4]]
+        if len(items) > 4:
+            lines.append(f"… and {len(items) - 4} more")
+        return "\n".join(lines)

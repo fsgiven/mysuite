@@ -133,5 +133,9 @@ in `AGENTS.md` and exercised by a doc-test.
   (remembered values + recent paths, local only, `MYSUITE_NO_UI_STATE=1` disables), `FileTarget` widget (folders, globs,
   comma lists, drops, path completion, Files…/Folder…/Recent, live "N files found / not found" status), `CommandLine`,
   `ChipGroup`; new Export fields: CMYK mode, colour variants, company profile, design tokens/brand/theme, subfolders.
-- Next, in order: Convert, Cutout, Watermark, Metadata, Compress, Enhance (each moves onto `ToolScreen`; `FileTarget` replaces
-  the old Browse box), then retire the old shared CSS block.
+- Then moved onto the same shell, one slice each: Convert (several target formats), Cutout, Watermark (logo is a single-file
+  `FileTarget`), Metadata (strip / randomize / credit / declare / apply), Compress (codec groups, preset fills the form,
+  explicit values in the command), Enhance (`--preset` + changes only). The old Browse boxes, drop inputs and the SVG
+  thumbnail strip are gone (the preview is the plan, the command and the progress bar).
+- Still open here: the generated screens (`AutoToolScreen`, used by kit/pdf/…) still use the older form layout; moving them onto
+  `ToolScreen` would give them plan/command/remembered settings too.

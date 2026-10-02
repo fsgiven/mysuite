@@ -1,260 +1,104 @@
+"""Convert: any image/vector/PDF to another format, beside the original (or several formats at once).
+
+A form over `mysuite convert …`; see mysuite.tui.shell. Stable ids: `#input-files`, `#target-format`, `#quality`, `#dpi`.
+"""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from textual import events, work
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
-from textual.widgets import (
-    Button,
-    Checkbox,
-    Footer,
-    Header,
-    Input,
-    Label,
-    ProgressBar,
-    RichLog,
-    Select,
-    Static,
-)
-from rich.markup import escape
-from textual.worker import get_current_worker
+from textual.containers import Horizontal
+from textual.widgets import Checkbox, Collapsible, Input, Label
 
-from mysuite.utils.paths import show_path
-from mysuite.config import Config, load_config
-from mysuite.convert._parsing import (
-    SOURCE_EXTENSIONS,
-    TARGET_EXTENSIONS,
-    InvalidInputError,
-    check_no_output_collisions,
-    resolve_input_files,
-)
-from mysuite.convert.converter import ConversionError, ConvertOutcome, convert_file
-from mysuite.tui.dragdrop import merge_paths_into_input, parse_dropped_paths, parse_input_files_field
-from mysuite.tui.screens.file_picker import FilePickerScreen
-from mysuite.utils.subprocess_utils import MysuiteToolError
+from mysuite.convert._parsing import SOURCE_EXTENSIONS, TARGET_EXTENSIONS
+from mysuite.tui.shell import ChipGroup, FormError, ToolScreen, field
+from mysuite.tui.widgets.file_target import FileTarget
 
-_DROP_EXTENSIONS = frozenset(SOURCE_EXTENSIONS)
+TARGETS = sorted(TARGET_EXTENSIONS)
+_SOURCES = frozenset(SOURCE_EXTENSIONS)
 
 
-class ConvertDropInput(Input):
-    """Same drag-drop mechanism as export_screen.SvgDropInput, but accepts any
-    recognized convert source format instead of just .svg — see that class's
-    docstring for why _on_paste needs event.prevent_default(), not just
-    event.stop(), to suppress Input's own default paste-insertion."""
-
-    def _on_paste(self, event: events.Paste) -> None:
-        dropped = parse_dropped_paths(event.text, extensions=_DROP_EXTENSIONS)
-        if dropped:
-            self.value = merge_paths_into_input(self.value, dropped)
-            event.stop()
-            event.prevent_default()
-
-
-class ConvertScreen(Screen):
+class ConvertScreen(ToolScreen):
     TOOL_KEY = "convert"
+    CLI = ("convert",)
+    HEADING = "Convert"
+    PERSIST = ("target-format", "quality", "dpi", "background", "overwrite", "recursive")
 
-    BINDINGS = [
-        ("escape", "go_back", "Back"),
-        ("ctrl+r", "run", "Run"),
-    ]
+    def compose_form(self) -> ComposeResult:
+        yield Label("Files to convert", classes="section")
+        yield FileTarget(
+            input_id="input-files", browse_id="browse-input-files", extensions=_SOURCES, noun="file",
+            placeholder="photo.png, a folder, or a glob like ~/Pictures/*.heic",
+        )
+        yield Checkbox("Include subfolders", id="recursive")
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config: Config | None = None
-        self.last_summary_text: str = ""
+        yield Label("Convert to", classes="section")
+        yield field("Pick one or several (each gets its own file)", ChipGroup(TARGETS, id="target-format", columns=5))
 
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Horizontal():
-            with Vertical(id="form-pane"):
-                with Vertical(id="group-source", classes="field-group"):
-                    yield Label(
-                        "File(s), a folder, or comma-separated — "
-                        "click here, then drag a file in to add it"
-                    )
-                    with Horizontal(classes="field-row"):
-                        yield ConvertDropInput(placeholder="path/to/file or a folder", id="input-files")
-                        yield Button("Browse", id="browse-input-files")
+        yield Label("Options", classes="section")
+        with Horizontal(classes="pair"):
+            yield field("Quality 0-100 (jpeg, webp)", Input(placeholder="default", id="quality"))
+            yield field("DPI (svg, pdf, eps sources)", Input(placeholder="300", id="dpi"))
+        yield field("Background for flattened transparency", Input(placeholder="white or #ffffff (jpeg and bmp default to white)", id="background"))
+        with Collapsible(title="Safety", collapsed=True, id="adv-safety"):
+            yield Checkbox("Replace files that already exist", id="overwrite")
 
-                    yield Label("Convert to")
-                    yield Select[str](
-                        [(fmt, fmt) for fmt in sorted(TARGET_EXTENSIONS)],
-                        id="target-format", allow_blank=False, value="png",
-                    )
+    def apply_defaults(self) -> None:
+        self.query_one("#target-format", ChipGroup).select_only(["png"])
 
-                    with Horizontal(classes="field-row"):
-                        with Vertical(classes="field-half"):
-                            yield Label("Quality 0-100 (jpeg/webp)")
-                            yield Input(placeholder="", id="quality")
-                        with Vertical(classes="field-half"):
-                            yield Label("DPI (vector source only)")
-                            yield Input(placeholder="300", id="dpi")
-
-                    yield Label("Background — e.g. white, #ffffff (jpeg/bmp default to white)")
-                    yield Input(placeholder="", id="background")
-
-                    yield Checkbox("Overwrite existing files", id="overwrite")
-                    yield Checkbox("Recursive (for folder inputs)", id="recursive")
-
-                with Horizontal(classes="field-row", id="action-row"):
-                    yield Button("Run  [ctrl+r]", id="run-btn", variant="primary")
-
-            with Vertical(id="results-pane"):
-                with Vertical(id="group-run", classes="field-group"):
-                    yield ProgressBar(id="run-progress", total=100)
-                    yield RichLog(id="run-log", markup=True, wrap=True)
-                    yield Static("", id="run-summary")
-        yield Footer()
-
-    def on_mount(self) -> None:
-        self.app.sub_title = "Convert"
-        self.query_one("#group-source", Vertical).border_title = "Source"
-        self.query_one("#group-run", Vertical).border_title = "Progress"
-
-        self._config = load_config()
-        self.query_one("#input-files", Input).focus()
-
-    def action_go_back(self) -> None:
-        self.app.pop_screen()
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "browse-input-files":
-            self._browse_input_files()
-        elif event.button.id == "run-btn":
-            self.action_run()
-
-    def _browse_input_files(self) -> None:
-        def apply(path: Path | None) -> None:
-            if path is not None:
-                self.query_one("#input-files", Input).value = str(path)
-
-        self.app.push_screen(FilePickerScreen(title="Choose input file"), apply)
-
-    def _log(self, message: str) -> None:
-        self.query_one("#run-log", RichLog).write(message)
-
-    def _flash_error(self, field_id: str, message: str) -> None:
-        field = self.query_one(field_id, Input)
-        field.add_class("field-error")
-        field.focus()
-        self._log(f"[#F87171]✗[/#F87171] {escape(message)}")
-
-    def _resolve_form(
-        self,
-    ) -> tuple[list[Path], str, float, int | None, str | None, bool] | None:
-        for field_id in ("#input-files", "#dpi", "#quality"):
-            self.query_one(field_id, Input).remove_class("field-error")
-
-        value = self.query_one("#input-files", Input).value.strip()
-        if not value:
-            self._flash_error(
-                "#input-files", "enter an input file path, folder, or comma-separated list"
-            )
+    def _number(self, wid: str, label: str, *, whole: bool, low: float, high: float | None = None) -> str | None:
+        raw = self.query_one(f"#{wid}", Input).value.strip()
+        if not raw:
             return None
-        raw_inputs = parse_input_files_field(value)
-        recursive = self.query_one("#recursive", Checkbox).value
         try:
-            files = resolve_input_files(raw_inputs, recursive=recursive)
-        except InvalidInputError as exc:
-            self._flash_error("#input-files", str(exc))
-            return None
-
-        target_format = self.query_one("#target-format", Select).value
-        if target_format in (None, Select.BLANK, Select.NULL):
-            self._flash_error("#input-files", "choose a target format")
-            return None
-
-        try:
-            check_no_output_collisions(files, target_format)
-        except InvalidInputError as exc:
-            self._flash_error("#input-files", str(exc))
-            return None
-
-        dpi_str = self.query_one("#dpi", Input).value.strip()
-        try:
-            dpi = float(dpi_str) if dpi_str else 300.0
+            value = int(raw) if whole else float(raw)
         except ValueError:
-            self._flash_error("#dpi", f"invalid dpi: {dpi_str!r}")
-            return None
+            raise FormError(f"{label} must be a {'whole ' if whole else ''}number, not {raw!r}", wid) from None
+        if value < low or (high is not None and value > high):
+            raise FormError(f"{label} must be {f'{low:g}-{high:g}' if high is not None else f'at least {low:g}'}", wid)
+        return raw
 
-        quality_str = self.query_one("#quality", Input).value.strip()
-        try:
-            quality = int(quality_str) if quality_str else None
-            if quality is not None and not (0 <= quality <= 100):
-                raise ValueError
-        except ValueError:
-            self._flash_error("#quality", f"quality must be 0-100: {quality_str!r}")
-            return None
+    def argv(self) -> list[str]:
+        res = self.query_one(FileTarget).resolve()
+        if res.empty:
+            raise FormError("choose at least one file — paste a path, drop a file, or use Files… / Folder…", "input-files")
+        if res.missing or res.unsupported or res.empty_folders:
+            bad = (res.missing or [str(p) for p in res.unsupported] or [str(p) for p in res.empty_folders])[0]
+            raise FormError(f"not usable: {bad}" if res.missing or res.unsupported else f"no convertible files in {bad}", "input-files")
+        targets = self.query_one("#target-format", ChipGroup).selected
+        if not targets:
+            raise FormError("choose at least one format to convert to", "target-format")
+        out = ["--to", ",".join(targets)]
 
-        background = self.query_one("#background", Input).value.strip() or None
-        overwrite = self.query_one("#overwrite", Checkbox).value
+        def opt(flag: str, value: str | None) -> None:
+            if value:
+                out.extend([flag, value])
 
-        return files, target_format, dpi, quality, background, overwrite
+        opt("--quality", self._number("quality", "Quality", whole=True, low=0, high=100))
+        opt("--dpi", self._number("dpi", "DPI", whole=False, low=1))
+        opt("--background", self.query_one("#background", Input).value.strip() or None)
+        if self.query_one("#recursive", Checkbox).value:
+            out.append("--recursive")
+        if self.query_one("#overwrite", Checkbox).value:
+            out.append("--overwrite")
+        if any(a.startswith("-") for a in res.args):
+            return [*out, "--", *res.args]
+        return [*res.args, *out]
 
-    def action_run(self) -> None:
-        resolved = self._resolve_form()
-        if resolved is None:
-            return
-        files, target_format, dpi, quality, background, overwrite = resolved
+    def output_dir(self) -> Path | None:
+        for item in self.last_report.get("items", []):
+            if item.get("output"):
+                return Path(item["output"]).parent
+        return None
 
-        assert self._config is not None
-        self.query_one("#run-btn", Button).disabled = True
-        self.query_one("#run-progress", ProgressBar).update(total=len(files), progress=0)
-        self.query_one("#run-summary", Static).update("")
-
-        self._run_convert_worker(files, target_format, dpi, quality, background, overwrite)
-
-    @work(thread=True, exclusive=True, group="convert-run")
-    def _run_convert_worker(
-        self,
-        files: list[Path],
-        target_format: str,
-        dpi: float,
-        quality: int | None,
-        background: str | None,
-        overwrite: bool,
-    ) -> None:
-        worker = get_current_worker()
-        assert self._config is not None
-        written = 0
-        skipped = 0
-        failed = 0
-        for input_path in files:
-            if worker.is_cancelled:
-                break
-            try:
-                outcome = convert_file(
-                    input_path, target_format,
-                    tools=self._config.tools, dpi=dpi, quality=quality,
-                    background=background, overwrite=overwrite,
-                )
-            except (ConversionError, MysuiteToolError) as exc:
-                failed += 1
-                self.app.call_from_thread(self._on_item_done, None, str(exc), input_path)
-                continue
-            if outcome.status == "skipped_existing":
-                skipped += 1
-            else:
-                written += 1
-            self.app.call_from_thread(self._on_item_done, outcome, None, input_path)
-        self.app.call_from_thread(self._on_run_complete, written, skipped, failed)
-
-    def _on_item_done(
-        self, outcome: ConvertOutcome | None, error: str | None, input_path: Path
-    ) -> None:
-        self.query_one("#run-progress", ProgressBar).advance(1)
-        if error is not None:
-            self._log(f"[#F87171]✗[/#F87171] {show_path(input_path)}: {escape(error)}")
-        elif outcome is not None and outcome.status == "skipped_existing":
-            self._log(f"[dim]— exists, skipped: {show_path(outcome.output_path)}[/dim]")
-        elif outcome is not None:
-            self._log(f"[#4ADE80]✓[/#4ADE80] {show_path(outcome.output_path)}")
-            if outcome.note:
-                self._log(f"[#FBBF24]⚠[/#FBBF24] {escape(outcome.note)}")
-
-    def _on_run_complete(self, written: int, skipped: int, failed: int) -> None:
-        self.query_one("#run-btn", Button).disabled = False
-        self.last_summary_text = f"done — {written} written, {skipped} already existed, {failed} failed"
-        self.query_one("#run-summary", Static).update(self.last_summary_text)
+    def plan_text(self, report: dict[str, Any]) -> str:
+        items = report.get("items", [])
+        if not items:
+            return "nothing to convert"
+        lines = [f"{len(items)} conversion(s) — files are written beside the originals"]
+        for item in items[:4]:
+            lines.append(f"{Path(item['input']).name} → {Path(item['output']).name}")
+        if len(items) > 4:
+            lines.append(f"… and {len(items) - 4} more")
+        return "\n".join(lines)

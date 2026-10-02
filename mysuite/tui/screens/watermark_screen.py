@@ -1,282 +1,116 @@
+"""Watermark: stamp a logo (image or SVG) onto photos — a copy beside each original, originals untouched.
+
+A form over `mysuite watermark …`; see mysuite.tui.shell. Stable ids: `#input-files`, `#logo`, `#position`, `#scale`,
+`#opacity`, `#margin`.
+"""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from textual import events, work
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
-from textual.widgets import (
-    Button,
-    Checkbox,
-    Footer,
-    Header,
-    Input,
-    Label,
-    ProgressBar,
-    RichLog,
-    Select,
-    Static,
-)
-from rich.markup import escape
-from textual.worker import get_current_worker
+from textual.containers import Horizontal
+from textual.widgets import Checkbox, Collapsible, Input, Label, Select
 
-from mysuite.utils.paths import show_path
-from mysuite.config import Config, load_config
-from mysuite.convert._parsing import (
-    InvalidInputError,
-    SOURCE_EXTENSIONS,
-    detect_source_format,
-    resolve_input_files,
-)
-from mysuite.tui.dragdrop import merge_paths_into_input, parse_dropped_paths, parse_input_files_field
-from mysuite.tui.screens.file_picker import FilePickerScreen
-from mysuite.utils.subprocess_utils import MysuiteToolError
-from mysuite.watermark.watermark import (
-    GRAVITY_BY_POSITION,
-    WatermarkError,
-    WatermarkOutcome,
-    watermark_file,
-)
+from mysuite.convert._parsing import SOURCE_EXTENSIONS
+from mysuite.tui.shell import FormError, ToolScreen, field
+from mysuite.tui.widgets.file_target import FileTarget
+from mysuite.watermark.watermark import GRAVITY_BY_POSITION
 
-_DROP_EXTENSIONS = frozenset(SOURCE_EXTENSIONS)
+_SOURCES = frozenset(SOURCE_EXTENSIONS)
+_BLANK = (None, Select.BLANK, Select.NULL)
 
 
-class WatermarkDropInput(Input):
-    """Same drag-drop mechanism as ConvertDropInput/CutoutDropInput/SvgDropInput
-    — see export_screen.SvgDropInput's docstring for why _on_paste needs
-    event.prevent_default(), not just event.stop()."""
-
-    def _on_paste(self, event: events.Paste) -> None:
-        dropped = parse_dropped_paths(event.text, extensions=_DROP_EXTENSIONS)
-        if dropped:
-            self.value = merge_paths_into_input(self.value, dropped)
-            event.stop()
-            event.prevent_default()
-
-
-class WatermarkScreen(Screen):
+class WatermarkScreen(ToolScreen):
     TOOL_KEY = "watermark"
+    CLI = ("watermark",)
+    HEADING = "Watermark"
+    PERSIST = ("logo", "position", "scale", "opacity", "margin", "overwrite", "recursive")
 
-    BINDINGS = [
-        ("escape", "go_back", "Back"),
-        ("ctrl+r", "run", "Run"),
-    ]
+    def compose_form(self) -> ComposeResult:
+        yield Label("Photos", classes="section")
+        yield FileTarget(
+            input_id="input-files", browse_id="browse-input-files", extensions=_SOURCES, noun="photo",
+            placeholder="photo.jpg, a folder, or a glob like ~/Pictures/*.jpg",
+        )
+        yield Checkbox("Include subfolders", id="recursive")
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config: Config | None = None
-        self.last_summary_text: str = ""
+        yield Label("Logo", classes="section")
+        yield FileTarget(
+            input_id="logo", browse_id="browse-logo", extensions=_SOURCES, noun="logo",
+            placeholder="logo.png or logo.svg", recent_kind="logos", folders=False,
+        )
 
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Horizontal():
-            with Vertical(id="form-pane"):
-                with Vertical(id="group-source", classes="field-group"):
-                    yield Label(
-                        "File(s), a folder, or comma-separated — "
-                        "click here, then drag a file in to add it"
-                    )
-                    with Horizontal(classes="field-row"):
-                        yield WatermarkDropInput(placeholder="path/to/photo or a folder", id="input-files")
-                        yield Button("Browse", id="browse-input-files")
+        yield Label("Placement", classes="section")
+        with Horizontal(classes="pair"):
+            yield field("Position", Select[str]([(p, p) for p in GRAVITY_BY_POSITION], id="position", prompt="bottom-right"), classes="grow")
+            yield field("Opacity 0-100", Input(placeholder="80", id="opacity"), classes="narrow")
+        with Horizontal(classes="pair"):
+            yield field("Logo size, % of photo width", Input(placeholder="15", id="scale"))
+            yield field("Margin, % of photo width", Input(placeholder="3", id="margin"))
+        with Collapsible(title="Safety", collapsed=True, id="adv-safety"):
+            yield Checkbox("Replace files that already exist", id="overwrite")
 
-                    yield Label("Logo — image or SVG to stamp on")
-                    with Horizontal(classes="field-row"):
-                        yield Input(placeholder="path/to/logo.png", id="logo")
-                        yield Button("Browse", id="browse-logo")
-
-                    yield Label("Position")
-                    yield Select[str](
-                        [(pos, pos) for pos in GRAVITY_BY_POSITION],
-                        id="position", allow_blank=False, value="bottom-right",
-                    )
-
-                    with Horizontal(classes="field-row"):
-                        with Vertical(classes="field-half"):
-                            yield Label("Scale % of width")
-                            yield Input(placeholder="15", id="scale")
-                        with Vertical(classes="field-half"):
-                            yield Label("Opacity 0-100")
-                            yield Input(placeholder="80", id="opacity")
-                    yield Label("Margin % of width")
-                    yield Input(placeholder="3", id="margin")
-
-                    yield Checkbox("Overwrite existing files", id="overwrite")
-                    yield Checkbox("Recursive (for folder inputs)", id="recursive")
-
-                with Horizontal(classes="field-row", id="action-row"):
-                    yield Button("Run  [ctrl+r]", id="run-btn", variant="primary")
-
-            with Vertical(id="results-pane"):
-                with Vertical(id="group-run", classes="field-group"):
-                    yield ProgressBar(id="run-progress", total=100)
-                    yield RichLog(id="run-log", markup=True, wrap=True)
-                    yield Static("", id="run-summary")
-        yield Footer()
-
-    def on_mount(self) -> None:
-        self.app.sub_title = "Watermark"
-        self.query_one("#group-source", Vertical).border_title = "Source"
-        self.query_one("#group-run", Vertical).border_title = "Progress"
-
-        self._config = load_config()
-        self.query_one("#input-files", Input).focus()
-
-    def action_go_back(self) -> None:
-        self.app.pop_screen()
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "browse-input-files":
-            self._browse_input_files()
-        elif event.button.id == "browse-logo":
-            self._browse_logo()
-        elif event.button.id == "run-btn":
-            self.action_run()
-
-    def _browse_input_files(self) -> None:
-        def apply(path: Path | None) -> None:
-            if path is not None:
-                self.query_one("#input-files", Input).value = str(path)
-
-        self.app.push_screen(FilePickerScreen(title="Choose input photo"), apply)
-
-    def _browse_logo(self) -> None:
-        def apply(path: Path | None) -> None:
-            if path is not None:
-                self.query_one("#logo", Input).value = str(path)
-
-        self.app.push_screen(FilePickerScreen(title="Choose logo"), apply)
-
-    def _log(self, message: str) -> None:
-        self.query_one("#run-log", RichLog).write(message)
-
-    def _flash_error(self, field_id: str, message: str) -> None:
-        field = self.query_one(field_id, Input)
-        field.add_class("field-error")
-        field.focus()
-        self._log(f"[#F87171]✗[/#F87171] {escape(message)}")
-
-    def _resolve_form(
-        self,
-    ) -> tuple[list[Path], Path, str, float, int, float, bool] | None:
-        for field_id in ("#input-files", "#logo", "#scale", "#opacity", "#margin"):
-            self.query_one(field_id, Input).remove_class("field-error")
-
-        value = self.query_one("#input-files", Input).value.strip()
-        if not value:
-            self._flash_error(
-                "#input-files", "enter an input file path, folder, or comma-separated list"
-            )
+    def _number(self, wid: str, label: str, *, whole: bool, low: float, high: float | None = None) -> str | None:
+        raw = self.query_one(f"#{wid}", Input).value.strip()
+        if not raw:
             return None
-        raw_inputs = parse_input_files_field(value)
-        recursive = self.query_one("#recursive", Checkbox).value
         try:
-            files = resolve_input_files(raw_inputs, recursive=recursive)
-        except InvalidInputError as exc:
-            self._flash_error("#input-files", str(exc))
-            return None
+            value = int(raw) if whole else float(raw)
+        except ValueError:
+            raise FormError(f"{label} must be a {'whole ' if whole else ''}number, not {raw!r}", wid) from None
+        if value < low or (high is not None and value > high):
+            raise FormError(f"{label} must be {f'{low:g}-{high:g}' if high is not None else f'above {low:g}'}", wid)
+        return raw
 
-        logo_str = self.query_one("#logo", Input).value.strip()
-        if not logo_str:
-            self._flash_error("#logo", "choose a logo file")
-            return None
-        logo_path = Path(logo_str)
-        if detect_source_format(logo_path) is None:
-            self._flash_error("#logo", f"unrecognized logo format: {logo_path}")
-            return None
-
+    def argv(self) -> list[str]:
+        res = self._targets()[0].resolve()
+        logo = self._targets()[1].resolve()
+        if res.empty:
+            raise FormError("choose at least one photo — paste a path, drop a file, or use Files… / Folder…", "input-files")
+        if res.missing or res.unsupported or res.empty_folders:
+            bad = (res.missing or [str(p) for p in res.unsupported] or [str(p) for p in res.empty_folders])[0]
+            raise FormError(f"not usable: {bad}" if res.missing or res.unsupported else f"no photos in {bad}", "input-files")
+        if logo.empty:
+            raise FormError("choose a logo — a PNG, JPEG or SVG to stamp on", "logo")
+        if len(logo.files) != 1 or logo.missing or logo.unsupported:
+            bad = (logo.missing or [str(p) for p in logo.unsupported] or ["more than one file"])[0]
+            raise FormError(f"the logo must be one image file: {bad}", "logo")
+        out = ["--logo", logo.args[0]]
         position = self.query_one("#position", Select).value
-        if position in (None, Select.BLANK, Select.NULL):
-            position = "bottom-right"
+        if position not in _BLANK:
+            out += ["--position", str(position)]
+        for flag, wid, label, whole, low, high in (
+            ("--scale", "scale", "Logo size", False, 0.1, 100),
+            ("--opacity", "opacity", "Opacity", True, 0, 100),
+            ("--margin", "margin", "Margin", False, 0, 50),
+        ):
+            value = self._number(wid, label, whole=whole, low=low, high=high)
+            if value:
+                out += [flag, value]
+        if self.query_one("#recursive", Checkbox).value:
+            out.append("--recursive")
+        if self.query_one("#overwrite", Checkbox).value:
+            out.append("--overwrite")
+        if any(a.startswith("-") for a in res.args):
+            return [*out, "--", *res.args]
+        return [*res.args, *out]
 
-        scale_str = self.query_one("#scale", Input).value.strip()
-        try:
-            scale = float(scale_str) if scale_str else 15.0
-        except ValueError:
-            self._flash_error("#scale", f"invalid scale: {scale_str!r}")
-            return None
+    def _targets(self) -> list[FileTarget]:
+        return list(self.query(FileTarget))
 
-        opacity_str = self.query_one("#opacity", Input).value.strip()
-        try:
-            opacity = int(opacity_str) if opacity_str else 80
-            if not (0 <= opacity <= 100):
-                raise ValueError
-        except ValueError:
-            self._flash_error("#opacity", f"opacity must be 0-100: {opacity_str!r}")
-            return None
+    def output_dir(self) -> Path | None:
+        for item in self.last_report.get("items", []):
+            if item.get("output"):
+                return Path(item["output"]).parent
+        return None
 
-        margin_str = self.query_one("#margin", Input).value.strip()
-        try:
-            margin = float(margin_str) if margin_str else 3.0
-        except ValueError:
-            self._flash_error("#margin", f"invalid margin: {margin_str!r}")
-            return None
-
-        overwrite = self.query_one("#overwrite", Checkbox).value
-        return files, logo_path, position, scale, opacity, margin, overwrite
-
-    def action_run(self) -> None:
-        resolved = self._resolve_form()
-        if resolved is None:
-            return
-        files, logo_path, position, scale, opacity, margin, overwrite = resolved
-
-        assert self._config is not None
-        self.query_one("#run-btn", Button).disabled = True
-        self.query_one("#run-progress", ProgressBar).update(total=len(files), progress=0)
-        self.query_one("#run-summary", Static).update("")
-
-        self._run_watermark_worker(files, logo_path, position, scale, opacity, margin, overwrite)
-
-    @work(thread=True, exclusive=True, group="watermark-run")
-    def _run_watermark_worker(
-        self,
-        files: list[Path],
-        logo_path: Path,
-        position: str,
-        scale: float,
-        opacity: int,
-        margin: float,
-        overwrite: bool,
-    ) -> None:
-        worker = get_current_worker()
-        assert self._config is not None
-        written = 0
-        skipped = 0
-        failed = 0
-        for input_path in files:
-            if worker.is_cancelled:
-                break
-            try:
-                outcome = watermark_file(
-                    input_path, logo_path=logo_path, tools=self._config.tools,
-                    position=position, scale_pct=scale, opacity=opacity, margin_pct=margin,
-                    overwrite=overwrite,
-                )
-            except (WatermarkError, MysuiteToolError) as exc:
-                failed += 1
-                self.app.call_from_thread(self._on_item_done, None, str(exc), input_path)
-                continue
-            if outcome.status == "skipped_existing":
-                skipped += 1
-            else:
-                written += 1
-            self.app.call_from_thread(self._on_item_done, outcome, None, input_path)
-        self.app.call_from_thread(self._on_run_complete, written, skipped, failed)
-
-    def _on_item_done(
-        self, outcome: WatermarkOutcome | None, error: str | None, input_path: Path
-    ) -> None:
-        self.query_one("#run-progress", ProgressBar).advance(1)
-        if error is not None:
-            self._log(f"[#F87171]✗[/#F87171] {show_path(input_path)}: {escape(error)}")
-        elif outcome is not None and outcome.status == "skipped_existing":
-            self._log(f"[dim]— exists, skipped: {show_path(outcome.output_path)}[/dim]")
-        elif outcome is not None:
-            self._log(f"[#4ADE80]✓[/#4ADE80] {show_path(outcome.output_path)}")
-
-    def _on_run_complete(self, written: int, skipped: int, failed: int) -> None:
-        self.query_one("#run-btn", Button).disabled = False
-        self.last_summary_text = f"done — {written} written, {skipped} already existed, {failed} failed"
-        self.query_one("#run-summary", Static).update(self.last_summary_text)
+    def plan_text(self, report: dict[str, Any]) -> str:
+        items = report.get("items", [])
+        if not items:
+            return "nothing to do"
+        lines = [f"{len(items)} watermarked copy(ies) — written beside the originals"]
+        lines += [f"{Path(i['input']).name} → {Path(i['output']).name}" for i in items[:4] if i.get("output")]
+        if len(items) > 4:
+            lines.append(f"… and {len(items) - 4} more")
+        return "\n".join(lines)

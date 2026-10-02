@@ -264,3 +264,236 @@ def test_events_are_off_unless_asked(tmp_path, monkeypatch):
     assert on.exit_code == 0
     line = next(l for l in (on.stderr or "").splitlines() if l.startswith("@@mysuite "))
     assert json.loads(line[len("@@mysuite "):])["status"] == "written"
+
+
+# ----------------------------------------------------------------------------------------- Convert
+async def open_tool(pilot, key):
+    await pilot.pause()
+    pilot.app.screen._open_tool(key)
+    await pilot.pause()
+    await pilot.pause()
+    return pilot.app.screen
+
+
+@need_tools
+async def test_convert_screen_several_targets_and_the_shown_command(tmp_path):
+    import subprocess
+    photo = tmp_path / "my photo.png"
+    subprocess.run(["magick", "-size", "40x30", "gradient:red-blue", "-type", "TrueColor", f"PNG24:{photo}"], check=True)
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "convert")
+        sc.query_one("#input-files", Input).value = str(photo)
+        sc.query_one("#target-format", ChipGroup).select_only(["webp", "jpeg"])
+        sc.query_one("#quality", Input).value = "80"
+        await pilot.pause(0.5)
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert "2 conversion(s)" in str(sc.query_one("#plan", Static).render())
+        command = sc.query_one(CommandLine).command
+        parts = shlex.split(command)[1:]
+        doc = json.loads(cli(*parts, "--dry-run", "--json").stdout)
+        assert [i["format"] for i in doc["items"]] == ["jpeg", "webp"]
+        sc.action_run()
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert (tmp_path / "my photo.webp").exists() and (tmp_path / "my photo.jpg").exists()
+        assert "2 written" in sc.last_summary_text
+        assert sc.output_dir() == tmp_path
+
+
+async def test_convert_needs_a_target_and_a_real_file(tmp_path):
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "convert")
+        sc.action_run()
+        await pilot.pause()
+        assert "field-error" in sc.query_one("#input-files", Input).classes
+        (tmp_path / "a.png").write_bytes(b"x")
+        sc.query_one("#input-files", Input).value = str(tmp_path / "a.png")
+        sc.query_one("#target-format", ChipGroup).select_only([])
+        await pilot.pause()
+        sc.action_run()
+        await pilot.pause()
+        assert "at least one format" in sc.last_summary_text or "at least one format" in str(sc.query_one("#run-summary", Static).render())
+
+
+# ------------------------------------------------------------------------- Watermark and Cutout
+@need_tools
+async def test_watermark_command_matches_the_cli_and_validates_numbers(tmp_path):
+    import subprocess
+    photo = tmp_path / "photo.png"
+    logo = tmp_path / "logo.png"
+    subprocess.run(["magick", "-size", "120x80", "gradient:red-blue", "-type", "TrueColor", f"PNG24:{photo}"], check=True)
+    subprocess.run(["magick", "-size", "30x30", "xc:white", str(logo)], check=True)
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "watermark")
+        sc.query_one("#input-files", Input).value = str(photo)
+        sc.query_one("#logo", Input).value = str(logo)
+        sc.query_one("#position", Select).value = "top-left"
+        sc.query_one("#opacity", Input).value = "50"
+        await pilot.pause(0.5)
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert "1 watermarked" in str(sc.query_one("#plan", Static).render())
+        parts = shlex.split(sc.query_one(CommandLine).command)[1:]
+        assert parts[:2] == ["watermark", str(photo)] and "top-left" in parts and "--logo" in parts
+        doc = json.loads(cli(*parts, "--dry-run", "--json").stdout)
+        assert doc["ok"] and doc["items"][0]["status"] == "planned"
+        sc.query_one("#opacity", Input).value = "150"
+        await pilot.pause()
+        sc.action_run()
+        await pilot.pause()
+        assert "field-error" in sc.query_one("#opacity", Input).classes
+        sc.query_one("#opacity", Input).value = "50"
+        await pilot.pause()
+        sc.action_run()
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert (tmp_path / "photo_watermarked.png").exists() and "1 written" in sc.last_summary_text
+
+
+async def test_watermark_logo_must_be_one_image(tmp_path):
+    (tmp_path / "p.png").write_bytes(b"x")
+    (tmp_path / "a.png").write_bytes(b"x")
+    (tmp_path / "b.png").write_bytes(b"x")
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "watermark")
+        sc.query_one("#input-files", Input).value = str(tmp_path / "p.png")
+        sc.query_one("#logo", Input).value = f"{tmp_path / 'a.png'},{tmp_path / 'b.png'}"
+        await pilot.pause()
+        sc.action_run()
+        await pilot.pause()
+        assert "field-error" in sc.query_one("#logo", Input).classes
+
+
+async def test_cutout_form_builds_the_command(tmp_path):
+    photo = tmp_path / "me.jpg"
+    photo.write_bytes(b"x")
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "cutout")
+        sc.query_one("#input-files", Input).value = str(photo)
+        sc.query_one("#overwrite", Checkbox).value = True
+        assert sc.argv() == [str(photo), "--overwrite"]
+
+
+# --------------------------------------------------------------------------------------- Metadata
+async def test_metadata_modes_pick_the_subcommand_and_show_their_fields(tmp_path):
+    photo = tmp_path / "me.jpg"
+    photo.write_bytes(b"x")
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "metadata")
+        sc.query_one("#input-files", Input).value = str(photo)
+        mode = sc.query_one("#mode", Select)
+        for value, words, groups in (
+            ("strip", ("metadata", "strip"), set()),
+            ("credit", ("metadata", "credit"), {"group-credit", "group-credit-extra"}),
+            ("declare", ("metadata", "declare"), {"group-declare"}),
+            ("apply", ("metadata", "apply"), {"group-credit", "group-apply"}),
+        ):
+            mode.value = value
+            await pilot.pause()
+            assert sc.command_words() == words
+            shown = {g for g in ("group-credit", "group-credit-extra", "group-declare", "group-apply") if sc.query_one(f"#{g}").display}
+            assert shown == groups, (value, shown)
+        mode.value = "credit"
+        await pilot.pause()
+        sc.action_run()
+        await pilot.pause()
+        assert "field-error" in sc.query_one("#author", Input).classes          # credit needs a name (or a profile)
+        sc.query_one("#author", Input).value = "Jane Doe"
+        sc.query_one("#no-ai", Checkbox).value = True
+        await pilot.pause()
+        assert sc.argv() == [str(photo), "--author", "Jane Doe", "--no-ai"]
+
+
+@need_tools
+async def test_metadata_credit_command_matches_the_cli(tmp_path):
+    import subprocess
+    if shutil.which("exiftool") is None:
+        pytest.skip("needs exiftool")
+    photo = tmp_path / "me.jpg"
+    subprocess.run(["magick", "-size", "40x30", "xc:#3388ff", str(photo)], check=True)
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "metadata")
+        sc.query_one("#input-files", Input).value = str(photo)
+        sc.query_one("#mode", Select).value = "declare"
+        sc.query_one("#owner", Input).value = "Jane Doe"
+        await pilot.pause(0.5)
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        parts = shlex.split(sc.query_one(CommandLine).command)[1:]
+        assert parts[:3] == ["metadata", "declare", str(photo)]
+        doc = json.loads(cli(*parts, "--dry-run", "--json").stdout)
+        assert doc["ok"] and doc["items"][0]["output"].endswith(".jpg")
+
+
+# ---------------------------------------------------------------------------------------- Compress
+async def test_compress_command_follows_the_codec_and_matches_the_cli(tmp_path):
+    photo = tmp_path / "photo.png"
+    photo.write_bytes(b"x")
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "compress")
+        sc.query_one("#input-files", Input).value = str(photo)
+        sc.query_one("#codec", Select).value = "webp"
+        sc.query_one("#quality", Input).value = "70"
+        sc.query_one("#lossless", Checkbox).value = True
+        sc.query_one("#method", Input).value = "3"
+        await pilot.pause()
+        assert sc.argv() == [str(photo), "--codec", "webp", "--quality", "70", "--method", "3", "--lossless"]
+        # values of other codecs' hidden groups never leak into the command
+        sc.query_one("#speed", Input).value = "9"
+        assert "--speed" not in sc.argv()
+        sc.query_one("#codec", Select).value = "mozjpeg"
+        await pilot.pause()
+        assert sc.argv() == [str(photo), "--codec", "mozjpeg", "--quality", "70", "--subsample", "4:2:0", "--progressive"]
+        sc.query_one("#progressive", Checkbox).value = False
+        sc.query_one("#sharpen-amount", Input).value = "abc"
+        await pilot.pause()
+        sc.action_run()
+        await pilot.pause()
+        assert "field-error" in sc.query_one("#sharpen-amount", Input).classes
+
+
+@need_tools
+async def test_compress_dry_run_command_is_valid_cli(tmp_path):
+    import subprocess
+    photo = tmp_path / "photo.png"
+    subprocess.run(["magick", "-size", "40x30", "xc:#3388ff", str(photo)], check=True)
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "compress")
+        sc.query_one("#input-files", Input).value = str(photo)
+        sc.query_one("#preset", Select).value = "modern-web-avif"
+        await pilot.pause(0.5)
+        parts = shlex.split(sc.query_one(CommandLine).command)[1:]
+        assert "--codec" in parts and parts[parts.index("--codec") + 1] == "avif" and "--speed" in parts
+        result = cli(*parts, "--dry-run", "--json")
+        assert result.exit_code in (0, 4), result.output               # 4 = avifenc not installed; the flags themselves parsed
+        if result.exit_code == 0:
+            assert json.loads(result.stdout)["items"][0]["status"] == "planned"
+
+
+# ----------------------------------------------------------------------------------------- Enhance
+async def test_enhance_command_is_the_preset_plus_what_you_changed(tmp_path):
+    import numpy as np
+    from PIL import Image
+    photo = tmp_path / "photo.png"
+    Image.fromarray(np.random.default_rng(0).integers(0, 255, (30, 40, 3), dtype=np.uint8)).save(photo)
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "enhance")
+        sc.query_one("#input-files", Input).value = str(photo)
+        assert sc.argv() == [str(photo)]                                         # nothing changed, nothing to say
+        sc.query_one("#preset", Select).value = "old-photo"
+        await pilot.pause()
+        assert sc.argv() == [str(photo), "--preset", "old-photo"]                # the preset's own values are not repeated
+        sc.query_one("#scale", Input).value = "4"
+        sc.query_one("#restore-scratches", Checkbox).value = False
+        sc.query_one("#backend", Select).value = "classical"
+        await pilot.pause()
+        assert sc.argv() == [str(photo), "--preset", "old-photo", "--scale", "4", "--no-restore-scratches", "--backend", "classical"]
+        parts = ["enhance", "run", *sc.argv()]
+        doc = json.loads(cli(*parts, "--dry-run", "--json").stdout)
+        assert doc["ok"] and doc["items"][0]["output"].endswith("photo_enhanced.png")
+        sc.query_one("#scale", Input).value = "99"
+        await pilot.pause()
+        sc.action_run()
+        await pilot.pause()
+        assert "field-error" in sc.query_one("#scale", Input).classes

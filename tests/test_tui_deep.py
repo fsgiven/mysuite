@@ -105,7 +105,7 @@ async def test_convert_screen_runs(photo):
     async with MysuiteApp().run_test() as pilot:
         sc = await open_tool(pilot, "convert")
         sc.query_one("#input-files", Input).value = str(photo)
-        sc.query_one("#target-format", Select).value = "webp"
+        sc.query_one("#target-format").select_only(["webp"])
         sc.action_run()
         await finish(pilot)
         assert photo.with_suffix(".webp").exists() and "1 written" in str(sc.query_one("#run-summary", Static).render())
@@ -116,7 +116,7 @@ async def test_convert_screen_same_format_is_reported_not_crashed(photo):
     async with MysuiteApp().run_test() as pilot:
         sc = await open_tool(pilot, "convert")
         sc.query_one("#input-files", Input).value = str(photo)
-        sc.query_one("#target-format", Select).value = "png"
+        sc.query_one("#target-format").select_only(["png"])
         sc.action_run()
         await finish(pilot)
         assert "1 failed" in str(sc.query_one("#run-summary", Static).render())
