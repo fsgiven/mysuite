@@ -111,9 +111,16 @@ class Config:
     enhance_presets: dict[str, dict] = field(
         default_factory=lambda: dict(BUILT_IN_ENHANCE_PRESETS)
     )
+    profiles: dict[str, dict] = field(default_factory=dict)
+    """Company profiles ([profiles.NAME]); see mysuite/profiles.py."""
 
-    def resolve_export_settings(self, preset: str | None) -> ExportSettings:
+    def resolve_export_settings(self, preset: str | None, profile_export: dict | None = None) -> ExportSettings:
         settings = self.export
+        if profile_export:
+            try:
+                settings = replace(settings, **profile_export)
+            except TypeError as exc:
+                raise MysuiteConfigError(f"invalid export settings in the profile: {exc}") from exc
         if preset is not None:
             if preset not in self.presets:
                 raise MysuiteConfigError(
@@ -192,4 +199,5 @@ def load_config(explicit_path: Path | None = None) -> Config:
     return Config(
         export=export_settings, tools=tool_paths, presets=presets,
         compress_presets=compress_presets, enhance_presets=enhance_presets,
+        profiles=dict(data.get("profiles", {})),
     )

@@ -5,6 +5,7 @@ from typing import List, Optional
 
 import typer
 
+from mysuite import profiles as profiles_mod
 from mysuite import sandbox
 
 from mysuite.compress.cli import compress as compress_command
@@ -23,6 +24,7 @@ from mysuite.kits.cli import app as kit_app
 from mysuite.pdf.cli import app as pdf_app
 from mysuite.color.cli import app as variants_app
 from mysuite.preset_cli import app as preset_app
+from mysuite.profiles_cli import app as profiles_app
 from mysuite.tokens.cli import app as tokens_app
 from mysuite.specs.cli import print_command, profile_command, rename_command, sheet_command
 from mysuite.relight.cli import relight as relight_command
@@ -45,8 +47,23 @@ def _global_options(
     sandbox_here: bool = typer.Option(
         False, "--sandbox", help="Sandbox: allow only the current folder (same as --allow .)."
     ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-P",
+        help="Company profile from mysuite.toml ([profiles.NAME]): tokens, brand, variants, export defaults, metadata policy, "
+        "allowed folders. Also MYSUITE_PROFILE. Flags still win.",
+    ),
 ) -> None:
+    profiles_mod.activate(profile)
     roots = list(allow or [])
+    active = profiles_mod.active_name()
+    if active:
+        try:
+            from mysuite.config import load_config
+
+            prof = profiles_mod.resolve(load_config(None))
+            roots += [Path(a).expanduser() for a in (prof.allow if prof else [])]
+        except Exception:  # noqa: BLE001 - reported by the command that needs the profile, with the right --config
+            pass
     if sandbox_here:
         roots.append(Path.cwd())
     env_policy = sandbox.from_environment()
@@ -91,6 +108,7 @@ app.add_typer(qr_app, name="qr")
 app.add_typer(kit_app, name="kit")
 app.add_typer(tokens_app, name="tokens")
 app.add_typer(variants_app, name="variants")
+app.add_typer(profiles_app, name="profiles")
 app.add_typer(pdf_app, name="pdf")
 app.add_typer(pipeline_app, name="pipeline")
 app.add_typer(preset_app, name="preset")

@@ -38,8 +38,10 @@ class MysuiteServer:
         self._register()
 
     # ------------------------------------------------------------------ plumbing
-    def _run(self, argv: list[str], *, timeout: int = 900) -> dict[str, Any]:
+    def _run(self, argv: list[str], *, timeout: int = 900, profile: str | None = None) -> dict[str, Any]:
         prefix: list[str] = []
+        if profile:
+            prefix += ["--profile", profile]
         for root in self.roots:
             prefix += ["--allow", str(root)]
         proc = subprocess.run(
@@ -54,7 +56,7 @@ class MysuiteServer:
                     "warnings": [], "errors": [f"mysuite did not return JSON: {tail}"]}
 
     def _call(self, command: list[str], inputs: list[str], options: dict[str, Any], *, dry_run: bool = False,
-              overwrite: bool = False) -> dict[str, Any]:
+              overwrite: bool = False, profile: str | None = None) -> dict[str, Any]:
         spec_key = " ".join(command)
         commands = schema.build()["commands"]
         step = engine.Step(1, command[0], command, {k: v for k, v in options.items() if v is not None})
@@ -64,7 +66,7 @@ class MysuiteServer:
             return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
                     "errors": [f"unknown option(s) for {spec_key}: {', '.join(bad)}. Valid: {', '.join(sorted(valid - {'json', 'config'}))}"]}
         argv = engine.build_argv(step, [str(p) for p in inputs], overwrite=overwrite, dry_run=dry_run, commands=commands)
-        return self._run(argv)
+        return self._run(argv, profile=profile)
 
     # --------------------------------------------------------------------- tools
     def _register(self) -> None:
@@ -80,12 +82,13 @@ class MysuiteServer:
                            recolor: list[str] | None = None, cmyk_mode: str | None = None, cmyk_profile: str | None = None,
                            background: str | None = None, tokens: str | None = None, brand: str | None = None,
                            theme: str | None = None, variants: str | None = None, negative_map: list[str] | None = None,
-                           dry_run: bool = False, overwrite: bool = False, options: dict[str, Any] | None = None) -> dict[str, Any]:
+                           dry_run: bool = False, overwrite: bool = False, options: dict[str, Any] | None = None,
+                           profile: str | None = None) -> dict[str, Any]:
             opts = {"formats": formats, "sizes": sizes, "profiles": profiles, "out": out, "preset": preset,
                     "recolor": recolor, "cmyk_mode": cmyk_mode, "cmyk_profile": cmyk_profile, "background": background,
                     "tokens": tokens, "brand": brand, "theme": theme, "variants": variants, "negative_map": negative_map,
                     **(options or {})}
-            return self._call(["export"], inputs, opts, dry_run=dry_run, overwrite=overwrite)
+            return self._call(["export"], inputs, opts, dry_run=dry_run, overwrite=overwrite, profile=profile)
 
         @mcp.tool(description="Convert files to other formats beside the source. to: e.g. ['png','webp'].")
         def mysuite_convert(inputs: list[str], to: list[str], quality: int | None = None, background: str | None = None,
@@ -116,20 +119,25 @@ class MysuiteServer:
             return self._call(["enhance", "run"], inputs, {"preset": preset, "scale": scale, "backend": "classical"},
                               dry_run=dry_run, overwrite=overwrite)
 
-        @mcp.tool(description="Metadata: action 'strip' (remove everything incl. GPS), 'randomize' (plausible decoy camera identity) or 'credit' (embed author/copyright as C2PA; needs author).")
+        @mcp.tool(description="Metadata: action 'strip' (remove everything incl. GPS), 'randomize' (plausible decoy camera identity), 'credit' (embed author/copyright as C2PA; needs author) or 'apply' (a policy such as 'strip,credit', or the profile's). profile = a company profile name from mysuite.toml.")
         def mysuite_metadata(inputs: list[str], action: str, author: str | None = None, copyright: str | None = None,
-                             dry_run: bool = False, overwrite: bool = False) -> dict[str, Any]:
+                             policy: str | None = None, profile: str | None = None, dry_run: bool = False,
+                             overwrite: bool = False) -> dict[str, Any]:
             if action not in engine.METADATA_ACTIONS:
                 return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
                         "errors": [f"action must be one of {sorted(engine.METADATA_ACTIONS)}"]}
-            opts = {"author": author, "copyright": copyright} if action == "credit" else {}
-            if action == "credit" and not author:
+            opts = {"author": author, "copyright": copyright} if action in ("credit", "apply") else {}
+            if action == "apply":
+                opts["policy"] = policy
+            if action == "credit" and not author and not profile:
                 return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
-                        "errors": ["credit needs author"]}
-            return self._call(["metadata", action], inputs, opts, dry_run=dry_run, overwrite=overwrite)
+                        "errors": ["credit needs author (or a profile that has one)"]}
+            return self._call(["metadata", action], inputs, opts, dry_run=dry_run, overwrite=overwrite, profile=profile)
 
         @mcp.tool(description="Run several tools in order, each on the previous step's outputs. 'pipeline' is the same structure as a pipeline file: {inputs:[...], step:[{tool:'export', formats:[...]}, {tool:'metadata', action:'strip'}, ...]}. Relative paths are relative to the first allowed folder. dry_run plans step 1 exactly.")
-        def mysuite_pipeline_run(pipeline: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+        def mysuite_pipeline_run(pipeline: dict[str, Any], dry_run: bool = False, profile: str | None = None) -> dict[str, Any]:
+            if profile:
+                pipeline = {**pipeline, "profile": profile}
             try:
                 pipe = engine.parse(pipeline, base=self.roots[0], default_name="mcp")
             except engine.PipelineError as exc:
@@ -251,6 +259,15 @@ class MysuiteServer:
                              overwrite: bool = False) -> dict[str, Any]:
             return self._call(["variants", "make"], inputs, {"variants": variants, "tokens": tokens, "brand": brand,
                                                               "negative_map": negative_map, "out": out}, dry_run=dry_run, overwrite=overwrite)
+
+        @mcp.tool(description="Company profiles from mysuite.toml. action 'list', 'show' (name) or 'check' (name; checks keys, token source, brand, folders). Pass profile=<name> to mysuite_export / mysuite_metadata / mysuite_pipeline_run to use one.")
+        def mysuite_profiles(action: str, name: str | None = None) -> dict[str, Any]:
+            if action == "list":
+                return self._call(["profiles", "list"], [], {})
+            if action in ("show", "check") and name:
+                return self._call(["profiles", action], [name], {})
+            return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
+                    "errors": ["action must be list, or show/check with a name"]}
 
         @mcp.tool(description="Which external tools are installed (and how to install the missing ones).")
         def mysuite_doctor() -> dict[str, Any]:

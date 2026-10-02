@@ -38,6 +38,8 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | smaller files | `mysuite compress FILE --codec mozjpeg\|webp\|avif\|oxipng\|pngquant\|gifsicle --json` |
 | to crop, trim borders, rotate, flip, resize, pad to a size/aspect, round corners | `mysuite transform FILE --crop-aspect 1:1 --resize 512 --round 50% --json` |
 | to change the lighting direction/tint of a cut-out, product or logo (experimental) | `mysuite relight FILE --preset golden-hour --json` or `--direction left --height 30` |
+| to use the company's defaults (tokens, brand, variants, sizes, CMYK, metadata policy, allowed folders) | `mysuite --profile acme export logo.svg --json` (see `mysuite profiles list --json`) |
+| to strip the old metadata and credit the company in one go | `mysuite --profile acme metadata apply photo.jpg --json` (or `--policy strip,credit --author "Acme"`) |
 | a whole set of files from one logo (favicon, iOS/Android app icons, social images, retina) | `mysuite kit make logo.svg --kit favicon --json` (`mysuite kit list --json` shows all kits) |
 | to merge / split / extract / rotate / resize / number / stamp / strip / compress a PDF, or turn pages into images and images into a PDF | `mysuite pdf merge a.pdf b.pdf --json`, `mysuite pdf extract doc.pdf --pages 1,3-5 --json` … (`mysuite pdf --help`) |
 | an image at an exact size or print size (500 px, 10x15cm at 300 dpi), dpi stored in the file | `mysuite print photo.jpg --size 10x15cm --dpi 300 --fit cover --json` |
@@ -74,6 +76,8 @@ mysuite tokens check logo.svg --tokens tokens.css --json
 mysuite tokens list tokens.css --json
 mysuite variants make logo.svg --variants negative,mono-white --tokens tokens.css --json
 mysuite export logo.svg --formats png --sizes 64 --variants default,negative,invert --tokens tokens.css --out out_var --json
+mysuite profiles list --json
+mysuite profiles save acme --tokens tokens.css --brand x --formats png --sizes 64 --policy strip --json
 mysuite kit list --json
 mysuite kit make logo.svg --kit favicon --out kits --json
 mysuite print pic.png --size 1200x630 --fit cover --json
@@ -127,6 +131,19 @@ adapter is untested against a live file). Pass `--brand` when a source holds sev
   tokens share a colour but disagree in dark mode, the response says so in `warnings`; settle it with
   `--negative-map "#1d1d1b=token:--headline-text-color"`. Colours with no matching token stay as they are (also a warning).
 - You cannot look at the result, so read `warnings` and run `tokens check` first.
+
+## Company profiles
+
+A profile in `mysuite.toml` (`[profiles.acme]`) bundles a company's defaults: design tokens + brand + theme + default
+variants, `[profiles.acme.export]` settings (formats, sizes, colour profiles, CMYK mode, output folder…),
+`[profiles.acme.metadata]` (`policy = ["strip", "credit"]`, `author`, `copyright`), default compress/enhance presets and
+`allow` folders (they become the sandbox). Select one with `mysuite --profile acme …` (global option, or
+`MYSUITE_PROFILE=acme`), `profile = "acme"` at the top of a pipeline file, or `profile="acme"` in the MCP tools.
+Precedence: command-line options > `--preset` > the profile > `[export]` in the file > built-in defaults. An unknown or
+invalid profile is an error (exit 1), never silently ignored. Manage them with `mysuite profiles list|show|save|delete|check`;
+`check` validates keys, loads the token source (remote git/Figma sources only with `--online`), the brand, folders and tools.
+`metadata apply` runs the profile's policy: each step works on the previous step's output (`strip` then `credit` gives
+`name_stripped_credited.jpg`).
 
 ## Exact jobs: "ask for 500, get 500"
 
@@ -190,7 +207,7 @@ Claude Desktop / Cursor (`mcpServers` in their config JSON):
 
 Tools: `mysuite_inspect`, `mysuite_export`, `mysuite_convert`, `mysuite_cutout`, `mysuite_watermark`,
 `mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_relight`, `mysuite_kit`, `mysuite_pdf`,
-`mysuite_tokens`, `mysuite_variants`, `mysuite_print`, `mysuite_rename`, `mysuite_sheet`, `mysuite_profile`, `mysuite_ocr`, `mysuite_qr`, `mysuite_dupes`, `mysuite_diff`, `mysuite_contrast`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
+`mysuite_tokens`, `mysuite_variants`, `mysuite_profiles`, `mysuite_print`, `mysuite_rename`, `mysuite_sheet`, `mysuite_profile`, `mysuite_ocr`, `mysuite_qr`, `mysuite_dupes`, `mysuite_diff`, `mysuite_contrast`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
 `mysuite_schema`; resources `mysuite://guide`, `mysuite://schema`, `mysuite://allowed-folders`. They run the same
 commands as the CLI and return the same JSON, always sandboxed, never overwriting unless `overwrite=true`.
 Without `--allow` the server only sees the folder it was started in. With a local model (Ollama, LM Studio, …)

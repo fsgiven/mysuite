@@ -30,8 +30,8 @@ async def server(*allow: Path):
         yield client
 
 
-async def call(client, name, **arguments):
-    result = await client.call_tool(name, arguments)
+async def call(client, tool, /, **arguments):
+    result = await client.call_tool(tool, arguments)
     if result.structured_content is not None:
         return result.structured_content
     return json.loads(result.content[0].text)
@@ -51,7 +51,7 @@ async def test_lists_every_tool_with_descriptions(work):
     async with server(work) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert {"mysuite_inspect", "mysuite_export", "mysuite_convert", "mysuite_cutout", "mysuite_watermark",
-            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_relight", "mysuite_metadata", "mysuite_kit", "mysuite_pdf", "mysuite_ocr", "mysuite_qr", "mysuite_dupes", "mysuite_diff", "mysuite_contrast", "mysuite_print", "mysuite_rename", "mysuite_sheet", "mysuite_profile", "mysuite_tokens", "mysuite_variants", "mysuite_pipeline_run", "mysuite_doctor",
+            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_relight", "mysuite_metadata", "mysuite_kit", "mysuite_pdf", "mysuite_ocr", "mysuite_qr", "mysuite_dupes", "mysuite_diff", "mysuite_contrast", "mysuite_print", "mysuite_rename", "mysuite_sheet", "mysuite_profile", "mysuite_tokens", "mysuite_variants", "mysuite_profiles", "mysuite_pipeline_run", "mysuite_doctor",
             "mysuite_schema"} <= set(tools)
     assert all(t.description for t in tools.values())
     assert "dry_run" in tools["mysuite_export"].input_schema["properties"]
@@ -242,3 +242,17 @@ async def test_tokens_and_variants_through_mcp(work):
         assert outside["exit_code"] == 3
         bad = await call(c, "mysuite_tokens", action="show", source=str(work / "ds.css"))
         assert bad["exit_code"] == 2
+
+
+@pytest.mark.asyncio
+async def test_profiles_through_mcp(work):
+    (work / "mysuite.toml").write_text('[profiles.acme]\ndescription = "Acme"\n[profiles.acme.export]\nformats = ["png"]\nsizes = [40]\nout_dir = "acme-out"\n')
+    async with server(work) as c:
+        listing = await call(c, "mysuite_profiles", action="list")
+        assert listing["ok"] and listing["items"][0]["name"] == "acme"
+        assert (await call(c, "mysuite_profiles", action="check", name="acme"))["ok"]
+        exp = await call(c, "mysuite_export", inputs=[str(work / "logo.svg")], profile="acme")
+        assert exp["ok"] and exp["items"][0]["output"].endswith("acme-out/logo/png/rgb/logo_40.png")
+        ghost = await call(c, "mysuite_export", inputs=[str(work / "logo.svg")], profile="ghost")
+        assert ghost["exit_code"] == 1 and "ghost" in ghost["errors"][0]
+        assert (await call(c, "mysuite_profiles", action="show"))["exit_code"] == 2

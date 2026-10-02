@@ -264,4 +264,23 @@ TOOL_REGISTRY: list[ToolSpec] = [
         ),
         cli="mysuite variants make logo.svg --variants negative --tokens tokens/ --brand acme",
     ),
+    ToolSpec(
+        key="profiles",
+        label="Profiles",
+        description="A company's defaults in one place: tokens, brand, sizes, metadata policy.",
+        screen_factory=_auto_factory("profiles"),
+        accent="#FDA4AF",  # blush
+        commands=(
+            ("List profiles", ("profiles", "list")), ("Create or replace a profile", ("profiles", "save")),
+            ("Show a profile", ("profiles", "show")), ("Check a profile works", ("profiles", "check")),
+            ("Delete a profile", ("profiles", "delete")), ("Apply a metadata policy to photos", ("metadata", "apply")),
+        ),
+        help=(
+            "A profile bundles what you repeat for one company: where its design tokens are, the brand, the logo variants, "
+            "export sizes/formats/CMYK, the allowed folders, and what to do with photo metadata (for example strip it, then "
+            "credit the company). Create one here, then use it from the command line with --profile NAME, from pipelines, "
+            "or from AI agents. Options you set directly always win over the profile."
+        ),
+        cli="mysuite profiles save acme --tokens tokens/ --brand acme --policy strip,credit --author \"Acme\"",
+    ),
 ]

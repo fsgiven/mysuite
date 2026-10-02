@@ -13,7 +13,9 @@ from mysuite.compress._parsing import (
     output_path_for,
 )
 from mysuite.compress.compress import CompressError, compress_file
+from mysuite import profiles as profiles_mod
 from mysuite.config import MysuiteConfigError, load_config
+from mysuite.profiles import ProfileError
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.doctor import require_tools
 from mysuite.utils import jsonout
@@ -155,6 +157,14 @@ def compress(
     except InvalidInputError as exc:
         log_error(str(exc))
         raise typer.Exit(1) from exc
+
+    try:
+        active_profile = profiles_mod.resolve(config)
+    except ProfileError as exc:
+        log_error(escape(str(exc)))
+        raise typer.Exit(1) from exc
+    if preset is None and active_profile and active_profile.compress_preset:
+        preset = active_profile.compress_preset
 
     explicit = {
         "codec": codec, "quality": quality,

@@ -7,6 +7,8 @@ from typing import List, Optional
 import typer
 
 from rich.markup import escape
+from mysuite import profiles as profiles_mod
+from mysuite.profiles import ProfileError
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.enhance import history
 from mysuite.enhance._parsing import (
@@ -79,10 +81,13 @@ def run(
             "gamma": gamma, "restore_scratches": restore_scratches,
             "output_format": output_format, "output_quality": output_quality,
         }
+        active_profile = profiles_mod.resolve(config)
+        if preset is None and active_profile and active_profile.enhance_preset:
+            preset = active_profile.enhance_preset
         settings = EnhanceSettings.from_dict(config.resolve_enhance_settings(preset or "gentle", explicit))
         files = resolve_input_files(inputs, recursive=recursive)
         check_no_output_collisions(files, settings.output_format)
-    except (MysuiteConfigError, EnhanceError, InvalidEnhanceInputError) as exc:
+    except (MysuiteConfigError, EnhanceError, InvalidEnhanceInputError, ProfileError) as exc:
         log_error(str(exc))
         raise typer.Exit(1) from exc
 

@@ -86,3 +86,12 @@ in `AGENTS.md` and exercised by a doc-test.
   and were not copied into the repo.
 - Still open: profiles/company defaults (tokens source, brand, metadata policy per company), presets rework, `.ai` import,
   SVG optimise, the relight depth model, `mysuite agent`.
+
+## Update 2026-10-02 (profiles)
+
+- Shipped: `[profiles.NAME]` (tokens, brand, theme, variants, export defaults, metadata policy, presets, allow folders), global
+  `--profile` / `MYSUITE_PROFILE`, `mysuite profiles list|show|save|delete|check`, `mysuite metadata apply`, pipeline `profile = "…"`,
+  MCP `mysuite_profiles` + `profile=` on export/metadata/pipeline, a "Profiles" dashboard card.
+- Later (asked for): bring the hand-built screens (Export, Convert, Cutout, Watermark, Metadata, Compress, Enhance) in line with
+  the new visuals (cards, helper, colours) and clean them up; they are unchanged for now.
+- Still open: presets rework into one subsystem, `.ai` import, SVG optimise, relight depth model, `mysuite agent`.

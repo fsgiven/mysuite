@@ -22,7 +22,9 @@ from mysuite.export.naming import resolve_naming_templates, resolve_path_templat
 from mysuite.export.planner import MysuitePlannerError, build_plan
 from mysuite.color.cmyk import CmykError, CmykSettings
 from mysuite.color.svg import DEFAULT_TOLERANCE
+from mysuite import profiles as profiles_mod
 from mysuite.color import variants as variant_mod
+from mysuite.profiles import ProfileError
 from mysuite.color.variants import VariantError
 from mysuite.export.recolor import InvalidRecolorError, apply_recolor, make_variant_svg, parse_recolor_list, resolve_token_refs
 from mysuite.tokens.model import TokenError
@@ -174,7 +176,7 @@ def export(
         "figma:FILEKEY. Lets --recolor use token:NAME and enables the negative variant.",
     ),
     brand: Optional[str] = typer.Option(None, "--brand", help="Which brand of the token source (when it has several)."),
-    theme: str = typer.Option("light", "--theme", help="Which theme's token values --recolor token:NAME uses: light or dark."),
+    theme: Optional[str] = typer.Option(None, "--theme", help="Which theme's token values --recolor token:NAME uses: light (default) or dark."),
     variants: Optional[str] = typer.Option(
         None, "--variants",
         help="Several colour variants in one run, each in its own folder: default, negative (token-driven, needs --tokens), "
@@ -216,10 +218,19 @@ def export(
 
     try:
         config = load_config(config_path)
-        settings = config.resolve_export_settings(preset)
-    except MysuiteConfigError as exc:
-        log_error(str(exc))
+        active_profile = profiles_mod.resolve(config)
+        settings = config.resolve_export_settings(preset, active_profile.export if active_profile else None)
+    except (MysuiteConfigError, ProfileError) as exc:
+        log_error(escape(str(exc)))
         raise typer.Exit(1) from exc
+    if active_profile:                      # flags > preset > profile: only fill what the command line left open
+        tokens = tokens or active_profile.tokens
+        brand = brand or active_profile.brand
+        theme = theme or active_profile.theme
+        variants = variants or active_profile.variants
+        negative_map = negative_map or (active_profile.negative_map or None)
+        jsonout.set_extra(profile=active_profile.name)
+    theme = theme or "light"
 
     resolved_dpi = settings.dpi if dpi is None else dpi
     resolved_unit = settings.default_unit if unit is None else unit

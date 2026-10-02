@@ -6,6 +6,7 @@
 
 - `--allow` - Sandbox: only read/write inside this folder (repeatable). Also set by MYSUITE_ROOTS. A path outside is refused with exit code 3. Meant for agents.
 - `--sandbox` - Sandbox: allow only the current folder (same as --allow .).
+- `--profile / -P` - Company profile from mysuite.toml ([profiles.NAME]): tokens, brand, variants, export defaults, metadata policy, allowed folders. Also MYSUITE_PROFILE. Flags still win.
 
 ## Exit codes
 
@@ -262,7 +263,7 @@ Batch-export an SVG into multiple sizes, formats, and color profiles.
 - `--cmyk-profile` (file) CMYK ICC profile (e.g. FOGRA39 or your printer's) used for the conversion and embedded as the PDF output intent. Default: Ghostscript's SWOP profile.
 - `--tokens` (str) Design tokens: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir (pinned, cached), or figma:FILEKEY. Lets --recolor use token:NAME and enables the negative variant.
 - `--brand` (str) Which brand of the token source (when it has several).
-- `--theme` (str, default `light`) Which theme's token values --recolor token:NAME uses: light or dark.
+- `--theme` (str) Which theme's token values --recolor token:NAME uses: light (default) or dark.
 - `--variants` (str) Several colour variants in one run, each in its own folder: default, negative (token-driven, needs --tokens), invert, mono-black, mono-white, grayscale. E.g. default,negative,mono-white.
 - `--negative-map` (str, repeatable) For the negative variant: LOGOCOLOUR=token:NAME makes that logo colour take the token's DARK value, e.g. '#1d1d1b=token:--headline-text-color'. Repeatable. Use it when several tokens share a colour but differ in dark mode.
 - `--negative-tolerance` (float range, default `5.0`) How close (CIEDE2000) a logo colour must be to a token's light value for the negative variant to use that token.
@@ -318,12 +319,27 @@ Run the MCP server (stdio) so MCP clients can use mysuite. Needs `pip install 'm
 
 - `--allow` (path, repeatable) Folder the server may read/write (repeatable). Default: the current folder.
 
+## `mysuite metadata apply`
+
+Apply a metadata policy in one go - the active profile's, or --policy: any of strip, randomize, credit, in order (e.g. strip,credit removes everything, then embeds your credit). Each step works on the previous step's output.
+
+- argument `inputs` (path, required, repeatable) Image files and/or folders.
+- `--policy` (str) Comma-separated steps: strip, randomize, credit (default: the profile's metadata.policy).
+- `--author / -a` (str) For the credit step (default: the profile's metadata.author).
+- `--copyright` (str) For the credit step (default: the profile's metadata.copyright).
+- `--recursive / -r` (boolean) 
+- `--overwrite / --no-overwrite` (boolean) 
+- `--dry-run` (boolean) Preview the final file names, write nothing.
+- `--config / -c` (path) Explicit path to mysuite.toml.
+- `--quiet / -q` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite metadata credit`
 
 Embed a signed C2PA provenance manifest (author/copyright) for correct crediting.
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories (non-recursive unless --recursive).
-- `--author / -a` (str) Author/creator name to embed.
+- `--author / -a` (str) Author/creator name to embed (or the active profile's metadata.author).
 - `--copyright` (str) Copyright notice to embed, e.g. '© 2026 Jane Doe'.
 - `--generator` (str, default `mysuite`) Software/tool named as the claim generator (not independently visible in c2patool's own read-back report on all versions — author/copyright are the fields that reliably read back).
 - `--recursive / -r` (boolean) Recurse into subdirectories.
@@ -599,6 +615,66 @@ Convert colour profiles: to sRGB for screens, to CMYK for print.
 - `--recursive / -r` (boolean) 
 - `--overwrite / --no-overwrite` (boolean) 
 - `--config / -c` (path) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite profiles check`
+
+Check a profile works: valid keys, the token source loads, the brand exists, folders exist. Git and Figma sources are only fetched with --online.
+
+- argument `name` (str, required) 
+- `--online` (boolean) Also fetch git/figma token sources (network).
+- `--config / -c` (path) Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite profiles delete`
+
+Remove a profile from mysuite.toml.
+
+- argument `name` (str, required) 
+- `--config / -c` (path) Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite profiles list`
+
+List the profiles in mysuite.toml.
+
+- `--config / -c` (path) Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite profiles save`
+
+Create or replace a profile in mysuite.toml. Only the options you give are stored.
+
+- argument `name` (str, required) Profile name, e.g. acme.
+- `--description` (str) 
+- `--tokens` (str) Token source (file/folder, git+https://…@REF#path=…, figma:KEY).
+- `--brand` (str) 
+- `--theme` (str) light or dark.
+- `--variants` (str) Default logo variants, e.g. default,negative.
+- `--negative-map` (str, repeatable) LOGOCOLOUR=token:NAME (repeatable).
+- `--allow` (str, repeatable) Sandbox folder(s) this profile may read/write (repeatable).
+- `--formats` (str) Export formats, comma-separated.
+- `--sizes` (str) Export sizes, comma-separated.
+- `--colour-profiles` (str) Export colour profiles: rgb,cmyk.
+- `--cmyk-mode` (str) exact, clean or clean:N.
+- `--cmyk-profile` (str) CMYK ICC profile path.
+- `--out-dir` (str) Export output folder.
+- `--background` (str) 
+- `--policy` (str) Metadata policy steps, e.g. strip,credit.
+- `--author` (str) Metadata credit: author.
+- `--copyright` (str) Metadata credit: copyright line.
+- `--compress-preset` (str) 
+- `--enhance-preset` (str) 
+- `--overwrite / --no-overwrite` (boolean) Replace a profile of the same name.
+- `--config / -c` (path) Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite profiles show`
+
+One profile, in full.
+
+- argument `name` (str, required) Profile name.
+- `--config / -c` (path) Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
 ## `mysuite qr make`

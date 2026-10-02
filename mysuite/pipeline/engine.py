@@ -18,13 +18,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from mysuite import profiles as profiles_mod
 from mysuite import sandbox, schema
 from mysuite.convert._parsing import SOURCE_EXTENSIONS
 
 MAX_STEPS = 20
 RESERVED = {"tool", "action", "id", "from", "inputs", "only"}
 SINGLE = {"export", "convert", "cutout", "watermark", "compress", "inspect", "transform", "relight", "ocr", "dupes"}
-METADATA_ACTIONS = {"strip", "randomize", "credit"}
+METADATA_ACTIONS = {"strip", "randomize", "credit", "apply"}
 PDF_ACTIONS = {"info", "merge", "split", "extract", "rotate", "resize", "strip", "number", "stamp", "images", "render", "from-images", "compress"}
 
 
@@ -55,6 +56,7 @@ class Pipeline:
     steps: list[Step]
     overwrite: bool = False
     continue_on_error: bool = False
+    profile: str | None = None
 
 
 # ------------------------------------------------------------------ loading
@@ -68,7 +70,7 @@ def load(path: Path) -> Pipeline:
 
 
 def parse(data: dict[str, Any], *, base: Path, default_name: str = "pipeline") -> Pipeline:
-    allowed_top = {"name", "inputs", "overwrite", "continue_on_error", "step", "steps"}
+    allowed_top = {"name", "inputs", "overwrite", "continue_on_error", "step", "steps", "profile"}
     unknown = set(data) - allowed_top
     if unknown:
         raise PipelineError(f"unknown top-level key(s): {', '.join(sorted(unknown))} (allowed: {', '.join(sorted(allowed_top))})")
@@ -99,6 +101,7 @@ def parse(data: dict[str, Any], *, base: Path, default_name: str = "pipeline") -
     return Pipeline(
         name=str(data.get("name", default_name)), base=base, inputs=inputs, steps=steps,
         overwrite=bool(data.get("overwrite", False)), continue_on_error=bool(data.get("continue_on_error", False)),
+        profile=data.get("profile"),
     )
 
 
@@ -222,8 +225,11 @@ def _child_env() -> dict[str, str]:
     return env
 
 
-def _run_child(argv: list[str], cwd: Path) -> tuple[int, dict[str, Any] | None, str]:
+def _run_child(argv: list[str], cwd: Path, profile: str | None = None) -> tuple[int, dict[str, Any] | None, str]:
     prefix: list[str] = []
+    profile = profile or profiles_mod.active_name()
+    if profile:
+        prefix += ["--profile", profile]
     policy = sandbox.active()
     if policy:
         for root in policy.roots:
@@ -279,7 +285,7 @@ def run(pipeline: Pipeline, *, dry_run: bool = False, config: Path | None = None
         argv = build_argv(step, inputs, overwrite=pipeline.overwrite, dry_run=dry_run, commands=commands)
         if config:
             argv[argv.index("--"):argv.index("--")] = ["--config", str(config)]
-        code, doc, err = _run_child(argv, pipeline.base)
+        code, doc, err = _run_child(argv, pipeline.base, pipeline.profile)
         outs = [i["output"] for i in (doc or {}).get("items", []) if i.get("status") in ("written", "skipped_existing", "planned") and i.get("output")]
         status = "ok" if code == 0 else "failed"
         if dry_run and code == 0:
