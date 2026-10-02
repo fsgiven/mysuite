@@ -14,33 +14,38 @@ telemetry.
 </p>
 <p align="center"><sub>A real session in the terminal dashboard (<code>mysuite tui</code>), on synthetic demo images.</sub></p>
 
-| Tool | What it does |
-| --- | --- |
-| `export` | One SVG → many sizes, formats (PNG/PDF/EPS/SVG/JPEG/WebP/TIFF/ICO/ICNS) and color profiles, with presets, recoloring and naming templates |
-| `convert` | Convert files between formats, in place beside the source |
-| `cutout` | Isolate a photo's subject onto a transparent background (macOS Vision) |
-| `watermark` | Stamp a logo onto images as a visible, scalable overlay |
-| `metadata` | **strip** all metadata, **randomize** it into a plausible decoy camera, or **credit** with a C2PA provenance record |
-| `enhance` | Upscale and restore photos locally: denoise, sharpen, scratch removal, color, optional AI backend |
-| `compress` | Re-encode with the same best-in-class codecs Squoosh uses (mozjpeg, WebP, AVIF, oxipng, pngquant, gifsicle), plus sharpening |
-| `kit` | A whole set from one logo with exact specs: favicon set (ico, PNGs, Apple/Android icons, manifest), iOS `AppIcon.appiconset`, Android mipmaps, social images (Open Graph, Twitter, LinkedIn, YouTube, Instagram), retina @1x/@2x/@3x |
-| `svg` | Bring PDF / Illustrator `.ai` / EPS / SVGZ in as plain SVG (text becomes outlines, colours tidy hex, trimmed to the drawing), and make SVGs smaller with a render-checked optimiser |
-| `pdf` | PDF toolbox: merge, split, extract pages, rotate, fit to a paper size, page numbers, stamp text/logo, strip metadata, compress, pages ⇄ images |
-| `print` | Output at an exact size: `10x15cm` at 300 dpi is exactly 1181×1772 px, dpi stored in the file; contain/cover/stretch, bleed |
-| `rename`, `sheet`, `profile` | Rename by pattern (`{n:3}`, `{date}`…; copies by default), contact sheets (PNG/PDF), colour profiles (to sRGB, or RGB → CMYK with the export engine) |
-| `ocr`, `qr`, `dupes`, `diff`, `contrast` | Read text and QR codes (macOS Vision), make QR codes, find duplicate/look-alike pictures, compare two images, WCAG contrast checks |
-| `profiles` | Company profiles in `mysuite.toml`: tokens, brand, variants, export defaults, metadata policy (`metadata apply`), allowed folders; `--profile NAME` everywhere |
-| `mark` | An **invisible ownership mark** (keyed spread-spectrum): `embed` it, later `detect` whether a picture carries your mark - survives JPEG, resizing, cropping, mirroring, noise; see [docs/PROTECTION.md](docs/PROTECTION.md) |
-| `metadata declare` | A machine-readable **"no AI use" declaration** (PLUS DataMining + XMP Rights; `credit --no-ai` adds the C2PA training-mining assertion) |
-| `shield` | **Experimental** image protection against AI editing (PhotoGuard-style encoder attack); read [docs/SHIELD.md](docs/SHIELD.md) first |
-| `install` | Fetch the heavier parts once, on demand (`tools`, `vision`, `cutout`, `shield`), into `~/.cache/mysuite` |
-| `testcases` | Generates a CC0 folder of test files (about 60) to try every tool, including the awkward cases |
-| `tokens`, `variants` | Design tokens (CSS variables, W3C JSON, pinned git repo, Figma): list/show/check a logo's colours, `token:NAME` recolors, and logo variants (negative/on-dark from the tokens' dark theme, mono, invert, grayscale) |
-| `transform` | Quick edits: trim, crop (box or aspect), rotate, flip, resize, pad, round corners, background — in a fixed, predictable order |
-| `relight` | *Experimental, classical (no AI model):* re-shade a cut-out/product/logo as if lit from another direction, with presets (key-left, dramatic, golden-hour…) |
-| `inspect` | Facts about a file (size, colour mode, transparency, palette, sharpness, GPS…) as numbers — for agents and humans |
-| `pipeline` | Several tools in one declarative file (export → metadata → compress…) |
-| `mcp` | An MCP server so Claude Desktop, Cursor, Claude Code or a local-model client can drive all of this |
+**Status key** (per tool, in both tables below): ✅ **Stable**: covered by automated tests and run for real on one machine, no known problem beyond the limits listed.
+🟡 **Caveats**: tested and usable, but a stated limit matters or part of it has never been run live (the row says which).
+🧪 **Experimental**: works as built, but the effect is limited or unproven; do not rely on it.
+A row in the test table that covers several tools takes the weakest status among them.
+
+| Tool | Status | What it does |
+| --- | --- | --- |
+| `export` | ✅ Stable | One SVG → many sizes, formats (PNG/PDF/EPS/SVG/JPEG/WebP/TIFF/ICO/ICNS) and color profiles, with presets, recoloring and naming templates |
+| `convert` | ✅ Stable | Convert files between formats, in place beside the source |
+| `cutout` | 🟡 Caveats | Isolate a photo's subject onto a transparent background (macOS Vision) |
+| `watermark` | ✅ Stable | Stamp a logo onto images as a visible, scalable overlay |
+| `metadata` | 🟡 Caveats | **strip** all metadata, **randomize** it into a plausible decoy camera, or **credit** with a C2PA provenance record |
+| `enhance` | 🟡 Caveats | Upscale and restore photos locally: denoise, sharpen, scratch removal, color, optional AI backend |
+| `compress` | ✅ Stable | Re-encode with the same best-in-class codecs Squoosh uses (mozjpeg, WebP, AVIF, oxipng, pngquant, gifsicle), plus sharpening |
+| `kit` | ✅ Stable | A whole set from one logo with exact specs: favicon set (ico, PNGs, Apple/Android icons, manifest), iOS `AppIcon.appiconset`, Android mipmaps, social images (Open Graph, Twitter, LinkedIn, YouTube, Instagram), retina @1x/@2x/@3x |
+| `svg` | 🟡 Caveats | Bring PDF / Illustrator `.ai` / EPS / SVGZ in as plain SVG (text becomes outlines, colours tidy hex, trimmed to the drawing), and make SVGs smaller with a render-checked optimiser |
+| `pdf` | ✅ Stable | PDF toolbox: merge, split, extract pages, rotate, fit to a paper size, page numbers, stamp text/logo, strip metadata, compress, pages ⇄ images |
+| `print` | ✅ Stable | Output at an exact size: `10x15cm` at 300 dpi is exactly 1181×1772 px, dpi stored in the file; contain/cover/stretch, bleed |
+| `rename`, `sheet`, `profile` | ✅ Stable | Rename by pattern (`{n:3}`, `{date}`…; copies by default), contact sheets (PNG/PDF), colour profiles (to sRGB, or RGB → CMYK with the export engine) |
+| `ocr`, `qr`, `dupes`, `diff`, `contrast` | 🟡 Caveats | Read text and QR codes (macOS Vision), make QR codes, find duplicate/look-alike pictures, compare two images, WCAG contrast checks |
+| `profiles` | ✅ Stable | Company profiles in `mysuite.toml`: tokens, brand, variants, export defaults, metadata policy (`metadata apply`), allowed folders; `--profile NAME` everywhere |
+| `mark` | ✅ Stable | An **invisible ownership mark** (keyed spread-spectrum): `embed` it, later `detect` whether a picture carries your mark - survives JPEG, resizing, cropping, mirroring, noise; see [docs/PROTECTION.md](docs/PROTECTION.md) |
+| `metadata declare` | 🟡 Caveats | A machine-readable **"no AI use" declaration** (PLUS DataMining + XMP Rights; `credit --no-ai` adds the C2PA training-mining assertion) |
+| `shield` | 🧪 Experimental | **Experimental** image protection against AI editing (PhotoGuard-style encoder attack); read [docs/SHIELD.md](docs/SHIELD.md) first |
+| `install` | ✅ Stable | Fetch the heavier parts once, on demand (`tools`, `vision`, `cutout`, `shield`), into `~/.cache/mysuite` |
+| `testcases` | ✅ Stable | Generates a CC0 folder of test files (about 60) to try every tool, including the awkward cases |
+| `tokens`, `variants` | 🟡 Caveats | Design tokens (CSS variables, W3C JSON, pinned git repo, Figma): list/show/check a logo's colours, `token:NAME` recolors, and logo variants (negative/on-dark from the tokens' dark theme, mono, invert, grayscale) |
+| `transform` | ✅ Stable | Quick edits: trim, crop (box or aspect), rotate, flip, resize, pad, round corners, background — in a fixed, predictable order |
+| `relight` | 🧪 Experimental | *Experimental, classical (no AI model):* re-shade a cut-out/product/logo as if lit from another direction, with presets (key-left, dramatic, golden-hour…) |
+| `inspect` | ✅ Stable | Facts about a file (size, colour mode, transparency, palette, sharpness, GPS…) as numbers — for agents and humans |
+| `pipeline` | ✅ Stable | Several tools in one declarative file (export → metadata → compress…) |
+| `mcp` | 🟡 Caveats | An MCP server so Claude Desktop, Cursor, Claude Code or a local-model client can drive all of this |
 
 Outputs are always written **beside the source** with a suffix (`_cutout`, `_stripped`, `_compressed`,
 ...). mysuite never overwrites without `--overwrite` and never modifies your original.
@@ -56,29 +61,30 @@ The rest wraps standard command-line tools, so it should work elsewhere, but tha
 
 mysuite is a young personal project, released as-is. Please read this before relying on it.
 
-| Tool | Automated tests | Known problems |
-| --- | --- | --- |
-| `export` | Yes: every format and colourspace, CMYK values read back from the PDF, the recolor matrix, unusual and hostile SVGs, naming and path safety | CMYK numbers come from an ICC profile, so they are only as good as that profile: the default is Ghostscript's SWOP-like one, not your printer's (pass `--cmyk-profile`). Gradients and images are converted by Ghostscript, not rewritten to `clean` values (and the export says so). Spot colours (Pantone) are not supported |
-| `convert` | Yes: the full source × target matrix and edge cases | single-frame targets keep only the first page/frame (and say so) |
-| `watermark` | Yes: all 9 positions, opacity, scale, SVG logos | none known |
-| `cutout` | Yes (needs the macOS helper, so skipped on CI): real Vision runs | Vision is probabilistic: it sometimes picks the wrong subject (an empty result is now reported as a failure) |
-| `metadata` | Yes: strip, randomize and **credit** (embed and read back as JPG/PNG/WebP/TIFF) | `credit` uses c2patool's built-in *test* certificate |
-| `compress` | Yes: all six codecs, presets, odd colour modes | none known |
-| `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | the optional AI backend has **never been run with real model weights**; 16-bit sources become 8-bit (now reported) |
-| `transform` | Yes: every operation checked on pixels (resize modes, crop, trim, rotate, flip, pad, round, flatten), fixed order, EXIF handling, safety | no preview exists in a terminal, so judge the result by opening the file; animated sources keep only the first frame (and say so) |
-| `relight` | Yes: the lit side is brighter for every direction, flat areas unchanged, alpha kept, tint, presets, bad values, safety | **experimental**: it fakes depth from the picture's own brightness and an alpha-mask dome, so it is a lighting nudge, not a true relight; faces and busy photos will not look right. A depth-model backend is planned |
-| `profiles` | Yes: validation of every key, layering (flags > preset > profile > file), env/flag selection, sandbox from `allow`, compress/enhance presets, metadata policy chains (strip → randomize → credit), save/list/show/delete/check, pipelines and MCP | relative paths in a profile are relative to where you run mysuite; `check` does not fetch remote token sources unless you pass `--online` |
-| `mark`, `declare` | Yes: invisible at ~40 dB, found after JPEG 30, half/3-4/1.5x size, crop, mirror, blur, noise, brightness; wrong key/id/unmarked never found; alpha kept; flat edge cases; the declaration tags read back with exiftool/inspect; the C2PA assertion with c2patool | the mark is **erased by heavy blur, rotation (unless `--deep`) and by passing the picture through an AI image model**; it proves a copy came from you, it prevents nothing; the declaration only binds cooperating crawlers and is removed by stripping metadata |
-| `shield`, `install` | Yes: the install plan/consent/cleanup/removal logic, size and alpha preservation and the pixel budget with the real worker, tiling, errors; effect measured by hand against Stable Diffusion 1.5 (docs/SHIELD.md) | **not a guarantee**: it targets the SD 1.x/2.x encoder, my half-size-and-back test removed most of the protection, it is slow (~1 min per 512 px tile on an Apple GPU), and the effect on other models and services is untested |
-| `tokens`, `variants` | Yes: CSS parsing (aliases across files, fallbacks, cycles, brands, light/dark, `@media`), W3C JSON, Figma response parsing, a pinned git source (cached, refreshable), matching, every variant on pixels, export integration; also run by hand against a real design system (Axis, not included) | the **negative** variant is only as good as the tokens: when several tokens share a colour but differ in dark mode it picks the majority and says so (`--negative-map` settles it); logo colours with no token stay as they were; Figma is **untested against a live file** (the Variables API is Enterprise-only); you can't preview, so read the warnings |
-| `kit` | Yes: every PNG of every kit has exactly the specified pixels, ICO contents, manifest and Contents.json match the files, opaque iOS icons, backgrounds, padding, overwrite and safety | the specs follow the platforms' published sizes today; platforms change them, so check before shipping an app |
-| `svg` | Yes: PDF/AI/EPS/SVGZ import renders like the original, trimming, page selection, hostile input, optimiser verified by rendering before/after, export takes these files directly, pipeline and MCP | import needs poppler (`mysuite install tools --yes`); live text becomes outlines; gradient meshes, effects and overprint are whatever the PDF flattened them to; legacy PostScript `.ai` goes through Ghostscript and is only as good as that; not verified against files from every Illustrator version |
-| `pdf` | Yes: page ranges, merge/split/extract/rotate/resize/strip/number/stamp/render/images/from-images/compress, corrupt and password-protected files, sandbox | encrypted PDFs are refused, not opened; stamps and numbers use rsvg-convert's fonts (Helvetica/Arial fallback); `compress` can make a small PDF bigger (it says so) |
-| `print`, `rename`, `sheet`, `profile` | Yes: exact pixels and dpi for cm/in/mm/px, fit modes, bleed, rename safety (collisions, swaps, existing files), contact sheets, sRGB and CMYK conversion | colour conversion honours embedded ICC profiles but cannot replace a calibrated print workflow; `rename --move` changes your originals, so use `--dry-run` first |
-| `ocr`, `qr`, `dupes`, `diff`, `contrast` | Yes (`ocr` and `qr read` need the macOS `mysuite-vision` helper, so they are skipped on CI): real Vision runs, QR round trip, duplicates (identical, resized, recompressed), diff metrics, WCAG ratios | OCR quality is whatever Apple's model gives; duplicate detection is a perceptual hash, so very similar but different pictures can be grouped (nothing is ever deleted) |
-| `inspect` | Yes: CMYK/alpha/gray, EXIF orientation/GPS/serial, blank/blurry, multipage, SVG facts, thumbnails | the "blurry" flag is a heuristic (variance of the Laplacian), not a verdict |
-| `--json`, sandbox, `pipeline`, `mcp` | Yes: one JSON document on stdout, exit codes 0–4, escape attempts (`..`, absolute paths, symlinks), pipelines end to end, the MCP server through a real MCP client | the sandbox is off unless you ask for it (the MCP server always uses it); pipelines are unproven beyond the examples; MCP tested with the Python SDK, **not yet with Claude Desktop or Cursor** |
-| Terminal dashboard | Yes: every screen has pilot tests, and the commands the forms show are run against the real CLI in tests | Drag-and-drop depends on your terminal emulator |
+| Tool | Status | Automated tests | Known problems |
+| --- | --- | --- | --- |
+| `export` | ✅ Stable | Yes: every format and colourspace, CMYK values read back from the PDF, the recolor matrix, unusual and hostile SVGs, naming and path safety | CMYK numbers come from an ICC profile, so they are only as good as that profile: the default is Ghostscript's SWOP-like one, not your printer's (pass `--cmyk-profile`). Gradients and images are converted by Ghostscript, not rewritten to `clean` values (and the export says so). Spot colours (Pantone) are not supported |
+| `convert` | ✅ Stable | Yes: the full source × target matrix and edge cases | single-frame targets keep only the first page/frame (and say so) |
+| `watermark` | ✅ Stable | Yes: all 9 positions, opacity, scale, SVG logos | none known |
+| `cutout` | 🟡 Caveats | Yes (needs the macOS helper, so skipped on CI): real Vision runs | Vision is probabilistic: it sometimes picks the wrong subject (an empty result is now reported as a failure) |
+| `metadata` | 🟡 Caveats | Yes: strip, randomize and **credit** (embed and read back as JPG/PNG/WebP/TIFF) | `credit` uses c2patool's built-in *test* certificate |
+| `compress` | ✅ Stable | Yes: all six codecs, presets, odd colour modes | none known |
+| `enhance` | 🟡 Caveats | Yes: pipeline, scratch removal, presets, CLI, TUI | the optional AI backend has **never been run with real model weights**; 16-bit sources become 8-bit (now reported) |
+| `transform` | ✅ Stable | Yes: every operation checked on pixels (resize modes, crop, trim, rotate, flip, pad, round, flatten), fixed order, EXIF handling, safety | no preview exists in a terminal, so judge the result by opening the file; animated sources keep only the first frame (and say so) |
+| `relight` | 🧪 Experimental | Yes: the lit side is brighter for every direction, flat areas unchanged, alpha kept, tint, presets, bad values, safety | **experimental**: it fakes depth from the picture's own brightness and an alpha-mask dome, so it is a lighting nudge, not a true relight; faces and busy photos will not look right. A depth-model backend is planned |
+| `profiles` | ✅ Stable | Yes: validation of every key, layering (flags > preset > profile > file), env/flag selection, sandbox from `allow`, compress/enhance presets, metadata policy chains (strip → randomize → credit), save/list/show/delete/check, pipelines and MCP | relative paths in a profile are relative to where you run mysuite; `check` does not fetch remote token sources unless you pass `--online` |
+| `mark`, `declare` | 🟡 Caveats | Yes: invisible at ~40 dB, found after JPEG 30, half/3-4/1.5x size, crop, mirror, blur, noise, brightness; wrong key/id/unmarked never found; alpha kept; flat edge cases; the declaration tags read back with exiftool/inspect; the C2PA assertion with c2patool | the mark is **erased by heavy blur, rotation (unless `--deep`) and by passing the picture through an AI image model**; it proves a copy came from you, it prevents nothing; the declaration only binds cooperating crawlers and is removed by stripping metadata |
+| `shield` | 🧪 Experimental | Yes: size and alpha preservation, the pixel budget with the real worker, tiling, errors; effect measured by hand against Stable Diffusion 1.5 (docs/SHIELD.md) | **not a guarantee, and it did not stop ChatGPT's image generation in the owner's own test** (closed model, different encoder); it targets the SD 1.x/2.x encoder, my half-size-and-back test removed most of the protection, it is slow (~1 min per 512 px tile on an Apple GPU), and the effect on other models and services is untested |
+| `install` | ✅ Stable | Yes: the install plan, consent, cleanup and removal logic | none known |
+| `tokens`, `variants` | 🟡 Caveats | Yes: CSS parsing (aliases across files, fallbacks, cycles, brands, light/dark, `@media`), W3C JSON, Figma response parsing, a pinned git source (cached, refreshable), matching, every variant on pixels, export integration; also run by hand against a real design system (Axis, not included) | the **negative** variant is only as good as the tokens: when several tokens share a colour but differ in dark mode it picks the majority and says so (`--negative-map` settles it); logo colours with no token stay as they were; Figma is **untested against a live file** (the Variables API is Enterprise-only); you can't preview, so read the warnings |
+| `kit` | ✅ Stable | Yes: every PNG of every kit has exactly the specified pixels, ICO contents, manifest and Contents.json match the files, opaque iOS icons, backgrounds, padding, overwrite and safety | the specs follow the platforms' published sizes today; platforms change them, so check before shipping an app |
+| `svg` | 🟡 Caveats | Yes: PDF/AI/EPS/SVGZ import renders like the original, trimming, page selection, hostile input, optimiser verified by rendering before/after, export takes these files directly, pipeline and MCP | import needs poppler (`mysuite install tools --yes`); live text becomes outlines; gradient meshes, effects and overprint are whatever the PDF flattened them to; legacy PostScript `.ai` goes through Ghostscript and is only as good as that; not verified against files from every Illustrator version |
+| `pdf` | ✅ Stable | Yes: page ranges, merge/split/extract/rotate/resize/strip/number/stamp/render/images/from-images/compress, corrupt and password-protected files, sandbox | encrypted PDFs are refused, not opened; stamps and numbers use rsvg-convert's fonts (Helvetica/Arial fallback); `compress` can make a small PDF bigger (it says so) |
+| `print`, `rename`, `sheet`, `profile` | ✅ Stable | Yes: exact pixels and dpi for cm/in/mm/px, fit modes, bleed, rename safety (collisions, swaps, existing files), contact sheets, sRGB and CMYK conversion | colour conversion honours embedded ICC profiles but cannot replace a calibrated print workflow; `rename --move` changes your originals, so use `--dry-run` first |
+| `ocr`, `qr`, `dupes`, `diff`, `contrast` | 🟡 Caveats | Yes (`ocr` and `qr read` need the macOS `mysuite-vision` helper, so they are skipped on CI): real Vision runs, QR round trip, duplicates (identical, resized, recompressed), diff metrics, WCAG ratios | OCR quality is whatever Apple's model gives; duplicate detection is a perceptual hash, so very similar but different pictures can be grouped (nothing is ever deleted) |
+| `inspect` | ✅ Stable | Yes: CMYK/alpha/gray, EXIF orientation/GPS/serial, blank/blurry, multipage, SVG facts, thumbnails | the "blurry" flag is a heuristic (variance of the Laplacian), not a verdict |
+| `--json`, sandbox, `pipeline`, `mcp` | 🟡 Caveats | Yes: one JSON document on stdout, exit codes 0–4, escape attempts (`..`, absolute paths, symlinks), pipelines end to end, the MCP server through a real MCP client | the sandbox is off unless you ask for it (the MCP server always uses it); pipelines are unproven beyond the examples; MCP tested with the Python SDK, **not yet with Claude Desktop or Cursor** |
+| Terminal dashboard | 🟡 Caveats | Yes: every screen has pilot tests, and the commands the forms show are run against the real CLI in tests | Drag-and-drop depends on your terminal emulator |
 
 All 22 findings from the first test pass are fixed and the suite has no expected failures. Details are in
 [docs/TEST-FINDINGS.md](docs/TEST-FINDINGS.md).
