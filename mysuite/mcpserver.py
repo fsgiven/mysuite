@@ -113,7 +113,7 @@ class MysuiteServer:
             return self._call(["compress"], inputs, {"codec": codec, "preset": preset, "quality": quality},
                               dry_run=dry_run, overwrite=overwrite)
 
-        @mcp.tool(description="Upscale/restore photos locally (classical; no AI model unless installed). preset: gentle | prime | old_photo | portrait | ai_art.")
+        @mcp.tool(description="Upscale/restore photos locally (classical; no AI model unless installed). preset: gentle | prime | old-photo | portrait | ai-art.")
         def mysuite_enhance(inputs: list[str], preset: str = "gentle", scale: int | None = None,
                             dry_run: bool = False, overwrite: bool = False) -> dict[str, Any]:
             return self._call(["enhance", "run"], inputs, {"preset": preset, "scale": scale, "backend": "classical"},

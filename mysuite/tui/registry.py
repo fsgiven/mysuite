@@ -166,11 +166,11 @@ TOOL_REGISTRY: list[ToolSpec] = [
         screen_factory=_enhance_screen_factory,
         accent="#F9A8D4",  # rose
         help=(
-            "Pick a preset (gentle, prime, old_photo, portrait, ai_art) and a scale. It is classical image processing "
+            "Pick a preset (gentle, prime, old-photo, portrait, ai-art) and a scale. It is classical image processing "
             "(no AI model unless you installed one), so it cleans and sharpens but cannot invent detail.\n"
-            "'old_photo' also fills thin straight scratches. Output is name_enhanced.png."
+            "'old-photo' also fills thin straight scratches. Output is name_enhanced.png."
         ),
-        cli="mysuite enhance run old.jpg --preset old_photo --scale 2",
+        cli="mysuite enhance run old.jpg --preset old-photo --scale 2",
     ),
     ToolSpec(
         key="kits",

@@ -827,6 +827,20 @@ EXPERIMENTAL: make images resist AI image editing (PhotoGuard-style). Needs `mys
 - `--dry-run` (boolean) Show the files and a time estimate, change nothing.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite testcases list`
+
+List what the generator makes, and what each file exercises, without writing anything.
+
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite testcases make`
+
+Generate the test folder (about 60 files, 10 MB, a few seconds). Nothing is downloaded.
+
+- `--out / -o` (path) Folder to create.
+- `--overwrite / --no-overwrite` (boolean) Write into a folder that already exists.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite tokens check`
 
 Check a logo's colours against the tokens: which are on-palette, which are off. Exit 1 with --strict if any is off.

@@ -115,3 +115,11 @@ in `AGENTS.md` and exercised by a doc-test.
 - Measured: mark found after JPEG q30, half size, crop, mirror, noise; NOT after heavy blur, rotation (without --deep) or an AI
   img2img pass (even strength 0.15).
 - Next: bring the hand-built screens (Export, Convert, Cutout, Watermark, Metadata, Compress, Enhance) in line with the new visuals.
+
+## Update 2026-10-02 (test files)
+
+- Shipped: `mysuite testcases make|list` (generated, CC0, deterministic, ~60 files incl. broken and awkward ones) and a tour test over
+  it. The tour found a real bug: dashboard/MCP help named enhance presets `old_photo`/`ai_art`, the real names are `old-photo`/`ai-art`
+  (fixed, with a test that checks help text against the CLI).
+- Still open: curated real photos (CC0/public-domain, with a source/licence manifest) and an optional on-demand larger set - waiting
+  for the user's own images or approved sources.

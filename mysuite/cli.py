@@ -27,6 +27,7 @@ from mysuite.color.cli import app as variants_app
 from mysuite.install_cli import install as install_command
 from mysuite.mark.cli import app as mark_app
 from mysuite.preset_cli import app as preset_app
+from mysuite.testcases.cli import app as testcases_app
 from mysuite.shield.cli import shield as shield_command
 from mysuite.profiles_cli import app as profiles_app
 from mysuite.tokens.cli import app as tokens_app
@@ -115,6 +116,7 @@ app.add_typer(tokens_app, name="tokens")
 app.command("install", help="Fetch the heavier parts once, when needed (helpers, the shield environment). mysuite itself stays small.")(install_command)
 app.command("shield", help="EXPERIMENTAL: make images resist AI image editing (PhotoGuard-style). Needs `mysuite install shield`.")(shield_command)
 app.add_typer(mark_app, name="mark")
+app.add_typer(testcases_app, name="testcases")
 app.add_typer(variants_app, name="variants")
 app.add_typer(profiles_app, name="profiles")
 app.add_typer(pdf_app, name="pdf")

@@ -43,6 +43,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | an invisible ownership mark, or to check whether a picture carries it | `mysuite mark embed photo.png --key SECRET --json` / `mysuite mark detect suspect.jpg --key SECRET --json` (the key is the user's secret: never invent or log one; `MYSUITE_MARK_KEY` also works). docs/PROTECTION.md says what it survives |
 | a 'no AI training/use' declaration in the file | `mysuite metadata declare photo.jpg --owner "Name" --json`; `metadata credit --no-ai` adds the C2PA assertion (a request that cooperating tools honour, not a lock) |
 | to protect an image against AI editing (experimental; slow, needs a one-time ~1.4 GB component) | `mysuite shield photo.png --json` (exit 4 + `missing_components` if not installed: ask the user before running `mysuite install shield --yes`). Read docs/SHIELD.md and do not promise protection |
+| files to try the tools on (an agent trial, a demo) | `mysuite testcases make --out DIR --json` writes ~60 generated, CC0 files with a README saying what each one exercises |
 | a whole set of files from one logo (favicon, iOS/Android app icons, social images, retina) | `mysuite kit make logo.svg --kit favicon --json` (`mysuite kit list --json` shows all kits) |
 | to merge / split / extract / rotate / resize / number / stamp / strip / compress a PDF, or turn pages into images and images into a PDF | `mysuite pdf merge a.pdf b.pdf --json`, `mysuite pdf extract doc.pdf --pages 1,3-5 --json` … (`mysuite pdf --help`) |
 | an image at an exact size or print size (500 px, 10x15cm at 300 dpi), dpi stored in the file | `mysuite print photo.jpg --size 10x15cm --dpi 300 --fit cover --json` |
@@ -81,6 +82,7 @@ mysuite variants make logo.svg --variants negative,mono-white --tokens tokens.cs
 mysuite export logo.svg --formats png --sizes 64 --variants default,negative,invert --tokens tokens.css --out out_var --json
 mysuite profiles list --json
 mysuite install --json
+mysuite testcases list --json
 mysuite metadata declare photo.jpg --owner Acme --json
 mysuite shield pic.png --dry-run --json
 mysuite profiles save acme --tokens tokens.css --brand x --formats png --sizes 64 --policy strip --json
