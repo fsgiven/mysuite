@@ -12,7 +12,7 @@ from mysuite.profiles import ProfileError
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.doctor import require_tools
 from mysuite.metadata._parsing import output_path_for
-from mysuite.metadata.metadata import credit_file, randomize_file, strip_file
+from mysuite.metadata.metadata import DATA_MINING, credit_file, declare_file, randomize_file, strip_file
 from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
@@ -117,6 +117,7 @@ def credit(
     copyright_notice: Optional[str] = typer.Option(
         None, "--copyright", help="Copyright notice to embed, e.g. '© 2026 Jane Doe'."
     ),
+    no_ai: bool = typer.Option(False, "--no-ai", help="Also record in the manifest that AI training, generative training, inference and data mining are NOT allowed (C2PA training-mining assertion)."),
     generator: str = typer.Option(
         "mysuite", "--generator",
         help="Software/tool named as the claim generator (not independently visible in "
@@ -160,7 +161,7 @@ def credit(
         input_files, mode="credited",
         run_one=lambda p: credit_file(
             p, author=author, copyright_notice=copyright_notice, generator=generator,
-            tools=config.tools, overwrite=overwrite,
+            tools=config.tools, overwrite=overwrite, no_ai=no_ai or bool(active_profile and active_profile.metadata.get("no_ai")),
         ),
         dry_run=dry_run, quiet=quiet,
     )
@@ -244,11 +245,15 @@ def apply(
     for step in steps:
         require_tools(config.tools, f"metadata-{step}")
     jsonout.set_extra(policy=steps, profile=active_profile.name if active_profile else None)
-    modes = {"strip": "stripped", "randomize": "randomized", "credit": "credited"}
+    modes = {"strip": "stripped", "randomize": "randomized", "credit": "credited", "declare": "declared"}
+    profile_meta = active_profile.metadata if active_profile else {}
     runners = {
         "strip": lambda p: strip_file(p, tools=config.tools, overwrite=overwrite),
         "randomize": lambda p: randomize_file(p, tools=config.tools, overwrite=overwrite),
-        "credit": lambda p: credit_file(p, author=author, copyright_notice=copyright_notice, generator="mysuite", tools=config.tools, overwrite=overwrite),
+        "credit": lambda p: credit_file(p, author=author, copyright_notice=copyright_notice, generator="mysuite", tools=config.tools,
+                                        overwrite=overwrite, no_ai=bool(profile_meta.get("no_ai"))),
+        "declare": lambda p: declare_file(p, policy="prohibited", owner=author, terms_url=profile_meta.get("terms_url"),
+                                          tools=config.tools, overwrite=overwrite),
     }
     failed = 0
     for src in input_files:
@@ -272,3 +277,37 @@ def apply(
                 log_step(escape(str(current)))
     if failed:
         raise typer.Exit(1)
+
+
+@app.command(
+    "declare",
+    help="Write a machine-readable 'no AI use' declaration (PLUS DataMining + XMP Rights) into a copy (name_declared.ext). "
+    "It is a legal/consent signal that cooperating crawlers and tools read - it does not technically block anything.",
+)
+@jsonout.with_json("metadata-declare")
+def declare(
+    inputs: List[Path] = typer.Argument(..., exists=True, readable=True, help="Image files and/or folders."),
+    policy: str = typer.Option("prohibited", "--policy", help=f"{', '.join(DATA_MINING)}: what is not allowed."),
+    owner: Optional[str] = typer.Option(None, "--owner", help="Copyright owner name to record."),
+    terms_url: Optional[str] = typer.Option(None, "--terms-url", help="Link to your AI-use terms."),
+    recursive: bool = typer.Option(False, "--recursive", "-r"),
+    overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    config_path: Optional[Path] = typer.Option(None, "--config", "-c", help="Explicit path to mysuite.toml."),
+    quiet: bool = typer.Option(False, "--quiet", "-q"),
+) -> None:
+    if policy not in DATA_MINING:
+        log_error(f"policy must be one of {', '.join(DATA_MINING)}")
+        raise typer.Exit(1)
+    try:
+        input_files = resolve_input_files(inputs, recursive=recursive)
+        config = load_config(config_path)
+    except (InvalidInputError, MysuiteConfigError) as exc:
+        log_error(escape(str(exc)))
+        raise typer.Exit(1) from exc
+    require_tools(config.tools, "metadata-declare")
+    _run_batch(
+        input_files, mode="declared",
+        run_one=lambda p: declare_file(p, policy=policy, owner=owner, terms_url=terms_url, tools=config.tools, overwrite=overwrite),
+        dry_run=dry_run, quiet=quiet,
+    )

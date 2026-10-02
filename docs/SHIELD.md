@@ -45,4 +45,4 @@ runs offline; only the install step uses the network.
 ## Better habits that cost nothing
 
 Save the protected PNG as is (do not re-compress it), post a smaller preview than the original where you can, keep
-originals private, and combine this with a visible watermark and a "no AI training" declaration (planned next).
+originals private, and combine this with an invisible ownership mark and a "no AI training" declaration - see [PROTECTION.md](PROTECTION.md), which also lists what each layer proves and what survives.

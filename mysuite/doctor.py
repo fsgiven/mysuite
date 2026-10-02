@@ -73,6 +73,7 @@ NEEDS: dict[str, tuple[str, ...]] = {
     "metadata-strip": ("exiftool", "magick"),
     "metadata-randomize": ("exiftool", "magick"),
     "metadata-credit": ("c2patool",),
+    "metadata-declare": ("exiftool",),
     "compress-mozjpeg": ("cjpeg",),
     "compress-webp": ("cwebp",),
     "compress-avif": ("avifenc",),

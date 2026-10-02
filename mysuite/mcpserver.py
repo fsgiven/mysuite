@@ -119,9 +119,9 @@ class MysuiteServer:
             return self._call(["enhance", "run"], inputs, {"preset": preset, "scale": scale, "backend": "classical"},
                               dry_run=dry_run, overwrite=overwrite)
 
-        @mcp.tool(description="Metadata: action 'strip' (remove everything incl. GPS), 'randomize' (plausible decoy camera identity), 'credit' (embed author/copyright as C2PA; needs author) or 'apply' (a policy such as 'strip,credit', or the profile's). profile = a company profile name from mysuite.toml.")
+        @mcp.tool(description="Metadata: action 'strip' (remove everything incl. GPS), 'randomize' (plausible decoy camera identity), 'credit' (embed author/copyright as C2PA; needs author) or 'declare' (write a machine-readable 'no AI use' notice: policy prohibited | prohibited-ai-training | prohibited-genai-training, owner, terms_url) or 'apply' (a policy such as 'strip,credit,declare', or the profile's). profile = a company profile name from mysuite.toml.")
         def mysuite_metadata(inputs: list[str], action: str, author: str | None = None, copyright: str | None = None,
-                             policy: str | None = None, profile: str | None = None, dry_run: bool = False,
+                             policy: str | None = None, owner: str | None = None, terms_url: str | None = None, profile: str | None = None, dry_run: bool = False,
                              overwrite: bool = False) -> dict[str, Any]:
             if action not in engine.METADATA_ACTIONS:
                 return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
@@ -129,6 +129,8 @@ class MysuiteServer:
             opts = {"author": author, "copyright": copyright} if action in ("credit", "apply") else {}
             if action == "apply":
                 opts["policy"] = policy
+            if action == "declare":
+                opts = {"owner": owner, "terms_url": terms_url, "policy": policy}
             if action == "credit" and not author and not profile:
                 return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
                         "errors": ["credit needs author (or a profile that has one)"]}
@@ -273,6 +275,15 @@ class MysuiteServer:
         def mysuite_shield(inputs: list[str], strength: str | None = None, steps: int | None = None, dry_run: bool = False,
                            overwrite: bool = False) -> dict[str, Any]:
             return self._call(["shield"], inputs, {"strength": strength, "steps": steps}, dry_run=dry_run, overwrite=overwrite)
+
+        @mcp.tool(description="Invisible ownership mark. action 'embed' (writes <name>_marked.png) or 'detect' (is MY mark in this picture? returns detected + confidence z, scale, mirrored). key = the owner's SECRET (never invent one: ask the user); id = optional label (a different id is a different mark). Survives JPEG, resizing, cropping, mirroring, noise; not heavy blur, rotation (unless deep=true) or AI regeneration - see docs/PROTECTION.md.")
+        def mysuite_mark(action: str, inputs: list[str], key: str, id: str | None = None, strength: str | None = None,
+                         deep: bool = False, overwrite: bool = False) -> dict[str, Any]:
+            if action == "embed":
+                return self._call(["mark", "embed"], inputs, {"key": key, "id": id, "strength": strength}, overwrite=overwrite)
+            if action == "detect":
+                return self._call(["mark", "detect"], inputs, {"key": key, "id": id, "deep": deep or None})
+            return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [], "errors": ["action must be embed or detect"]}
 
         @mcp.tool(description="List the on-demand components (helpers, the shield environment): size, what they need, installed or not. Read only: installing downloads gigabytes, so it is deliberately not offered here - tell the user to run `mysuite install NAME`.")
         def mysuite_components() -> dict[str, Any]:

@@ -15,7 +15,9 @@ default presets, allowed folders - in mysuite.toml under [profiles.NAME].
     profiles = ["rgb", "cmyk"]
     cmyk_mode = "clean"
     [profiles.acme.metadata]                  # what `mysuite metadata apply` does
-    policy = ["strip", "credit"]              # strip | randomize | credit, in this order
+    policy = ["strip", "credit", "declare"]   # strip | randomize | credit | declare, in this order
+    no_ai = true                              # credit also records "no AI training/mining" in the C2PA manifest
+    terms_url = "https://acme.example/ai-terms"
     author = "Acme Corp"
     copyright = "© 2026 Acme Corp"
 
@@ -28,10 +30,10 @@ import os
 from dataclasses import dataclass, field, fields
 from typing import Any
 
-POLICIES = ("strip", "randomize", "credit")
+POLICIES = ("strip", "randomize", "credit", "declare")
 TOP_KEYS = {"description", "tokens", "brand", "theme", "variants", "negative_map", "allow", "compress_preset",
             "enhance_preset", "export", "metadata"}
-META_KEYS = {"policy", "author", "copyright"}
+META_KEYS = {"policy", "author", "copyright", "no_ai", "terms_url"}
 
 
 class ProfileError(ValueError):
@@ -95,6 +97,8 @@ def parse_profile(name: str, data: Any) -> Profile:
         raise ProfileError(f"profile {name!r}: metadata policy must be a list of {', '.join(POLICIES)}")
     if "credit" in profile.policy and not meta.get("author"):
         raise ProfileError(f"profile {name!r}: the credit policy needs metadata.author")
+    if "no_ai" in meta and not isinstance(meta["no_ai"], bool):
+        raise ProfileError(f"profile {name!r}: metadata.no_ai must be true or false")
     for key in ("tokens", "brand", "variants", "compress_preset", "enhance_preset"):
         if getattr(profile, key) is not None and not isinstance(getattr(profile, key), str):
             raise ProfileError(f"profile {name!r}: {key} must be text")

@@ -109,6 +109,8 @@ def save(
     policy: Optional[str] = typer.Option(None, "--policy", help="Metadata policy steps, e.g. strip,credit."),
     author: Optional[str] = typer.Option(None, "--author", help="Metadata credit: author."),
     copyright_notice: Optional[str] = typer.Option(None, "--copyright", help="Metadata credit: copyright line."),
+    no_ai: Optional[bool] = typer.Option(None, "--no-ai/--allow-ai", help="Metadata: record a 'no AI training/mining' declaration."),
+    terms_url: Optional[str] = typer.Option(None, "--terms-url", help="Metadata declare: link to your AI-use terms."),
     compress_preset: Optional[str] = typer.Option(None, "--compress-preset"),
     enhance_preset: Optional[str] = typer.Option(None, "--enhance-preset"),
     overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite", help="Replace a profile of the same name."),
@@ -120,7 +122,7 @@ def save(
         "profiles": csv(colour_profiles), "cmyk_mode": cmyk_mode, "cmyk_profile": cmyk_profile,
         "out_dir": out_dir, "background": background,
     }.items() if v is not None}
-    meta = {k: v for k, v in {"policy": csv(policy), "author": author, "copyright": copyright_notice}.items() if v is not None}
+    meta = {k: v for k, v in {"policy": csv(policy), "author": author, "copyright": copyright_notice, "no_ai": no_ai, "terms_url": terms_url}.items() if v is not None}
     data = {k: v for k, v in {
         "description": description, "tokens": tokens, "brand": brand, "theme": theme, "variants": variants,
         "negative_map": negative_map or None, "allow": allow or None, "compress_preset": compress_preset,

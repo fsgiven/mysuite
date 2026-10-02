@@ -108,7 +108,17 @@ def randomize_file(
     return MetadataOutcome(input_path, output_path, "written")
 
 
-def _build_manifest(*, author: str, copyright_notice: str | None, generator: str) -> dict:
+NO_AI_ENTRIES = ("c2pa.ai_generative_training", "c2pa.ai_training", "c2pa.ai_inference", "c2pa.data_mining")
+
+# PLUS data-mining vocabulary, spelled the way exiftool writes it (value -> DMI-... code)
+DATA_MINING = {
+    "prohibited": "Prohibited",
+    "prohibited-ai-training": "Prohibited for AI/ML training",
+    "prohibited-genai-training": "Prohibited for Generative AI/ML training",
+}
+
+
+def _build_manifest(*, author: str, copyright_notice: str | None, generator: str, no_ai: bool = False) -> dict:
     creative_work: dict = {
         "@context": "https://schema.org",
         "@type": "CreativeWork",
@@ -116,10 +126,10 @@ def _build_manifest(*, author: str, copyright_notice: str | None, generator: str
     }
     if copyright_notice:
         creative_work["copyrightNotice"] = copyright_notice
-    return {
-        "claim_generator": generator,
-        "assertions": [{"label": "stds.schema-org.CreativeWork", "data": creative_work}],
-    }
+    assertions: list[dict] = [{"label": "stds.schema-org.CreativeWork", "data": creative_work}]
+    if no_ai:
+        assertions.append({"label": "c2pa.training-mining", "data": {"entries": {e: {"use": "notAllowed"} for e in NO_AI_ENTRIES}}})
+    return {"claim_generator": generator, "assertions": assertions}
 
 
 def credit_file(
@@ -130,6 +140,7 @@ def credit_file(
     generator: str = "mysuite",
     tools: ToolPaths,
     overwrite: bool = False,
+    no_ai: bool = False,
 ) -> MetadataOutcome:
     """Embeds a signed C2PA provenance manifest (author/copyright/generator)
     via c2patool, writing a new file beside the source (name_credited.ext).
@@ -149,7 +160,7 @@ def credit_file(
     if not overwrite and output_path.exists():
         return MetadataOutcome(input_path, output_path, "skipped_existing")
 
-    manifest = _build_manifest(author=author, copyright_notice=copyright_notice, generator=generator)
+    manifest = _build_manifest(author=author, copyright_notice=copyright_notice, generator=generator, no_ai=no_ai)
     manifest_path = _tmp_sibling(input_path, ".json")
     manifest_path.write_text(json.dumps(manifest))
 
@@ -164,4 +175,42 @@ def credit_file(
     finally:
         manifest_path.unlink(missing_ok=True)
 
+    return MetadataOutcome(input_path, output_path, "written")
+
+
+def declare_file(
+    input_path: Path,
+    *,
+    policy: str = "prohibited",
+    owner: str | None = None,
+    terms_url: str | None = None,
+    tools: ToolPaths,
+    overwrite: bool = False,
+) -> MetadataOutcome:
+    """Writes a machine-readable "no AI use" declaration into a COPY (name_declared.ext): the PLUS DataMining property,
+    XMP Rights (Marked, UsageTerms, WebStatement) and optionally the owner. Honoured only by crawlers and tools that
+    choose to read it - it is a legal/consent signal, not a technical block."""
+    if policy not in DATA_MINING:
+        raise ValueError(f"policy must be one of {', '.join(DATA_MINING)}")
+    output_path = output_path_for(input_path, "declared")
+    if not overwrite and output_path.exists():
+        return MetadataOutcome(input_path, output_path, "skipped_existing")
+    terms = "No use for AI/ML training, generative AI, or data mining without the owner's written permission."
+    args = [
+        f"-XMP-plus:DataMining={DATA_MINING[policy]}",
+        "-XMP-xmpRights:Marked=True",
+        f"-XMP-xmpRights:UsageTerms={terms}",
+    ]
+    if terms_url:
+        args.append(f"-XMP-xmpRights:WebStatement={terms_url}")
+    if owner:
+        args += [f"-XMP-plus:CopyrightOwnerName={owner}", f"-XMP-xmpRights:Owner={owner}"]
+
+    def write(tmp_path: Path) -> None:
+        import shutil
+
+        shutil.copyfile(input_path, tmp_path)
+        run([tools.exiftool, "-q", "-overwrite_original", "-m", *args, str(tmp_path)])
+
+    atomic_write_via(output_path, write, preserve_extension=True)
     return MetadataOutcome(input_path, output_path, "written")

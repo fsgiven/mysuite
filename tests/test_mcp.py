@@ -51,7 +51,7 @@ async def test_lists_every_tool_with_descriptions(work):
     async with server(work) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert {"mysuite_inspect", "mysuite_export", "mysuite_convert", "mysuite_cutout", "mysuite_watermark",
-            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_relight", "mysuite_metadata", "mysuite_kit", "mysuite_pdf", "mysuite_ocr", "mysuite_qr", "mysuite_dupes", "mysuite_diff", "mysuite_contrast", "mysuite_print", "mysuite_rename", "mysuite_sheet", "mysuite_profile", "mysuite_tokens", "mysuite_variants", "mysuite_profiles", "mysuite_shield", "mysuite_components", "mysuite_pipeline_run", "mysuite_doctor",
+            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_relight", "mysuite_metadata", "mysuite_kit", "mysuite_pdf", "mysuite_ocr", "mysuite_qr", "mysuite_dupes", "mysuite_diff", "mysuite_contrast", "mysuite_print", "mysuite_rename", "mysuite_sheet", "mysuite_profile", "mysuite_tokens", "mysuite_variants", "mysuite_profiles", "mysuite_shield", "mysuite_mark", "mysuite_components", "mysuite_pipeline_run", "mysuite_doctor",
             "mysuite_schema"} <= set(tools)
     assert all(t.description for t in tools.values())
     assert "dry_run" in tools["mysuite_export"].input_schema["properties"]
@@ -271,3 +271,25 @@ async def test_components_and_shield_through_mcp(work, tmp_path):
         assert plan["ok"] and plan["items"][0]["status"] == "planned" and plan["items"][0]["estimated_seconds"] > 0
         tools = {t.name for t in (await c.list_tools()).tools}
         assert "mysuite_install" not in tools                              # an agent cannot start a multi-GB download
+
+
+@pytest.mark.asyncio
+async def test_mark_and_declare_through_mcp(work):
+    import numpy as np
+    from PIL import Image as PILImage
+
+    rng = np.random.default_rng(1)
+    base = rng.normal(0, 1, (32, 40, 3))
+    arr = ((base - base.min()) / np.ptp(base) * 200 + 20).astype(np.uint8)
+    PILImage.fromarray(arr).resize((400, 320), PILImage.Resampling.BICUBIC).save(work / "ph.png")
+    async with server(work) as c:
+        emb = await call(c, "mysuite_mark", action="embed", inputs=[str(work / "ph.png")], key="a secret key")
+        assert emb["ok"] and emb["items"][0]["output"].endswith("ph_marked.png")
+        yes = await call(c, "mysuite_mark", action="detect", inputs=[str(work / "ph_marked.png")], key="a secret key")
+        no = await call(c, "mysuite_mark", action="detect", inputs=[str(work / "ph_marked.png")], key="not my key!!")
+        assert yes["items"][0]["detected"] is True and no["items"][0]["detected"] is False
+        bad = await call(c, "mysuite_mark", action="remove", inputs=[str(work / "ph.png")], key="a secret key")
+        assert bad["exit_code"] == 2
+        if shutil.which("exiftool"):
+            dec = await call(c, "mysuite_metadata", inputs=[str(work / "pic.png")], action="declare", policy="prohibited", owner="Me")
+            assert dec["ok"] and dec["items"][0]["output"].endswith("pic_declared.png")

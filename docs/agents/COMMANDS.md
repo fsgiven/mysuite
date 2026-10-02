@@ -323,6 +323,32 @@ Make a kit from a logo: `mysuite kit make logo.svg --kit favicon`.
 - `--quiet / -q` (boolean) Print only the summary.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite mark detect`
+
+Check whether pictures carry YOUR mark. Exit code 1 if none of them does with --strict.
+
+- argument `inputs` (path, required, repeatable) Pictures to check.
+- `--key` (str) Your secret key (or MYSUITE_MARK_KEY).
+- `--id` (str) The id used when embedding (if any).
+- `--recursive / -r` (boolean) 
+- `--strict` (boolean) Exit 1 when a picture does NOT carry the mark.
+- `--deep` (boolean) Also look for slightly rotated copies (±3°): much slower.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite mark embed`
+
+Add your invisible mark. Output: <name>_marked.png beside the original.
+
+- argument `inputs` (path, required, repeatable) Images / folders.
+- `--key` (str) Your secret key (or MYSUITE_MARK_KEY). Same key = same mark.
+- `--id` (str) Optional label mixed into the mark, e.g. a campaign or recipient: a different id is a different mark.
+- `--strength` (str, default `standard`) subtle (~44 dB), standard (~40 dB), strong (~37 dB): stronger survives more, shows more.
+- `--format` (str, default `png`) png (best), tiff or jpeg.
+- `--quality` (int, default `95`) JPEG quality.
+- `--recursive / -r` (boolean) 
+- `--overwrite / --no-overwrite` (boolean) 
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite mcp`
 
 Run the MCP server (stdio) so MCP clients can use mysuite. Needs `pip install 'mysuite[mcp]'`. Sandboxed to --allow folders (default: the current folder).
@@ -351,12 +377,28 @@ Embed a signed C2PA provenance manifest (author/copyright) for correct crediting
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories (non-recursive unless --recursive).
 - `--author / -a` (str) Author/creator name to embed (or the active profile's metadata.author).
 - `--copyright` (str) Copyright notice to embed, e.g. '© 2026 Jane Doe'.
+- `--no-ai` (boolean) Also record in the manifest that AI training, generative training, inference and data mining are NOT allowed (C2PA training-mining assertion).
 - `--generator` (str, default `mysuite`) Software/tool named as the claim generator (not independently visible in c2patool's own read-back report on all versions — author/copyright are the fields that reliably read back).
 - `--recursive / -r` (boolean) Recurse into subdirectories.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing output files.
 - `--dry-run` (boolean) Preview input -> output pairs, write nothing.
 - `--config / -c` (path) Explicit path to mysuite.toml.
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite metadata declare`
+
+Write a machine-readable 'no AI use' declaration (PLUS DataMining + XMP Rights) into a copy (name_declared.ext). It is a legal/consent signal that cooperating crawlers and tools read - it does not technically block anything.
+
+- argument `inputs` (path, required, repeatable) Image files and/or folders.
+- `--policy` (str, default `prohibited`) prohibited, prohibited-ai-training, prohibited-genai-training: what is not allowed.
+- `--owner` (str) Copyright owner name to record.
+- `--terms-url` (str) Link to your AI-use terms.
+- `--recursive / -r` (boolean) 
+- `--overwrite / --no-overwrite` (boolean) 
+- `--dry-run` (boolean) 
+- `--config / -c` (path) Explicit path to mysuite.toml.
+- `--quiet / -q` (boolean) 
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
 ## `mysuite metadata randomize`
@@ -673,6 +715,8 @@ Create or replace a profile in mysuite.toml. Only the options you give are store
 - `--policy` (str) Metadata policy steps, e.g. strip,credit.
 - `--author` (str) Metadata credit: author.
 - `--copyright` (str) Metadata credit: copyright line.
+- `--no-ai / --allow-ai` (boolean) Metadata: record a 'no AI training/mining' declaration.
+- `--terms-url` (str) Metadata declare: link to your AI-use terms.
 - `--compress-preset` (str) 
 - `--enhance-preset` (str) 
 - `--overwrite / --no-overwrite` (boolean) Replace a profile of the same name.

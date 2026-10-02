@@ -40,6 +40,8 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | to change the lighting direction/tint of a cut-out, product or logo (experimental) | `mysuite relight FILE --preset golden-hour --json` or `--direction left --height 30` |
 | to use the company's defaults (tokens, brand, variants, sizes, CMYK, metadata policy, allowed folders) | `mysuite --profile acme export logo.svg --json` (see `mysuite profiles list --json`) |
 | to strip the old metadata and credit the company in one go | `mysuite --profile acme metadata apply photo.jpg --json` (or `--policy strip,credit --author "Acme"`) |
+| an invisible ownership mark, or to check whether a picture carries it | `mysuite mark embed photo.png --key SECRET --json` / `mysuite mark detect suspect.jpg --key SECRET --json` (the key is the user's secret: never invent or log one; `MYSUITE_MARK_KEY` also works). docs/PROTECTION.md says what it survives |
+| a 'no AI training/use' declaration in the file | `mysuite metadata declare photo.jpg --owner "Name" --json`; `metadata credit --no-ai` adds the C2PA assertion (a request that cooperating tools honour, not a lock) |
 | to protect an image against AI editing (experimental; slow, needs a one-time ~1.4 GB component) | `mysuite shield photo.png --json` (exit 4 + `missing_components` if not installed: ask the user before running `mysuite install shield --yes`). Read docs/SHIELD.md and do not promise protection |
 | a whole set of files from one logo (favicon, iOS/Android app icons, social images, retina) | `mysuite kit make logo.svg --kit favicon --json` (`mysuite kit list --json` shows all kits) |
 | to merge / split / extract / rotate / resize / number / stamp / strip / compress a PDF, or turn pages into images and images into a PDF | `mysuite pdf merge a.pdf b.pdf --json`, `mysuite pdf extract doc.pdf --pages 1,3-5 --json` … (`mysuite pdf --help`) |
@@ -79,6 +81,7 @@ mysuite variants make logo.svg --variants negative,mono-white --tokens tokens.cs
 mysuite export logo.svg --formats png --sizes 64 --variants default,negative,invert --tokens tokens.css --out out_var --json
 mysuite profiles list --json
 mysuite install --json
+mysuite metadata declare photo.jpg --owner Acme --json
 mysuite shield pic.png --dry-run --json
 mysuite profiles save acme --tokens tokens.css --brand x --formats png --sizes 64 --policy strip --json
 mysuite kit list --json
@@ -218,7 +221,7 @@ Claude Desktop / Cursor (`mcpServers` in their config JSON):
 
 Tools: `mysuite_inspect`, `mysuite_export`, `mysuite_convert`, `mysuite_cutout`, `mysuite_watermark`,
 `mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_relight`, `mysuite_kit`, `mysuite_pdf`,
-`mysuite_tokens`, `mysuite_variants`, `mysuite_profiles`, `mysuite_shield`, `mysuite_components`, `mysuite_print`, `mysuite_rename`, `mysuite_sheet`, `mysuite_profile`, `mysuite_ocr`, `mysuite_qr`, `mysuite_dupes`, `mysuite_diff`, `mysuite_contrast`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
+`mysuite_tokens`, `mysuite_variants`, `mysuite_profiles`, `mysuite_shield`, `mysuite_mark`, `mysuite_components`, `mysuite_print`, `mysuite_rename`, `mysuite_sheet`, `mysuite_profile`, `mysuite_ocr`, `mysuite_qr`, `mysuite_dupes`, `mysuite_diff`, `mysuite_contrast`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
 `mysuite_schema`; resources `mysuite://guide`, `mysuite://schema`, `mysuite://allowed-folders`. They run the same
 commands as the CLI and return the same JSON, always sandboxed, never overwriting unless `overwrite=true`.
 Without `--allow` the server only sees the folder it was started in. With a local model (Ollama, LM Studio, …)

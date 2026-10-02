@@ -284,19 +284,25 @@ TOOL_REGISTRY: list[ToolSpec] = [
         cli="mysuite profiles save acme --tokens tokens/ --brand acme --policy strip,credit --author \"Acme\"",
     ),
     ToolSpec(
-        key="shield",
-        label="Shield",
-        description="Experimental: make an image resist AI editing. Slow, needs a one-time download.",
-        screen_factory=_auto_factory("shield"),
+        key="protect",
+        label="Protect",
+        description="Ownership mark, no-AI declaration, experimental shield against AI editing.",
+        screen_factory=_auto_factory("protect"),
         accent="#C7D2FE",  # periwinkle-white
-        commands=(("Protect images against AI editing", ("shield",)),),
-        help=(
-            "Adds a small invisible-ish pattern that confuses the image encoder behind Stable Diffusion-style editors, so an AI "
-            "'edit' of your picture turns into something else. Output is a lossless PNG (_shielded). It takes about a minute per "
-            "512 px tile, needs the shield component (Parts card, ~1.4 GB, fetched once), and is NOT a guarantee: resizing or "
-            "denoising can remove it, and it targets one model family. Tick 'dry run' first for a time estimate. See docs/SHIELD.md."
+        commands=(
+            ("Add an invisible ownership mark", ("mark", "embed")),
+            ("Check a picture for my mark", ("mark", "detect")),
+            ("Declare 'no AI use' in the file", ("metadata", "declare")),
+            ("Shield against AI editing (experimental)", ("shield",)),
         ),
-        cli="mysuite shield photo.png --strength standard",
+        help=(
+            "Four layers, from dependable to experimental. MARK hides a keyed pattern in the picture that survives JPEG, resizing, "
+            "cropping, mirroring and noise, so you can later prove a copy came from you (keep your key secret; heavy blur, rotation or "
+            "AI regeneration erase it). DECLARE writes a 'no AI training/mining' notice into a copy; only cooperating crawlers honour it. "
+            "SHIELD is experimental: it makes Stable Diffusion-style editors produce something else from your picture, needs a one-time "
+            "~1.4 GB part (Parts card), takes about a minute per 512 px tile and is largely undone by resizing. See docs/PROTECTION.md."
+        ),
+        cli="mysuite mark embed photo.png --key YOUR-SECRET",
     ),
     ToolSpec(
         key="parts",

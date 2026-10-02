@@ -106,3 +106,12 @@ in `AGENTS.md` and exercised by a doc-test.
 - Next (agreed): the solid part of protection - a "no AI training/mining" declaration (IPTC PLUS DataMining + C2PA
   training-mining assertion) in `metadata credit/apply`, and an invisible ownership watermark that survives resize/JPEG;
   then the hand-built screens get the new visuals.
+
+## Update 2026-10-02 (protection, solid layers)
+
+- Shipped: `mysuite mark embed|detect` (keyed spread-spectrum ownership mark; scale search, mirror, optional `--deep` rotation),
+  `metadata declare`, `credit --no-ai`, profile `no_ai`/`terms_url` and the `declare` policy step, `inspect` shows
+  `ai_declaration`, MCP `mysuite_mark`, a "Protect" dashboard card (mark/detect/declare/shield), docs/PROTECTION.md with measurements.
+- Measured: mark found after JPEG q30, half size, crop, mirror, noise; NOT after heavy blur, rotation (without --deep) or an AI
+  img2img pass (even strength 0.15).
+- Next: bring the hand-built screens (Export, Convert, Cutout, Watermark, Metadata, Compress, Enhance) in line with the new visuals.

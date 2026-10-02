@@ -25,7 +25,7 @@ from mysuite.convert._parsing import SOURCE_EXTENSIONS
 MAX_STEPS = 20
 RESERVED = {"tool", "action", "id", "from", "inputs", "only"}
 SINGLE = {"export", "convert", "cutout", "watermark", "compress", "inspect", "transform", "relight", "ocr", "dupes"}
-METADATA_ACTIONS = {"strip", "randomize", "credit", "apply"}
+METADATA_ACTIONS = {"strip", "randomize", "credit", "declare", "apply"}
 PDF_ACTIONS = {"info", "merge", "split", "extract", "rotate", "resize", "strip", "number", "stamp", "images", "render", "from-images", "compress"}
 
 
@@ -118,6 +118,11 @@ def _parse_step(index: int, raw: dict[str, Any], commands: dict[str, Any]) -> St
         command = ["enhance", "run"]
     elif tool == "variants":
         command = ["variants", "make"]
+    elif tool == "mark":
+        action = raw.get("action")
+        if action not in ("embed", "detect"):
+            raise PipelineError(f"step {index}: mark needs action = embed or detect")
+        command = ["mark", action]
     elif tool == "kit":
         command = ["kit", "make"]
     elif tool == "pdf":
@@ -130,7 +135,7 @@ def _parse_step(index: int, raw: dict[str, Any], commands: dict[str, Any]) -> St
     else:
         raise PipelineError(
             f"step {index}: unknown tool {tool!r} - expected one of "
-            f"{', '.join(sorted(SINGLE | {'metadata', 'enhance', 'kit', 'pdf', 'variants'}))}"
+            f"{', '.join(sorted(SINGLE | {'metadata', 'enhance', 'kit', 'pdf', 'variants', 'mark'}))}"
         )
     spec = commands[" ".join(command)]
     valid = {}

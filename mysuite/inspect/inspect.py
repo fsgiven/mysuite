@@ -68,6 +68,8 @@ def _exif_summary(path: Path, tools: ToolPaths) -> dict[str, Any]:
         "camera": " ".join(str(tags[k]) for k in ("IFD0:Make", "IFD0:Model") if k in tags) or None,
         "software": tags.get("IFD0:Software"),
         "captured": tags.get("ExifIFD:DateTimeOriginal"),
+        "ai_declaration": tags.get("XMP-plus:DataMining"),                # e.g. DMI-PROHIBITED-AIMLTRAINING
+        "usage_terms": tags.get("XMP-xmpRights:UsageTerms"),
         "tag_count": len(tags),
     }
 
