@@ -76,6 +76,7 @@ async def test_export_screen_bad_inputs_flash_errors_and_do_not_run(tmp_path):
     async with MysuiteApp().run_test() as pilot:
         sc = await open_tool(pilot, "export")
         sc.query_one("#input-svg", Input).value = str(tmp_path / "missing.svg")
+        await pilot.pause()                       # typing settles before Run is pressed
         sc.action_run()
         await pilot.pause()
         assert "field-error" in sc.query_one("#input-svg", Input).classes

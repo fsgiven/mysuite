@@ -435,3 +435,120 @@ AutoToolScreen #run-log {
 AutoToolScreen #group-what, AutoToolScreen #group-fields, AutoToolScreen #fields {
     height: auto;
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Single-tool screens built on mysuite.tui.shell.ToolScreen (Export first; the others follow).
+   Compact by design: one-line inputs, short labels, form on the left, plan + command + output on the right.
+   --------------------------------------------------------------------------------------------- */
+
+ToolScreen #tool-body { height: 1fr; }
+
+ToolScreen #form-pane {
+    width: 1fr;
+    min-width: 54;
+    max-width: 90;
+    padding: 0 1;
+    border-right: solid #2A2E3F;
+}
+
+ToolScreen #form { height: 1fr; padding: 0 1 0 0; }
+
+ToolScreen #action-row {
+    height: 3;
+    margin: 0;
+    padding-top: 1;
+    align: left middle;
+    border-top: solid #1B1E2B;
+}
+
+ToolScreen #action-row Button { margin-right: 1; }
+ToolScreen #action-row Checkbox { margin-right: 1; }
+
+ToolScreen #results-pane { width: 1fr; padding: 0 1; height: 100%; }
+
+ToolScreen .section { color: #7DD3FC; text-style: bold; margin: 1 0 0 0; height: 1; }
+ToolScreen .fl { margin: 0; height: 1; color: #8B93A7; }
+
+ToolScreen Input { height: 1; padding: 0 1; }
+ToolScreen Select { height: 1; }
+ToolScreen SelectCurrent { height: 1; padding: 0 1; }
+ToolScreen Select > SelectOverlay { max-height: 12; }
+
+ToolScreen .field { height: auto; margin: 1 1 0 0; }
+ToolScreen .pair { height: auto; margin-top: 0; }
+ToolScreen .pair > .field { width: 1fr; }
+ToolScreen .pair > .narrow { width: 22; }
+ToolScreen .pair > .grow { width: 1fr; }
+ToolScreen .field-row { height: 1; margin-top: 0; }
+ToolScreen .field-row Input { width: 1fr; }
+
+ToolScreen .mini {
+    height: 1;
+    min-width: 0;
+    padding: 0 1;
+    margin: 0 0 0 1;
+    border: none;
+    background: #1B1E2B;
+    color: #E8E8E8;
+}
+ToolScreen .mini:hover { background: #2A2E3F; }
+ToolScreen .mini:focus { border: none; text-style: bold reverse; }
+ToolScreen Button.-primary { height: 1; border: none; min-width: 14; }
+ToolScreen #action-row Button { height: 1; border: none; min-width: 10; }
+
+ToolScreen .chips { height: auto; margin-top: 0; }
+ToolScreen Checkbox.chip { height: 1; padding: 0; margin: 0; }
+ToolScreen Checkbox { height: 1; }
+
+ToolScreen .file-target { height: auto; }
+ToolScreen .target-status { height: auto; margin-top: 0; padding: 0 1; }
+
+ToolScreen Collapsible { border: none; background: transparent; padding: 0; margin-top: 1; }
+ToolScreen CollapsibleTitle { padding: 0 1; background: #161822; color: #E8E8E8; }
+ToolScreen Collapsible > Contents { padding: 0 0 0 1; height: auto; }
+
+ToolScreen #plan {
+    border: round #2A2E3F;
+    border-title-color: #7DD3FC;
+    padding: 0 1;
+    height: auto;
+    min-height: 3;
+    margin-bottom: 0;
+}
+
+ToolScreen .command-line {
+    border: round #2A2E3F;
+    border-title-color: #7DD3FC;
+    height: auto;
+    min-height: 3;
+    padding: 0 1;
+    align: left middle;
+}
+ToolScreen .command-text { width: 1fr; color: #E8E8E8; }
+
+ToolScreen #run-progress { margin: 1 0 0 0; }
+ToolScreen #run-log {
+    height: 1fr;
+    border: round #2A2E3F;
+    border-title-color: #7DD3FC;
+    background: #0D0E14;
+    padding: 0 1;
+}
+ToolScreen #run-summary { height: auto; margin-top: 1; }
+ToolScreen #after-run { height: 1; margin-top: 1; }
+ToolScreen #after-run Button { margin-left: 0; }
+
+#recent-dialog {
+    background: #10121A;
+    border: thick #2A2E3F;
+    width: 80%;
+    height: 60%;
+    margin: 4 6;
+    padding: 1 2;
+}
+#recent-title { text-style: bold; color: #7DD3FC; margin-bottom: 1; }
+#recent-list { height: 1fr; background: #161822; }
+
+ToolScreen .recolor-row { margin-bottom: 0; height: 1; }
+ToolScreen .recolor-row Input { width: 1fr; }
+ToolScreen .recolor-remove-btn { width: 3; min-width: 3; height: 1; border: none; padding: 0 1; margin-left: 1; background: #1B1E2B; }

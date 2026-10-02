@@ -14,14 +14,12 @@ class RecolorRow(Horizontal):
 
     def __init__(self, from_value: str = "", to_value: str = "") -> None:
         super().__init__(classes="field-row recolor-row")
-        self._from_value = from_value
-        self._to_value = to_value
+        self.from_input = Input(value=from_value, placeholder="white or #ffffff")
+        self.to_input = Input(value=to_value, placeholder="#ff0000 or black")
 
     def compose(self) -> ComposeResult:
-        self.from_input = Input(value=self._from_value, placeholder="white or #ffffff")
         yield self.from_input
         yield Label("→")
-        self.to_input = Input(value=self._to_value, placeholder="#ff0000 or black")
         yield self.to_input
         yield Button("−", classes="recolor-remove-btn")
 

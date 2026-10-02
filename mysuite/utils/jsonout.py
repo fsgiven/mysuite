@@ -56,9 +56,16 @@ def active() -> bool:
     return _current is not None
 
 
+EVENT_PREFIX = "@@mysuite "
+
+
 def add_item(**fields: Any) -> None:
     if _current is not None:
-        _current.items.append({k: _jsonable(v) for k, v in fields.items()})
+        item = {k: _jsonable(v) for k, v in fields.items()}
+        _current.items.append(item)
+        if os.environ.get("MYSUITE_EVENTS") == "1":
+            # The TUI sets this to follow a run live: one line per finished item on stderr (stdout stays one document).
+            print(EVENT_PREFIX + json.dumps(item, ensure_ascii=False), file=sys.stderr, flush=True)
 
 
 def add_warning(message: str) -> None:

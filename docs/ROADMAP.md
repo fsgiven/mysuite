@@ -123,3 +123,15 @@ in `AGENTS.md` and exercised by a doc-test.
   (fixed, with a test that checks help text against the CLI).
 - Still open: curated real photos (CC0/public-domain, with a source/licence manifest) and an optional on-demand larger set - waiting
   for the user's own images or approved sources.
+
+## Update 2026-10-02 (TUI single-tool screens)
+
+- Decided with the user: redo the seven hand-built screens one by one, **Export first**; layout is "form left, plan + command +
+  output right", easy to navigate and LLM-friendly; remember last settings per tool locally; make file targeting less clumsy.
+- Shipped for Export: `tui/shell.py` (`ToolScreen`: a form over the tool's own CLI command; live `--dry-run` plan, copyable
+  command line, streamed progress via `MYSUITE_EVENTS=1` item events on stderr, Stop, open-output-folder, Reset), `tui/ui_state.py`
+  (remembered values + recent paths, local only, `MYSUITE_NO_UI_STATE=1` disables), `FileTarget` widget (folders, globs,
+  comma lists, drops, path completion, Files…/Folder…/Recent, live "N files found / not found" status), `CommandLine`,
+  `ChipGroup`; new Export fields: CMYK mode, colour variants, company profile, design tokens/brand/theme, subfolders.
+- Next, in order: Convert, Cutout, Watermark, Metadata, Compress, Enhance (each moves onto `ToolScreen`; `FileTarget` replaces
+  the old Browse box), then retire the old shared CSS block.

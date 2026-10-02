@@ -31,7 +31,7 @@ DEFAULT_DROP_EXTENSIONS: frozenset[str] = frozenset({".svg"})
 
 
 def parse_dropped_paths(
-    text: str, extensions: frozenset[str] = DEFAULT_DROP_EXTENSIONS
+    text: str, extensions: frozenset[str] | None = DEFAULT_DROP_EXTENSIONS
 ) -> list[Path]:
     """Parses the raw text a terminal inserts when a file is dragged onto the
     window (delivered to Textual as a Paste event) into real, existing paths.
@@ -45,7 +45,7 @@ def parse_dropped_paths(
     non-path pastes. Defaults to {".svg"} to preserve the original SVG-only
     drop behavior for existing callers; pass a different set (or the full
     recognized-format set from mysuite.convert._parsing) for a general-purpose
-    drop target."""
+    drop target; extensions=None accepts any file."""
     paths: list[Path] = []
     for line in text.splitlines():
         token = line.strip()
@@ -53,7 +53,7 @@ def parse_dropped_paths(
             continue
         token = _unescape(_unquote(token))
         candidate = Path(token)
-        if candidate.is_dir() or (candidate.is_file() and candidate.suffix.lower() in extensions):
+        if candidate.is_dir() or (candidate.is_file() and (extensions is None or candidate.suffix.lower() in extensions)):
             paths.append(candidate)
     return paths
 

@@ -349,8 +349,7 @@ mysuite export logo.svg --variant negative \
   --recolor "#2b6cb0=#000000 #f6ad55=#ffffff"
 ```
 
-The TUI's single Recolor field works the same way — type `#2b6cb0=#000000 #f6ad55=#ffffff`,
-space- or comma-separated, into one box.
+The TUI's Export screen has one FROM → TO row per swap (add as many as you need).
 
 This is a literal `#hex` text substitution, not full SVG/CSS color parsing — it matches
 `fill="#hex"`/`style="fill:#hex"`/`<style>` blocks written as exact hex tokens, not named colors
@@ -632,28 +631,33 @@ which files you processed is itself a trace.
 mysuite tui
 ```
 
-Opens an interactive home screen listing the available tools — **Export**, **Convert**, **Cutout**,
-**Watermark**, **Metadata**, **Compress**, **Enhance** today, each with its own accent color so it's obvious
-which one you're in; more (`palette`, `sort`) will show up here as they're added, no navigation
-changes needed. Press a number key to jump straight to a tool, or arrow keys + Enter. The Export
-screen mirrors every CLI flag as a two-column form, fields grouped into titled panels (Source,
-Adjustments, Formats & color, Output, Options) rather than one long list — including a **Unit**
-dropdown (px/mm/cm/in) right next to Sizes, so bare numbers use whatever unit you've picked without
-typing the suffix every time, and a **Recolor** section with dedicated FROM/TO fields per swap (hex
-or CSS color names) plus +/− buttons, rather than one syntax-heavy text field. Convert/Cutout/
-Watermark use the same form/run shape, scaled down to what each actually needs (no
-sizes/formats/quality concepts for Cutout, for instance); Metadata adds a **Mode** toggle
-(Strip/Randomize/Credit) that shows or hides the Author/Copyright/Generator fields depending which mode is
-selected; Compress adds a **Codec** dropdown that shows only the six mozjpeg/webp/avif/oxipng/
-pngquant/gifsicle option groups relevant to whichever codec is selected.
-Keyboard shortcuts are shown in the footer: **Ctrl+R** run, **Ctrl+S** save the
-current Export form as a named preset (writes into `mysuite.toml` right from the TUI, no editing by
-hand). Every screen's input field also takes a folder, a comma-separated list of files, or a file
-dragged straight onto the terminal window (most terminals turn an OS file-drop into a paste of its
-path). Every **Browse**
-button opens a picker rooted at the filesystem root (`/`), not the project folder, so any file
-anywhere on disk is reachable by drilling down. The equivalent CLI commands keep working unchanged
-for scripting — the TUI is additive, not a replacement.
+Opens an interactive home screen listing the available tools as cards, each with its own accent colour.
+Press a number key to jump straight to a tool, or arrow keys + Enter; **h** / **F1** explains the screen you are on.
+
+**Export** is the first screen rebuilt on the new single-tool layout (Convert, Cutout, Watermark, Metadata, Compress and
+Enhance follow one by one). The form is a front end for the real `mysuite export …` command, so the two can never disagree:
+
+- **Form on the left, results on the right.** One-line inputs, short labels, the common choices up front (files, sizes + unit
+  + DPI, formats, RGB/CMYK and the CMYK number mode, colour variants, output folder, preset, company profile) and the rest
+  folded away under *Size, margin & quality*, *Colours: swaps & design tokens* and *Names & safety*.
+- **Plan** (live): "4 file(s) from 1 SVG(s) → exports; png ×2, pdf ×2", asked from the command's own `--dry-run` while you edit.
+- **Command** (live, with a *Copy* button): the exact `mysuite export …` line the form stands for. Paste it into a script
+  or hand it to an agent; only the values you changed appear, so config, presets and profiles keep their say.
+- **Output**: the command's own output, a progress bar that follows each finished file, and an *Open output folder* button.
+  *Preview only* runs the same command with `--dry-run`; *Stop* ends a long run.
+- **Remembers your last settings per tool** (sizes, formats, output folder, switches…) in `~/.cache/mysuite/ui-state.json` —
+  values and paths only, never file contents. *Reset* forgets a tool's settings; `MYSUITE_NO_UI_STATE=1` turns the memory off.
+
+**Choosing files** works the same everywhere the new layout is used: type or paste a path, a folder, a comma-separated list or
+a glob (`~/Pictures/*.png`); drop files onto the terminal; use **Files…** / **Folder…**; or pick from **Recent**. Press → to
+accept the grey path completion. A status line under the box says at once what it found ("✓ 3 SVGs · a.svg, b.svg, c.svg",
+"✗ not found: …", "not a supported type"), so a bad path shows up before you run.
+
+The other screens keep their current form/run shape until their turn: Convert/Cutout/Watermark are scaled-down versions of
+the same idea; Metadata has a **Mode** toggle (Strip/Randomize/Credit); Compress shows only the option groups of the chosen
+codec. Keyboard shortcuts are in the footer: **Ctrl+R** run, **Ctrl+S** save the Export form as a named preset (writes
+into `mysuite.toml`). The old screens' **Browse** pickers start in your home folder, so any file anywhere is reachable.
+The equivalent CLI commands keep working unchanged for scripting — the TUI is additive, not a replacement.
 
 ## Tests
 
