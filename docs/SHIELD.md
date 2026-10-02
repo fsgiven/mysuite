@@ -22,7 +22,12 @@ Two generated photos (a fox in snow, a sailboat at sunset), shielded with `--str
 | the shielded image shrunk to half size and enlarged again | **protection mostly lost**: the edit looks like the unprotected one |
 
 The perturbation was made with the `sd-vae-ft-mse` VAE and tested against SD 1.5's own VAE, so it transferred between
-those two. Not tested: SDXL, Flux, Midjourney, commercial services, newer editors.
+those two. Not tested by me: SDXL, Flux, Midjourney, commercial services, newer editors.
+
+**Field report (2026-10-02, the owner's own test):** a shielded 604x604 PNG was uploaded to ChatGPT with "regenerate the object on
+this image". It produced a clean regeneration of the original subject, so **shield did not stop ChatGPT's image generation**. That is
+what the model-specific caveat predicts: ChatGPT's image model is closed and not built on the SD encoder this attack targets.
+Do not expect shield to protect against ChatGPT, Gemini, Midjourney or similar services.
 
 ## Why not to over-trust it
 
