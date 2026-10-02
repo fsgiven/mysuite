@@ -28,6 +28,7 @@ telemetry.
 | `print` | Output at an exact size: `10x15cm` at 300 dpi is exactly 1181×1772 px, dpi stored in the file; contain/cover/stretch, bleed |
 | `rename`, `sheet`, `profile` | Rename by pattern (`{n:3}`, `{date}`…; copies by default), contact sheets (PNG/PDF), colour profiles (to sRGB, or RGB → CMYK with the export engine) |
 | `ocr`, `qr`, `dupes`, `diff`, `contrast` | Read text and QR codes (macOS Vision), make QR codes, find duplicate/look-alike pictures, compare two images, WCAG contrast checks |
+| `tokens`, `variants` | Design tokens (CSS variables, W3C JSON, pinned git repo, Figma): list/show/check a logo's colours, `token:NAME` recolors, and logo variants (negative/on-dark from the tokens' dark theme, mono, invert, grayscale) |
 | `transform` | Quick edits: trim, crop (box or aspect), rotate, flip, resize, pad, round corners, background — in a fixed, predictable order |
 | `relight` | *Experimental, classical (no AI model):* re-shade a cut-out/product/logo as if lit from another direction, with presets (key-left, dramatic, golden-hour…) |
 | `inspect` | Facts about a file (size, colour mode, transparency, palette, sharpness, GPS…) as numbers — for agents and humans |
@@ -59,6 +60,7 @@ mysuite is a young personal project, released as-is. Please read this before rel
 | `enhance` | Yes: pipeline, scratch removal, presets, CLI, TUI | the optional AI backend has **never been run with real model weights**; 16-bit sources become 8-bit (now reported) |
 | `transform` | Yes: every operation checked on pixels (resize modes, crop, trim, rotate, flip, pad, round, flatten), fixed order, EXIF handling, safety | no preview exists in a terminal, so judge the result by opening the file; animated sources keep only the first frame (and say so) |
 | `relight` | Yes: the lit side is brighter for every direction, flat areas unchanged, alpha kept, tint, presets, bad values, safety | **experimental**: it fakes depth from the picture's own brightness and an alpha-mask dome, so it is a lighting nudge, not a true relight; faces and busy photos will not look right. A depth-model backend is planned |
+| `tokens`, `variants` | Yes: CSS parsing (aliases across files, fallbacks, cycles, brands, light/dark, `@media`), W3C JSON, Figma response parsing, a pinned git source (cached, refreshable), matching, every variant on pixels, export integration; also run by hand against a real design system (Axis, not included) | the **negative** variant is only as good as the tokens: when several tokens share a colour but differ in dark mode it picks the majority and says so (`--negative-map` settles it); logo colours with no token stay as they were; Figma is **untested against a live file** (the Variables API is Enterprise-only); you can't preview, so read the warnings |
 | `kit` | Yes: every PNG of every kit has exactly the specified pixels, ICO contents, manifest and Contents.json match the files, opaque iOS icons, backgrounds, padding, overwrite and safety | the specs follow the platforms' published sizes today; platforms change them, so check before shipping an app |
 | `pdf` | Yes: page ranges, merge/split/extract/rotate/resize/strip/number/stamp/render/images/from-images/compress, corrupt and password-protected files, sandbox | encrypted PDFs are refused, not opened; stamps and numbers use rsvg-convert's fonts (Helvetica/Arial fallback); `compress` can make a small PDF bigger (it says so) |
 | `print`, `rename`, `sheet`, `profile` | Yes: exact pixels and dpi for cm/in/mm/px, fit modes, bleed, rename safety (collisions, swaps, existing files), contact sheets, sRGB and CMYK conversion | colour conversion honours embedded ICC profiles but cannot replace a calibrated print workflow; `rename --move` changes your originals, so use `--dry-run` first |
@@ -262,6 +264,28 @@ mysuite export logo.svg --date-stamp   # logo_512_20260819.png
 This only changes the tool's own *default* naming templates — a `naming_template`/
 `bundle_naming_template` you've already customized (in `mysuite.toml` or a preset) is left exactly
 as you wrote it, since `{date}` is available as a token there too if you want to place it yourself.
+
+## Design tokens & logo variants
+
+```bash
+mysuite tokens check logo.svg --tokens path/to/tokens --brand bild         # which logo colours are real brand colours?
+mysuite export logo.svg --tokens path/to/tokens --brand bild \
+    --recolor "#dd0000=token:--bg-color-brand-solid" --variants default,negative,mono-white
+mysuite variants make logo.svg --variants negative,mono-black --tokens path/to/tokens --brand bild   # SVG files only
+```
+
+Token sources: a `.css` or `.json` file or a folder of them; `git+https://host/org/repo@v1.2#path=dist/css`
+(shallow, pinned to a tag/branch/commit, cached in `~/.cache/mysuite`; the only network use besides `figma:`; the
+commit is reported; `--tokens-refresh` updates it); `figma:FILEKEY` (reads `FIGMA_TOKEN`; the Variables API needs a
+Figma Enterprise plan and this adapter has not been run against a live file). CSS tokens may be aliases
+(`var(--color-bild-red-50, #DD0000)`, also across files), per brand (`[data-color-brand="bild"]`) and per theme
+(`[data-theme="dark"]`, `@media (prefers-color-scheme: dark)`); W3C JSON may carry `$extensions.mysuite.dark`.
+
+**Variants:** `negative` (alias `on-dark`) gives every logo colour the dark-theme value of the token it matches (within a
+small colour distance; near-neutral blacks may match approximately and say so). `invert`, `mono-black`, `mono-white`
+and `grayscale` need no tokens. Each variant of an export lands in its own folder. Because a terminal can't show the
+result, mysuite reports every mapping it made and every colour it could not map. If you use a proprietary design system,
+keep its token files out of any public repository.
 
 ## Variants & recoloring
 

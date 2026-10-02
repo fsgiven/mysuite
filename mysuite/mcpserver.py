@@ -74,14 +74,16 @@ class MysuiteServer:
         def mysuite_inspect(paths: list[str], thumb: str | None = None, sheet: str | None = None) -> dict[str, Any]:
             return self._call(["inspect"], paths, {"thumb": thumb, "sheet": sheet})
 
-        @mcp.tool(description="Export an SVG logo to many sizes/formats (png,pdf,eps,svg,jpeg,webp,tiff,ico,icns), RGB and CMYK. cmyk_mode: exact | clean | clean:N. recolor: list of 'FROM=TO' colour swaps.")
+        @mcp.tool(description="Export an SVG logo to many sizes/formats (png,pdf,eps,svg,jpeg,webp,tiff,ico,icns), RGB and CMYK. cmyk_mode: exact | clean | clean:N. recolor: list of 'FROM=TO' colour swaps (TO or FROM may be 'token:NAME' with tokens=<design token source>, theme light|dark). variants: comma list of default, negative (token-driven on-dark, needs tokens), invert, mono-black, mono-white, grayscale - each variant gets its own folder.")
         def mysuite_export(inputs: list[str], formats: list[str] | None = None, sizes: list[str] | None = None,
                            profiles: list[str] | None = None, out: str | None = None, preset: str | None = None,
                            recolor: list[str] | None = None, cmyk_mode: str | None = None, cmyk_profile: str | None = None,
-                           background: str | None = None, dry_run: bool = False, overwrite: bool = False,
-                           options: dict[str, Any] | None = None) -> dict[str, Any]:
+                           background: str | None = None, tokens: str | None = None, brand: str | None = None,
+                           theme: str | None = None, variants: str | None = None, negative_map: list[str] | None = None,
+                           dry_run: bool = False, overwrite: bool = False, options: dict[str, Any] | None = None) -> dict[str, Any]:
             opts = {"formats": formats, "sizes": sizes, "profiles": profiles, "out": out, "preset": preset,
                     "recolor": recolor, "cmyk_mode": cmyk_mode, "cmyk_profile": cmyk_profile, "background": background,
+                    "tokens": tokens, "brand": brand, "theme": theme, "variants": variants, "negative_map": negative_map,
                     **(options or {})}
             return self._call(["export"], inputs, opts, dry_run=dry_run, overwrite=overwrite)
 
@@ -229,6 +231,26 @@ class MysuiteServer:
         @mcp.tool(description="Colour profile conversion: to 'srgb' (correct sRGB copy of Adobe RGB / Display P3 / CMYK photos) or 'cmyk' (print; same engine as export: cmyk_mode exact | clean | clean:N).")
         def mysuite_profile(inputs: list[str], to: str, cmyk_mode: str | None = None, format: str | None = None, overwrite: bool = False) -> dict[str, Any]:
             return self._call(["profile"], inputs, {"to": to, "cmyk_mode": cmyk_mode, "format": format}, overwrite=overwrite)
+
+        @mcp.tool(description="Design tokens. action 'list' (source, brand; filter, has_dark), 'show' (source, name), 'check' (source + logo: which logo colours are token colours, which are off-palette). source = a .css/.json file or folder (Axis-style CSS variables or W3C design-token JSON), git+https://host/org/repo@REF#path=dir (pinned, cached) or figma:FILEKEY (needs FIGMA_TOKEN in the environment).")
+        def mysuite_tokens(action: str, source: str, brand: str | None = None, name: str | None = None, logo: str | None = None,
+                           filter: str | None = None, has_dark: bool = False, theme: str | None = None, tolerance: float | None = None,
+                           strict: bool = False) -> dict[str, Any]:
+            if action == "list":
+                return self._call(["tokens", "list"], [source], {"brand": brand, "filter": filter, "has_dark": has_dark or None})
+            if action == "show" and name:
+                return self._call(["tokens", "show"], [source, name], {"brand": brand})
+            if action == "check" and logo:
+                return self._call(["tokens", "check"], [logo], {"tokens": source, "brand": brand, "theme": theme, "tolerance": tolerance, "strict": strict or None})
+            return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
+                    "errors": ["action must be list, show (needs name) or check (needs logo)"]}
+
+        @mcp.tool(description="Write SVG variants of a logo next to it (or in out): variants = comma list of negative (token-driven on-dark, needs tokens + brand), invert, mono-black, mono-white, grayscale. negative_map: ['#1d1d1b=token:--headline-text-color'] picks the token whose dark value a logo colour should take.")
+        def mysuite_variants(inputs: list[str], variants: str | None = None, tokens: str | None = None, brand: str | None = None,
+                             negative_map: list[str] | None = None, out: str | None = None, dry_run: bool = False,
+                             overwrite: bool = False) -> dict[str, Any]:
+            return self._call(["variants", "make"], inputs, {"variants": variants, "tokens": tokens, "brand": brand,
+                                                              "negative_map": negative_map, "out": out}, dry_run=dry_run, overwrite=overwrite)
 
         @mcp.tool(description="Which external tools are installed (and how to install the missing ones).")
         def mysuite_doctor() -> dict[str, Any]:

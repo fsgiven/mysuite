@@ -113,6 +113,8 @@ def _parse_step(index: int, raw: dict[str, Any], commands: dict[str, Any]) -> St
         command = ["metadata", action]
     elif tool == "enhance":
         command = ["enhance", "run"]
+    elif tool == "variants":
+        command = ["variants", "make"]
     elif tool == "kit":
         command = ["kit", "make"]
     elif tool == "pdf":
@@ -125,7 +127,7 @@ def _parse_step(index: int, raw: dict[str, Any], commands: dict[str, Any]) -> St
     else:
         raise PipelineError(
             f"step {index}: unknown tool {tool!r} - expected one of "
-            f"{', '.join(sorted(SINGLE | {'metadata', 'enhance', 'kit', 'pdf'}))}"
+            f"{', '.join(sorted(SINGLE | {'metadata', 'enhance', 'kit', 'pdf', 'variants'}))}"
         )
     spec = commands[" ".join(command)]
     valid = {}

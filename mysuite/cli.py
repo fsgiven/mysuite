@@ -21,7 +21,9 @@ from mysuite.pipeline.cli import app as pipeline_app
 from mysuite.helpers.cli import contrast as contrast_command, diff as diff_command, dupes as dupes_command, ocr as ocr_command, qr_app
 from mysuite.kits.cli import app as kit_app
 from mysuite.pdf.cli import app as pdf_app
+from mysuite.color.cli import app as variants_app
 from mysuite.preset_cli import app as preset_app
+from mysuite.tokens.cli import app as tokens_app
 from mysuite.specs.cli import print_command, profile_command, rename_command, sheet_command
 from mysuite.relight.cli import relight as relight_command
 from mysuite.transform.cli import transform as transform_command
@@ -87,6 +89,8 @@ app.command("sheet", help="Contact sheet: many pictures on one labelled page.")(
 app.command("profile", help="Convert colour profiles: to sRGB for screens, to CMYK for print.")(profile_command)
 app.add_typer(qr_app, name="qr")
 app.add_typer(kit_app, name="kit")
+app.add_typer(tokens_app, name="tokens")
+app.add_typer(variants_app, name="variants")
 app.add_typer(pdf_app, name="pdf")
 app.add_typer(pipeline_app, name="pipeline")
 app.add_typer(preset_app, name="preset")

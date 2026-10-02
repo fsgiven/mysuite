@@ -49,6 +49,9 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | to find duplicate or look-alike pictures (read only) | `mysuite dupes DIR --json` |
 | what changed between two images | `mysuite diff a.png b.png --out changes.png --json` |
 | whether a colour (or a logo's colours) is readable on a background | `mysuite contrast "#dd0000" white --json` / `mysuite contrast --logo logo.svg --on "#ffffff" --json` |
+| a logo in the brand colours from the design system, or its negative / on-dark / mono version | `mysuite variants make logo.svg --variants negative,mono-white --tokens tokens/ --brand bild --json`; in one export: `mysuite export logo.svg --variants default,negative --tokens tokens/ --brand bild --json` |
+| whether a logo uses the real brand colours | `mysuite tokens check logo.svg --tokens tokens/ --brand bild --json` (`--strict` exits 1 when a colour is off-palette) |
+| to look up design tokens | `mysuite tokens list tokens/ --brand bild --filter brand --json`, `mysuite tokens show tokens/ text-color-brand --brand bild --json` |
 | a bigger/cleaner photo | `mysuite enhance run FILE --preset gentle --json` |
 | no hidden data (GPS, serials) | `mysuite metadata strip FILE --json` |
 | a plausible different camera identity | `mysuite metadata randomize FILE --json` |
@@ -67,6 +70,10 @@ mysuite export logo.svg --formats png,pdf --sizes 64 --out out --json
 mysuite export logo.svg --formats pdf --profiles cmyk --cmyk-mode clean --sizes 100 --out out_cmyk --json
 mysuite convert pic.png --to webp --json
 mysuite transform pic.png --resize 20 --pad 1:1 --round 50% --json
+mysuite tokens check logo.svg --tokens tokens.css --json
+mysuite tokens list tokens.css --json
+mysuite variants make logo.svg --variants negative,mono-white --tokens tokens.css --json
+mysuite export logo.svg --formats png --sizes 64 --variants default,negative,invert --tokens tokens.css --out out_var --json
 mysuite kit list --json
 mysuite kit make logo.svg --kit favicon --out kits --json
 mysuite print pic.png --size 1200x630 --fit cover --json
@@ -103,6 +110,23 @@ math, not an AI model**: a pseudo-depth (the picture's own brightness blurred, p
 transparency) is lit with a directional light. Good for cut-outs, products and logos (try `--preset key-left`,
 `dramatic`, `golden-hour`, `cool-fill`); it cannot invent light on faces or complex scenes. Output
 `<name>_relit.png`. Say so when you offer it to a user.
+
+## Design tokens and logo variants
+
+Point `--tokens` at the brand's design tokens and mysuite links logo colours to them:
+a CSS custom-property file or folder (Axis-style `--bg-color-brand-solid: var(--color-bild-red-50, #DD0000)`, with
+`[data-color-brand]` brands and `[data-theme="dark"]` values), a W3C design-token JSON file, a **pinned git repo**
+(`git+https://host/org/repo@v1.2#path=packages/tokens/dist/css`, cached in `~/.cache/mysuite`; network only for this source,
+`--tokens-refresh` to update) or `figma:FILEKEY` (needs `FIGMA_TOKEN`; Figma's Variables API is Enterprise-only and this
+adapter is untested against a live file). Pass `--brand` when a source holds several.
+
+- `--recolor "#dd0000=token:--bg-color-brand-solid"` takes the colour from the token (`--theme dark` for its dark value),
+  so a token change re-exports everything consistently.
+- `--variants default,negative,mono-white,invert,grayscale,mono-black` writes each variant into its own folder.
+  **negative** is token-driven: every logo colour becomes the *dark-theme value of the token it matches*. When several
+  tokens share a colour but disagree in dark mode, the response says so in `warnings`; settle it with
+  `--negative-map "#1d1d1b=token:--headline-text-color"`. Colours with no matching token stay as they are (also a warning).
+- You cannot look at the result, so read `warnings` and run `tokens check` first.
 
 ## Exact jobs: "ask for 500, get 500"
 
@@ -166,7 +190,7 @@ Claude Desktop / Cursor (`mcpServers` in their config JSON):
 
 Tools: `mysuite_inspect`, `mysuite_export`, `mysuite_convert`, `mysuite_cutout`, `mysuite_watermark`,
 `mysuite_compress`, `mysuite_enhance`, `mysuite_transform`, `mysuite_relight`, `mysuite_kit`, `mysuite_pdf`,
-`mysuite_print`, `mysuite_rename`, `mysuite_sheet`, `mysuite_profile`, `mysuite_ocr`, `mysuite_qr`, `mysuite_dupes`, `mysuite_diff`, `mysuite_contrast`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
+`mysuite_tokens`, `mysuite_variants`, `mysuite_print`, `mysuite_rename`, `mysuite_sheet`, `mysuite_profile`, `mysuite_ocr`, `mysuite_qr`, `mysuite_dupes`, `mysuite_diff`, `mysuite_contrast`, `mysuite_metadata`, `mysuite_pipeline_run`, `mysuite_doctor`,
 `mysuite_schema`; resources `mysuite://guide`, `mysuite://schema`, `mysuite://allowed-folders`. They run the same
 commands as the CLI and return the same JSON, always sandboxed, never overwriting unless `overwrite=true`.
 Without `--allow` the server only sees the folder it was started in. With a local model (Ollama, LM Studio, …)

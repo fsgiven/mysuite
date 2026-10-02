@@ -34,6 +34,7 @@ def test_there_are_examples_to_run():
 @pytest.mark.parametrize("line", doctest_lines())
 def test_every_agents_md_example_runs(line, tmp_path, monkeypatch):
     (tmp_path / "logo.svg").write_text(SIMPLE_SVG)
+    (tmp_path / "tokens.css").write_text(':root{--brand-red:#dd0000;--brand-blue:#0057b8}[data-theme="dark"]{--brand-red:#ff6b6b;--brand-blue:#6bb0ff}')
     subprocess.run(["magick", "-size", "40x30", "xc:#dd0000", f"PNG24:{tmp_path / 'pic.png'}"], check=True)
     subprocess.run(["magick", "-size", "40x30", "xc:#336699", str(tmp_path / "photo.jpg")], check=True)
     toml_block = re.search(r"```toml\n(.*?)```", (ROOT / "AGENTS.md").read_text(), re.S).group(1)

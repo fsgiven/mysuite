@@ -243,4 +243,25 @@ TOOL_REGISTRY: list[ToolSpec] = [
         ),
         cli="mysuite dupes ~/Pictures --recursive",
     ),
+    ToolSpec(
+        key="tokens",
+        label="Tokens",
+        description="Brand colours from your design system: logo variants, palette checks.",
+        screen_factory=_auto_factory("tokens"),
+        accent="#D6D3D1",  # stone
+        commands=(
+            ("Make logo variants (negative, mono, invert…)", ("variants", "make")),
+            ("Check a logo's colours against the tokens", ("tokens", "check")),
+            ("List the colour tokens", ("tokens", "list")),
+            ("Show one token", ("tokens", "show")),
+        ),
+        help=(
+            "Point at your design tokens: a CSS or JSON file/folder (Axis-style CSS variables and W3C design-token JSON "
+            "both work), a pinned git repo (git+https://host/org/repo@v1#path=dir) or figma:FILEKEY. Pick a brand if the "
+            "source has several.\nVariants writes SVG versions of your logo: 'negative' follows the tokens' dark-theme "
+            "values, the others are invert, mono-black, mono-white, grayscale. Check tells you which logo colours are real "
+            "token colours and which are off-palette. Then run Export on the variants."
+        ),
+        cli="mysuite variants make logo.svg --variants negative --tokens tokens/ --brand acme",
+    ),
 ]

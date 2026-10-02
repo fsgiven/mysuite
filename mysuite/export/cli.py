@@ -22,7 +22,11 @@ from mysuite.export.naming import resolve_naming_templates, resolve_path_templat
 from mysuite.export.planner import MysuitePlannerError, build_plan
 from mysuite.color.cmyk import CmykError, CmykSettings
 from mysuite.color.svg import DEFAULT_TOLERANCE
-from mysuite.export.recolor import InvalidRecolorError, apply_recolor, parse_recolor_list
+from mysuite.color import variants as variant_mod
+from mysuite.color.variants import VariantError
+from mysuite.export.recolor import InvalidRecolorError, apply_recolor, make_variant_svg, parse_recolor_list, resolve_token_refs
+from mysuite.tokens.model import TokenError
+from mysuite.tokens.context import build_context
 from mysuite.export.renderer import Renderer
 from mysuite.export.units import (
     VALID_UNITS,
@@ -164,6 +168,28 @@ def export(
         help="CMYK ICC profile (e.g. FOGRA39 or your printer's) used for the conversion and embedded "
         "as the PDF output intent. Default: Ghostscript's SWOP profile.",
     ),
+    tokens: Optional[str] = typer.Option(
+        None, "--tokens",
+        help="Design tokens: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir (pinned, cached), or "
+        "figma:FILEKEY. Lets --recolor use token:NAME and enables the negative variant.",
+    ),
+    brand: Optional[str] = typer.Option(None, "--brand", help="Which brand of the token source (when it has several)."),
+    theme: str = typer.Option("light", "--theme", help="Which theme's token values --recolor token:NAME uses: light or dark."),
+    variants: Optional[str] = typer.Option(
+        None, "--variants",
+        help="Several colour variants in one run, each in its own folder: default, negative (token-driven, needs --tokens), "
+        "invert, mono-black, mono-white, grayscale. E.g. default,negative,mono-white.",
+    ),
+    negative_map: Optional[List[str]] = typer.Option(
+        None, "--negative-map",
+        help="For the negative variant: LOGOCOLOUR=token:NAME makes that logo colour take the token's DARK value, e.g. "
+        "'#1d1d1b=token:--headline-text-color'. Repeatable. Use it when several tokens share a colour but differ in dark mode.",
+    ),
+    negative_tolerance: float = typer.Option(
+        5.0, "--negative-tolerance", min=0.0,
+        help="How close (CIEDE2000) a logo colour must be to a token's light value for the negative variant to use that token.",
+    ),
+    tokens_refresh: bool = typer.Option(False, "--tokens-refresh", help="Fetch a git token source again instead of using the cached copy."),
     recursive: bool = typer.Option(
         False, "--recursive", help="When an input is a directory, include SVGs in subdirectories too."
     ),
@@ -239,10 +265,24 @@ def export(
         settings.path_template, variant=resolved_variant, default_path_template=DEFAULT_PATH_TEMPLATE
     )
 
+    token_set = None
+    token_ctx = None
+    if tokens:
+        try:
+            token_ctx = build_context(tokens, brand, negative_map, tokens_refresh)
+        except TokenError as exc:
+            log_error(escape(str(exc)))
+            raise typer.Exit(1) from exc
+        token_set = token_ctx.tokens
+        jsonout.set_extra(tokens={"source": token_ctx.loaded.description, "commit": token_ctx.loaded.commit, "count": len(token_set), "theme": theme})
     try:
         resolved_recolor_map = parse_recolor_list(recolor) if recolor else dict(settings.recolor)
-    except InvalidRecolorError as exc:
-        log_error(str(exc))
+        if any(str(v).startswith("token:") or str(k).startswith("token:") for k, v in resolved_recolor_map.items()):
+            if token_set is None:
+                raise InvalidRecolorError("token: references need --tokens SOURCE")
+            resolved_recolor_map = resolve_token_refs(resolved_recolor_map, token_set, brand, theme)
+    except (InvalidRecolorError, TokenError) as exc:
+        log_error(escape(str(exc)))
         raise typer.Exit(1) from exc
 
     def _resolve_margin_side(cli_value: Optional[str], settings_value: Optional[str]) -> Optional[str]:
@@ -308,6 +348,28 @@ def export(
         cmyk=resolved_cmyk,
     )
 
+    variant_names = [v.strip().lower() for v in (variants or "default").split(",") if v.strip()] or ["default"]
+    bad_variants = [v for v in variant_names if v not in variant_mod.ALL]
+    if bad_variants or len(set(variant_names)) != len(variant_names):
+        log_error("variants must be unique and from: " + ", ".join(variant_mod.ALL) + (f" (got {', '.join(bad_variants)})" if bad_variants else ""))
+        raise typer.Exit(1)
+    if variants and resolved_variant:
+        log_error("use either --variant (one folder name) or --variants (a list of colour variants), not both")
+        raise typer.Exit(1)
+    if theme not in ("light", "dark"):
+        log_error("--theme must be light or dark")
+        raise typer.Exit(1)
+    label_for = {v: (resolved_variant or "") if v == "default" else v for v in variant_names}
+    path_templates = {
+        v: resolve_path_template_for_variant(settings.path_template, variant=label_for[v] or None, default_path_template=DEFAULT_PATH_TEMPLATE)
+        for v in variant_names
+    }
+    token_view = token_ctx.view if token_ctx else None
+    negative_overrides = token_ctx.overrides if token_ctx else {}
+    if token_view is None and any(v in variant_mod.TOKEN_DRIVEN for v in variant_names):
+        log_error("the negative variant is driven by design tokens: pass --tokens SOURCE (or use invert / mono-white)")
+        raise typer.Exit(1)
+
     batch = len(input_files) > 1
     total_written = 0
     total_skipped_existing = 0
@@ -315,109 +377,120 @@ def export(
 
     for input_svg in input_files:
         resolved_name = name or input_svg.stem
+        for variant_name in variant_names:
 
-        try:
-            plan = build_plan(
-                name=resolved_name,
-                out_dir=resolved_out,
-                sizes=resolved_sizes,
-                formats=resolved_formats,
-                profiles=resolved_profiles,
-                naming_template=effective_naming_template,
-                path_template=effective_path_template,
-                bundle_naming_template=effective_bundle_naming_template,
-                variant=resolved_variant or "",
-                strict=resolved_strict,
-            )
-        except MysuitePlannerError as exc:
-            log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
-            raise typer.Exit(1) from exc
+            try:
+                plan = build_plan(
+                    name=resolved_name,
+                    out_dir=resolved_out,
+                    sizes=resolved_sizes,
+                    formats=resolved_formats,
+                    profiles=resolved_profiles,
+                    naming_template=effective_naming_template,
+                    path_template=path_templates[variant_name],
+                    bundle_naming_template=effective_bundle_naming_template,
+                    variant=label_for[variant_name],
+                    strict=resolved_strict,
+                )
+            except MysuitePlannerError as exc:
+                log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+                raise typer.Exit(1) from exc
 
-        if not quiet:
-            if batch:
-                console.print(f"\n[bold]=== {escape(str(input_svg))} ===[/bold]")
-            console.print(_build_tree(resolved_name, plan.jobs, plan.skips, plan.bundle_jobs))
+            if not quiet:
+                if batch:
+                    console.print(f"\n[bold]=== {escape(str(input_svg))} ===[/bold]")
+                console.print(_build_tree(resolved_name, plan.jobs, plan.skips, plan.bundle_jobs))
 
-        file_total = len(plan.jobs) + len(plan.bundle_jobs)
-        total_planned += file_total
+            file_total = len(plan.jobs) + len(plan.bundle_jobs)
+            total_planned += file_total
 
-        for job in [*plan.jobs, *plan.bundle_jobs]:
+            for job in [*plan.jobs, *plan.bundle_jobs]:
+                if dry_run:
+                    jsonout.add_item(
+                        input=input_svg, output=job.output_path, format=job.format, variant=label_for[variant_name],
+                        colorspace=job.colorspace, status="planned",
+                        **({"size": job.size.label} if hasattr(job, "size") else {"sizes": [s.label for s in job.sizes]}),
+                    )
+            for skip in plan.skips:
+                jsonout.add_warning(f"{skip.format}/{skip.colorspace} skipped: {skip.reason}")
+
             if dry_run:
+                if not quiet:
+                    console.print(f"\n[dim]dry run — {file_total} file(s) would be written, 0 written[/dim]")
+                continue
+
+            for skip in plan.skips:
+                if quiet:
+                    continue
+                log_skip(f"{skip.format}/{skip.colorspace} — {escape(skip.reason)}")
+
+            def on_job_done(job, skipped: bool, input_svg=input_svg, variant_name=variant_name) -> None:
                 jsonout.add_item(
-                    input=input_svg, output=job.output_path, format=job.format,
-                    colorspace=job.colorspace, status="planned",
+                    input=input_svg, output=job.output_path, format=job.format, colorspace=job.colorspace, variant=label_for[variant_name],
+                    status="skipped_existing" if skipped else "written",
                     **({"size": job.size.label} if hasattr(job, "size") else {"sizes": [s.label for s in job.sizes]}),
                 )
-        for skip in plan.skips:
-            jsonout.add_warning(f"{skip.format}/{skip.colorspace} skipped: {skip.reason}")
+                if quiet:
+                    return
+                if skipped:
+                    console.print(f"[dim]— exists, skipped: {escape(str(job.output_path))}[/dim]")
+                else:
+                    log_step(str(job.output_path))
 
-        if dry_run:
-            if not quiet:
-                console.print(f"\n[dim]dry run — {file_total} file(s) would be written, 0 written[/dim]")
-            continue
+            render_svg, is_temp = apply_recolor(input_svg, resolved_recolor_map, resolved_recolor_tolerance)
+            if variant_name != "default":
+                try:
+                    render_svg, is_temp, variant_notes = make_variant_svg(render_svg, is_temp, variant_name, token_view, overrides=negative_overrides, tolerance=negative_tolerance)
+                except (VariantError, TokenError) as exc:
+                    log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+                    raise typer.Exit(1) from exc
+                for note in variant_notes:
+                    jsonout.add_warning(f"{variant_name}: {note}")
+                    if not quiet:
+                        log_skip(escape(f"{variant_name}: {note}"))
+            try:
+                result = renderer.execute(plan, render_svg, on_job_done=on_job_done)
+            except CmykError as exc:
+                log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+                raise typer.Exit(1) from exc
+            except MysuiteToolError as exc:
+                detail = (exc.stderr or "").strip().splitlines()
+                log_error(f"{escape(str(input_svg))}: {escape(detail[-1] if detail else str(exc))}")
+                raise typer.Exit(1) from exc
+            except OSError as exc:
+                log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+                raise typer.Exit(1) from exc
+            finally:
+                if is_temp:
+                    render_svg.unlink(missing_ok=True)
+            if result.cmyk_conversions and not quiet:
+                console.print(
+                    f"[dim]CMYK ({escape(resolved_cmyk.mode)}"
+                    f"{':' + str(resolved_cmyk.step) if resolved_cmyk.mode == 'clean' else ''}, "
+                    f"{escape(renderer._engine.description)}):[/dim]"
+                )
+                for conv in sorted(result.cmyk_conversions, key=lambda c: c.rgb):
+                    console.print(f"[dim]  {escape(conv.label())}[/dim]")
+            if result.cmyk_conversions:
+                jsonout.set_extra(cmyk={
+                    "mode": resolved_cmyk.mode, "step": resolved_cmyk.step if resolved_cmyk.mode == "clean" else None,
+                    "profile": renderer._engine.description,
+                    "colours": [
+                        {"rgb": f"#{c.rgb[0]:02x}{c.rgb[1]:02x}{c.rgb[2]:02x}", "cmyk": list(c.cmyk),
+                         "delta_e": c.delta_e, "neutral": c.neutral}
+                        for c in sorted(result.cmyk_conversions, key=lambda c: c.rgb)
+                    ],
+                })
+            for note in result.cmyk_notes:
+                log_skip(escape(note))
+            total_written += len(result.written)
+            total_skipped_existing += len(result.skipped_existing)
 
-        for skip in plan.skips:
-            if quiet:
-                continue
-            log_skip(f"{skip.format}/{skip.colorspace} — {escape(skip.reason)}")
-
-        def on_job_done(job, skipped: bool, input_svg=input_svg) -> None:
-            jsonout.add_item(
-                input=input_svg, output=job.output_path, format=job.format, colorspace=job.colorspace,
-                status="skipped_existing" if skipped else "written",
-                **({"size": job.size.label} if hasattr(job, "size") else {"sizes": [s.label for s in job.sizes]}),
-            )
-            if quiet:
-                return
-            if skipped:
-                console.print(f"[dim]— exists, skipped: {escape(str(job.output_path))}[/dim]")
-            else:
-                log_step(str(job.output_path))
-
-        render_svg, is_temp = apply_recolor(input_svg, resolved_recolor_map, resolved_recolor_tolerance)
-        try:
-            result = renderer.execute(plan, render_svg, on_job_done=on_job_done)
-        except CmykError as exc:
-            log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
-            raise typer.Exit(1) from exc
-        except MysuiteToolError as exc:
-            detail = (exc.stderr or "").strip().splitlines()
-            log_error(f"{escape(str(input_svg))}: {escape(detail[-1] if detail else str(exc))}")
-            raise typer.Exit(1) from exc
-        except OSError as exc:
-            log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
-            raise typer.Exit(1) from exc
-        finally:
-            if is_temp:
-                render_svg.unlink(missing_ok=True)
-        if result.cmyk_conversions and not quiet:
-            console.print(
-                f"[dim]CMYK ({escape(resolved_cmyk.mode)}"
-                f"{':' + str(resolved_cmyk.step) if resolved_cmyk.mode == 'clean' else ''}, "
-                f"{escape(renderer._engine.description)}):[/dim]"
-            )
-            for conv in sorted(result.cmyk_conversions, key=lambda c: c.rgb):
-                console.print(f"[dim]  {escape(conv.label())}[/dim]")
-        if result.cmyk_conversions:
-            jsonout.set_extra(cmyk={
-                "mode": resolved_cmyk.mode, "step": resolved_cmyk.step if resolved_cmyk.mode == "clean" else None,
-                "profile": renderer._engine.description,
-                "colours": [
-                    {"rgb": f"#{c.rgb[0]:02x}{c.rgb[1]:02x}{c.rgb[2]:02x}", "cmyk": list(c.cmyk),
-                     "delta_e": c.delta_e, "neutral": c.neutral}
-                    for c in sorted(result.cmyk_conversions, key=lambda c: c.rgb)
-                ],
-            })
-        for note in result.cmyk_notes:
-            log_skip(escape(note))
-        total_written += len(result.written)
-        total_skipped_existing += len(result.skipped_existing)
-
-        if not quiet and batch:
-            console.print(
-                f"[bold green]done[/bold green] — {len(result.written)} written, "
-                f"{len(result.skipped_existing)} already existed"
-            )
+            if not quiet and batch:
+                console.print(
+                    f"[bold green]done[/bold green] — {len(result.written)} written, "
+                    f"{len(result.skipped_existing)} already existed"
+                )
 
     if dry_run:
         if not quiet and batch:

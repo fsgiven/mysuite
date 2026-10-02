@@ -51,7 +51,7 @@ async def test_lists_every_tool_with_descriptions(work):
     async with server(work) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert {"mysuite_inspect", "mysuite_export", "mysuite_convert", "mysuite_cutout", "mysuite_watermark",
-            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_relight", "mysuite_metadata", "mysuite_kit", "mysuite_pdf", "mysuite_ocr", "mysuite_qr", "mysuite_dupes", "mysuite_diff", "mysuite_contrast", "mysuite_print", "mysuite_rename", "mysuite_sheet", "mysuite_profile", "mysuite_pipeline_run", "mysuite_doctor",
+            "mysuite_compress", "mysuite_enhance", "mysuite_transform", "mysuite_relight", "mysuite_metadata", "mysuite_kit", "mysuite_pdf", "mysuite_ocr", "mysuite_qr", "mysuite_dupes", "mysuite_diff", "mysuite_contrast", "mysuite_print", "mysuite_rename", "mysuite_sheet", "mysuite_profile", "mysuite_tokens", "mysuite_variants", "mysuite_pipeline_run", "mysuite_doctor",
             "mysuite_schema"} <= set(tools)
     assert all(t.description for t in tools.values())
     assert "dry_run" in tools["mysuite_export"].input_schema["properties"]
@@ -225,3 +225,20 @@ async def test_new_tools_through_mcp(work):
         assert wrong["exit_code"] == 2 and "nope" in wrong["errors"][0]
         outside = await call(c, "mysuite_qr", action="make", text="x", out=str(work.parent / "escape.png"))
         assert outside["exit_code"] == 3 and not (work.parent / "escape.png").exists()
+
+
+@pytest.mark.asyncio
+async def test_tokens_and_variants_through_mcp(work):
+    (work / "ds.css").write_text(':root{--ink:#dd0000}[data-theme="dark"]{--ink:#ff6b6b}')
+    (work / "mono.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect fill="#dd0000" width="5" height="5"/></svg>')
+    async with server(work) as c:
+        listing = await call(c, "mysuite_tokens", action="list", source=str(work / "ds.css"))
+        assert listing["ok"] and listing["items"][0]["dark"] == "#ff6b6b"
+        chk = await call(c, "mysuite_tokens", action="check", source=str(work / "ds.css"), logo=str(work / "mono.svg"))
+        assert chk["on_palette"] == 1
+        var = await call(c, "mysuite_variants", inputs=[str(work / "mono.svg")], variants="negative,mono-white", tokens=str(work / "ds.css"))
+        assert var["ok"] and "#ff6b6b" in (work / "mono_negative.svg").read_text()
+        outside = await call(c, "mysuite_tokens", action="list", source=str(work.parent))
+        assert outside["exit_code"] == 3
+        bad = await call(c, "mysuite_tokens", action="show", source=str(work / "ds.css"))
+        assert bad["exit_code"] == 2

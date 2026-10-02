@@ -74,3 +74,15 @@ in `AGENTS.md` and exercised by a doc-test.
   `dupes`, `diff`, `contrast`; optional macOS helper `mysuite-vision` (`mysuite/native/vision/build.sh`).
 - Still open from the shortlist: SVG optimise, `.ai`/PDF-to-SVG import (needs poppler), video poster frames, content-aware rename,
   the relight depth model, tokens/variants, profiles, `mysuite agent`.
+
+## Update 2026-10-02 (tokens)
+
+- Shipped: design tokens (CSS custom properties incl. Axis-style aliases/brands/themes, W3C DTCG JSON, pinned+cached git source,
+  Figma adapter [untested live]), `mysuite tokens list|show|check`, `token:NAME` in `--recolor`, `--variants` on export, `mysuite
+  variants make|list`, MCP tools `mysuite_tokens`/`mysuite_variants`, "Tokens" dashboard card.
+- Verified by hand against the Axis tokens used by teaser-engine (673 colour tokens for Bild, 119 with distinct dark values):
+  the Bild on-light logo (`#1d1d1b`) becomes pure white, like Axis' own on-dark logo, once `--negative-map` points at
+  `--headline-text-color`; the automatic choice is a near-white (#f2f4f5) with an ambiguity warning. Axis files are proprietary
+  and were not copied into the repo.
+- Still open: profiles/company defaults (tokens source, brand, metadata policy per company), presets rework, `.ai` import,
+  SVG optimise, the relight depth model, `mysuite agent`.

@@ -260,6 +260,13 @@ Batch-export an SVG into multiple sizes, formats, and color profiles.
 - `--recolor-tolerance` (float range, default `2.0`) How close (CIEDE2000 colour difference) a colour must be to a --recolor FROM to count as it; 0 = exact match only, 2 = just-noticeable difference (default). Catches anti-aliased or slightly-off brand colours.
 - `--cmyk-mode` (str) How CMYK numbers are chosen for --profiles cmyk (pdf/eps/tiff all use the same engine): 'exact' keeps the profile's values; 'clean' or 'clean:N' snaps every channel to a multiple of N (default 5, so 73/92 becomes 75/90) and prints the colour shift. Greys are always K-only.
 - `--cmyk-profile` (file) CMYK ICC profile (e.g. FOGRA39 or your printer's) used for the conversion and embedded as the PDF output intent. Default: Ghostscript's SWOP profile.
+- `--tokens` (str) Design tokens: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir (pinned, cached), or figma:FILEKEY. Lets --recolor use token:NAME and enables the negative variant.
+- `--brand` (str) Which brand of the token source (when it has several).
+- `--theme` (str, default `light`) Which theme's token values --recolor token:NAME uses: light or dark.
+- `--variants` (str) Several colour variants in one run, each in its own folder: default, negative (token-driven, needs --tokens), invert, mono-black, mono-white, grayscale. E.g. default,negative,mono-white.
+- `--negative-map` (str, repeatable) For the negative variant: LOGOCOLOUR=token:NAME makes that logo colour take the token's DARK value, e.g. '#1d1d1b=token:--headline-text-color'. Repeatable. Use it when several tokens share a colour but differ in dark mode.
+- `--negative-tolerance` (float range, default `5.0`) How close (CIEDE2000) a logo colour must be to a token's light value for the negative variant to use that token.
+- `--tokens-refresh` (boolean) Fetch a git token source again instead of using the cached copy.
 - `--recursive` (boolean) When an input is a directory, include SVGs in subdirectories too.
 - `--config / -c` (path) Explicit path to mysuite.toml.
 - `--preset` (str) Name of a [presets.NAME] block to apply, or a built-in preset (favicon, macos-icon).
@@ -675,6 +682,40 @@ Contact sheet: many pictures on one labelled page.
 - `--config / -c` (path) 
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+## `mysuite tokens check`
+
+Check a logo's colours against the tokens: which are on-palette, which are off. Exit 1 with --strict if any is off.
+
+- argument `logo` (file, required) SVG (or raster image) to check.
+- `--tokens` (str) Token source (file, folder, git+… or figma:KEY).
+- `--brand` (str) Which brand (when the source has several, e.g. an Axis folder).
+- `--theme` (str, default `light`) light or dark.
+- `--tolerance` (float range, default `2.0`) CIEDE2000 distance that still counts as the token (0 = exact).
+- `--strict` (boolean) Exit with code 1 if any colour is not a token colour.
+- `--tokens-refresh` (boolean) Fetch a git source again instead of using the cached copy.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite tokens list`
+
+List the colour tokens of a source.
+
+- argument `source` (str, required) Token source: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir, or figma:FILEKEY.
+- `--brand` (str) Which brand (when the source has several, e.g. an Axis folder).
+- `--filter / -f` (str) Only names containing this text.
+- `--has-dark` (boolean) Only tokens that have a different dark-theme value.
+- `--tokens-refresh` (boolean) Fetch a git source again instead of using the cached copy.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite tokens show`
+
+One token: its values per theme and where it came from.
+
+- argument `source` (str, required) Token source: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir, or figma:FILEKEY.
+- argument `name` (str, required) Token name, e.g. --bg-color-brand-solid or brand.red.
+- `--brand` (str) Which brand (when the source has several, e.g. an Axis folder).
+- `--tokens-refresh` (boolean) Fetch a git source again instead of using the cached copy.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite transform`
 
 Quick edits: trim, crop, rotate, flip, resize, pad, round corners, background (fixed, predictable order).
@@ -710,6 +751,28 @@ Quick edits: trim, crop, rotate, flip, resize, pad, round corners, background (f
 
 Launch the interactive terminal dashboard.
 
+
+## `mysuite variants list`
+
+The available variants and what each does.
+
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+## `mysuite variants make`
+
+Write SVG variants of a logo: `mysuite variants make logo.svg --variants negative,mono-white --tokens tokens/ --brand acme`.
+
+- argument `inputs` (file, required, repeatable) SVG logo(s).
+- `--variants` (str, default `negative,mono-white,mono-black`) Comma-separated: invert, mono-black, mono-white, grayscale, negative, on-dark.
+- `--tokens` (str) Design tokens: file/folder (.css/.json), git+https://…@REF#path=dir, or figma:KEY. Needed for negative.
+- `--brand` (str) Which brand of the token source.
+- `--negative-map` (str, repeatable) LOGOCOLOUR=token:NAME: use that token's DARK value for that logo colour (repeatable).
+- `--negative-tolerance` (float range, default `5.0`) How close (CIEDE2000) a logo colour must be to a token to use it.
+- `--out / -o` (path) Output folder (default: beside the logo).
+- `--tokens-refresh` (boolean) Fetch a git token source again.
+- `--overwrite / --no-overwrite` (boolean) 
+- `--dry-run` (boolean) List the files that would be written.
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
 ## `mysuite watermark`
 

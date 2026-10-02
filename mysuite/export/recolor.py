@@ -58,6 +58,8 @@ def _normalize_color(value: str) -> str:
     lowered = stripped.lower()
     if lowered in _SVG_NAMED_COLORS:
         return lowered
+    if stripped.lower().startswith("token:") and len(stripped) > 6:
+        return stripped                      # resolved against --tokens later
     if parse_color(stripped) is not None:  # rgb(), hsl(), ... (not splittable on the CLI, fine in config)
         return stripped
     raise InvalidRecolorError(
@@ -131,3 +133,45 @@ def apply_recolor(
     finally:
         tmp.close()
     return Path(tmp.name), True
+
+
+def resolve_token_refs(mapping: dict[str, str], tokens, brand: str | None, theme: str) -> dict[str, str]:
+    """Replaces `token:NAME` on either side of a FROM=TO swap by that token's colour in the chosen theme."""
+    from mysuite.tokens.model import TokenError
+
+    def one(value: str) -> str:
+        if not value.lower().startswith("token:"):
+            return value
+        name = value[6:]
+        token = tokens.get(name, brand)
+        if token is None:
+            near = [n for n in tokens.names(brand) if name.lstrip("-").lower() in n.lower()][:5]
+            raise TokenError(f"no token named {name!r}" + (f" - did you mean: {', '.join(near)}" if near else ""))
+        color = token.color(theme)
+        if color is None:
+            raise TokenError(f"token {name!r} has no colour value")
+        return color.hex() if color.alpha is None or color.alpha >= 1 else token.values.get(theme) or token.values["light"]
+
+    return {one(k): one(v) for k, v in mapping.items()}
+
+
+def make_variant_svg(path: Path, is_temp: bool, variant: str, view, *, overrides: dict[str, str] | None = None, tolerance: float = 5.0) -> tuple[Path, bool, list[str]]:
+    """Writes the variant of an SVG to a temp file; returns (path, is_temp, notes). The input temp file is removed."""
+    from mysuite.color import variants as v
+    from mysuite.color.svg import palette
+
+    text = path.read_text(encoding="utf-8")
+    notes: list[str] = []
+    if variant in v.ALGORITHMIC:
+        out = v.apply_algorithmic(variant, text)
+    else:
+        hexes = [h[:7] for h, _ in palette(text)]
+        out, notes = v.apply_negative(text, view, hexes, tolerance=tolerance, overrides=overrides)
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".svg", prefix=f"mysuite-variant-{variant}-", delete=False)
+    try:
+        tmp.write(out)
+    finally:
+        tmp.close()
+    if is_temp:
+        path.unlink(missing_ok=True)
+    return Path(tmp.name), True, notes

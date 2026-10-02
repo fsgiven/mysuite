@@ -86,6 +86,11 @@ def _walk(text: str, fn: Callable[[str, Color], str | None]) -> str:
     return _STYLE_BLOCK_RE.sub(lambda m: f"{m.group(1)}{decls(m.group(2))}{m.group(3)}", text)
 
 
+def map_colours(text: str, fn: Callable[[str, Color], str | None]) -> str:
+    """Rewrites every colour literal in an SVG through fn(token, colour) -> replacement or None (keep)."""
+    return _walk(text, fn)
+
+
 def recolor_text(text: str, mapping: dict[str, str], tolerance: float = DEFAULT_TOLERANCE) -> str:
     """Rewrites every colour that equals (or is within `tolerance` CIEDE2000 of) a FROM key."""
     if not mapping:
