@@ -55,18 +55,35 @@ def native_svg_size(svg_path: Path) -> int | None:
     return None
 
 
+def native_svg_side(svg_path: Path, side: str) -> int | None:
+    """The SVG's own whole-pixel width or height (from its root width/height attributes), else None."""
+    try:
+        head = svg_path.read_text(encoding="utf-8", errors="replace")[:4096]
+    except OSError:
+        return None
+    root = re.search(r"<svg\b[^>]*>", head, re.S)
+    if not root:
+        return None
+    found = dict(_SIZE_ATTR_RE.findall(root.group(0)))
+    value = found.get(side)
+    return int(float(value)) if value and float(value).is_integer() else None
+
+
 def _rsvg_render_png(input_svg: Path, output_path: Path, size: Size, dpi: float, tools: ToolPaths) -> None:
-    _rsvg_render_png_dims(input_svg, output_path, size.label, size.label, dpi, tools)
+    _rsvg_render_png_dims(input_svg, output_path, *size.box(), dpi, tools)
+
+
+def _box_args(width: str | None, height: str | None) -> list[str]:
+    return ([f"--width={width}"] if width else []) + ([f"--height={height}"] if height else [])
 
 
 def _rsvg_render_png_dims(
-    input_svg: Path, output_path: Path, width: str, height: str, dpi: float, tools: ToolPaths
+    input_svg: Path, output_path: Path, width: str | None, height: str | None, dpi: float, tools: ToolPaths
 ) -> None:
     run([
         tools.rsvg_convert,
         "--format=png",
-        f"--width={width}",
-        f"--height={height}",
+        *_box_args(width, height),
         f"--dpi-x={dpi}",
         f"--dpi-y={dpi}",
         "--keep-aspect-ratio",
@@ -217,8 +234,7 @@ def _render_pdf_rgb(input_svg: Path, output_path: Path, size: Size, dpi: float, 
         run([
             tools.rsvg_convert,
             "--format=pdf",
-            f"--width={size.label}",
-            f"--height={size.label}",
+            *_box_args(*size.box()),
             f"--dpi-x={dpi}",
             f"--dpi-y={dpi}",
             "--keep-aspect-ratio",
@@ -286,7 +302,7 @@ def _convert_pdf_to_eps(input_pdf: Path, output_path: Path, tools: ToolPaths) ->
 
 
 def _render_svg(input_svg: Path, output_path: Path, size: Size, dpi: float, tools: ToolPaths) -> None:
-    native = native_svg_size(input_svg)
+    native = native_svg_size(input_svg) if size.fit == "longest" else native_svg_side(input_svg, size.fit)
     if native == size.pixels:
         def write(tmp_path: Path) -> None:
             shutil.copyfile(input_svg, tmp_path)
@@ -295,8 +311,7 @@ def _render_svg(input_svg: Path, output_path: Path, size: Size, dpi: float, tool
             run([
                 tools.rsvg_convert,
                 "--format=svg",
-                f"--width={size.label}",
-                f"--height={size.label}",
+                *_box_args(*size.box()),
                 f"--dpi-x={dpi}",
                 f"--dpi-y={dpi}",
                 "--keep-aspect-ratio",

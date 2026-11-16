@@ -10,6 +10,7 @@ UNITS_PER_INCH = {
 }
 
 VALID_UNITS = {"px", "mm", "cm", "in"}
+SIZE_BY = ("longest", "height", "width")
 
 _SIZE_RE = re.compile(r"^(\d+(?:\.\d+)?)(px|mm|cm|in)?$", re.IGNORECASE)
 
@@ -32,6 +33,17 @@ class Size:
     pixels: int
     """Resolved pixel-equivalent (via dpi for physical units) — used for sorting,
     grouping, and the {size_px} naming token."""
+
+    fit: str = "longest"
+    """Which side the size sets: "longest" (fits a size x size box, the default), "height" or "width"."""
+
+    def box(self) -> tuple[str | None, str | None]:
+        """(--width, --height) for rsvg-convert; None = left out, so rsvg scales that side to keep the aspect ratio."""
+        if self.fit == "height":
+            return None, self.label
+        if self.fit == "width":
+            return self.label, None
+        return self.label, self.label
 
 
 def parse_size(raw: str | int | float, *, dpi: float, default_unit: str = "px") -> Size:

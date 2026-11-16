@@ -71,6 +71,8 @@ class ExportSettings:
     rendering. Colours are matched by value (#d00 = #dd0000 = rgb(221,0,0) = hsl(...))
     and, within recolor_tolerance (CIEDE2000), near-identical colours too."""
     recolor_tolerance: float = 2.0
+    size_by: str = "longest"
+    """What a size sets: "longest" side (fits a size x size box), "height" or "width"."""
     cmyk_mode: str = "exact"
     """'exact' (the profile's numbers), 'clean' or 'clean:<step>' (snap each channel to a
     multiple of step, default 5: 73/92 -> 75/90)."""
