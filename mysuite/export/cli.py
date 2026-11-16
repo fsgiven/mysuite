@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import dataclasses
 import shutil
 import tempfile
 from pathlib import Path
@@ -33,6 +34,7 @@ from mysuite.tokens.model import TokenError
 from mysuite.tokens.context import build_context
 from mysuite.export.renderer import Renderer
 from mysuite.export.units import (
+    SIZE_BY,
     VALID_UNITS,
     InvalidPaddingError,
     InvalidSizeError,
@@ -98,6 +100,11 @@ def export(
         None, "--formats", "-f",
         help="Comma-separated: png,pdf,eps,svg,jpeg,webp,tiff,ico,icns "
         "(ico/icns bundle multiple sizes into one file).",
+    ),
+    size_by: Optional[str] = typer.Option(
+        None, "--size-by",
+        help="What each size sets: longest (default: the logo fits a SIZE x SIZE box), height or width. "
+        "E.g. --sizes 512,1080 --size-by height makes a wide logo exactly 512 and 1080 px high.",
     ),
     profiles: Optional[str] = typer.Option(None, "--profiles", "-p", help="Comma-separated: rgb,cmyk"),
     dpi: Optional[float] = typer.Option(
@@ -256,6 +263,11 @@ def export(
     except InvalidSizeError as exc:
         log_error(str(exc))
         raise typer.Exit(1) from exc
+    resolved_size_by = (size_by or settings.size_by or "longest").strip().lower()
+    if resolved_size_by not in SIZE_BY:
+        log_error(f"--size-by must be one of {', '.join(SIZE_BY)}, not {resolved_size_by!r}")
+        raise typer.Exit(1)
+    resolved_sizes = [dataclasses.replace(s, fit=resolved_size_by) for s in resolved_sizes]
     resolved_formats = parse_csv(formats) or settings.formats
     resolved_profiles = parse_csv(profiles) or settings.profiles
     resolved_out = out or Path(settings.out_dir)
