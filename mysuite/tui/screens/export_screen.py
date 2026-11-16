@@ -66,13 +66,13 @@ class ExportScreen(ToolScreen):
         yield Label("Logo files", classes="section")
         yield FileTarget(
             input_id="input-svg", browse_id="browse-input-svg", extensions=_SVG, noun="logo",
-            placeholder="logo.svg (or .ai, .pdf, .eps), a folder, or a glob like brand/*.svg",
+            placeholder="logo.svg / .ai / .pdf / .eps, a folder or brand/*.svg",
         )
         yield Checkbox("Include subfolders", id="recursive")
 
         yield Label("What to make", classes="section")
         with Horizontal(classes="pair"):
-            yield field("Sizes", Input(placeholder="16,32,64,128,256,512,1024", id="sizes"), classes="grow")
+            yield field("Sizes", Input(placeholder="e.g. 64,512,1024", id="sizes"), classes="grow")
             yield field("Unit", Select[str]([(u, u) for u in UNIT_OPTIONS], id="unit", prompt="default"), classes="narrow")
             yield field("DPI", Input(placeholder="300", id="dpi"), classes="narrow")
         yield field("Formats", ChipGroup(FORMAT_OPTIONS, id="formats", columns=5))
@@ -83,13 +83,13 @@ class ExportScreen(ToolScreen):
                 classes="grow",
             )
         yield field(
-            "Brand CMYK (used as given, e.g. #DD0000=0/100/100/0 #1D1D1B=75/65/65/80)",
-            Input(placeholder="none: computed from the profile", id="cmyk-map"),
+            "Brand CMYK, used as given",
+            Input(placeholder="e.g. #DD0000=0/100/100/0 #1D1D1B=75/65/65/80", id="cmyk-map"),
         )
-        yield field("Colour variants (none ticked = just the logo as it is)", ChipGroup(list(variant_mod.ALL), id="variants", columns=5))
+        yield field("Colour variants (none ticked = just the logo as it is)", ChipGroup(list(variant_mod.ALL), id="variants", columns=4))
         yield field(
-            "More variants: NAME=STEP+STEP (e.g. negativ_dark=knockout+mono:#1D1D1B cut_out=cutout+mono-white)",
-            Input(placeholder="optional", id="variant-specs"),
+            "More variants: NAME=STEP+STEP",
+            Input(placeholder="e.g. negativ_dark=knockout+mono:#1D1D1B", id="variant-specs"),
         )
 
         yield Label("Where", classes="section")

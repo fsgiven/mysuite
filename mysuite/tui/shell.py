@@ -11,6 +11,7 @@ import json
 import subprocess
 import sys
 import threading
+import time
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -24,11 +25,12 @@ from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import (
-    Button, Checkbox, Footer, Header, Input, Label, ProgressBar, RichLog, Select, Static,
+    Button, Checkbox, Footer, Input, Label, ProgressBar, RichLog, Select, Static,
 )
 
 from mysuite.pipeline import engine
-from mysuite.tui import ui_state
+from mysuite.tui import style, ui_state
+from mysuite.tui.widgets.app_bar import AppBar
 from mysuite.tui.widgets.command_line import CommandLine
 from mysuite.tui.widgets.file_target import FileTarget
 from mysuite.utils import jsonout
@@ -121,6 +123,9 @@ class ToolScreen(Screen):
         self._proc: subprocess.Popen | None = None
         self._planned = 0
         self._busy = False
+        self._started = 0.0
+        self._spin: Timer | None = None
+        self._spin_i = 0
 
     # ----------------------------------------------------------------- subclass surface
     def compose_form(self) -> ComposeResult:
@@ -160,7 +165,7 @@ class ToolScreen(Screen):
 
     # ------------------------------------------------------------------------ layout
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield AppBar(self.HEADING)
         with Horizontal(id="tool-body"):
             with Vertical(id="form-pane"):
                 with VerticalScroll(id="form"):
@@ -178,7 +183,7 @@ class ToolScreen(Screen):
                 yield Static("", id="run-summary")
                 with Horizontal(id="after-run"):
                     yield Button("Open output folder", id="open-out", classes="mini")
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def on_mount(self) -> None:
         self.app.sub_title = self.HEADING
@@ -187,6 +192,7 @@ class ToolScreen(Screen):
         self.query_one("#command", CommandLine).border_title = "Command"
         self.query_one("#run-log", RichLog).border_title = "Output"
         self.query_one("#after-run").display = False
+        self.query_one("#run-progress").display = False
         self.prepare()
         self.apply_defaults()
         self._restore()
@@ -195,16 +201,11 @@ class ToolScreen(Screen):
         self._focus_first()
 
     def _apply_accent(self) -> None:
-        """Each tool keeps its colour from the registry (the same one its card uses)."""
-        from mysuite.tui.registry import TOOL_REGISTRY
-
-        spec = next((t for t in TOOL_REGISTRY if t.key == self.TOOL_KEY), None)
-        if spec is None:
-            return
+        """One accent for every tool: section titles and panel titles."""
         for widget in self.query(".section"):
-            widget.styles.color = spec.accent
+            widget.styles.color = style.ACCENT
         for selector in ("#plan", "#run-log", "#command"):
-            self.query_one(selector).styles.border_title_color = spec.accent
+            self.query_one(selector).styles.border_title_color = style.ACCENT
 
     def _focus_first(self) -> None:
         try:
@@ -383,6 +384,34 @@ class ToolScreen(Screen):
     def write_log(self, message: str) -> None:
         self.query_one("#run-log", RichLog).write(message)
 
+    @while_shown
+    def write_status_line(self, line: str) -> None:
+        """A line of the command's own output; its leading ✓ / ⚠ / ✗ / — gets the status colour."""
+        stripped = line.lstrip()
+        mark = stripped[:1]
+        colour = style.STATUS_MARKS.get(mark)
+        if colour:
+            rest = self._short_paths(stripped[1:]).strip()
+            if "/" in rest and " " not in rest:                   # one output file: name first, its folder dimmed
+                folder, _, name = rest.rpartition("/")
+                tail = "/".join(folder.split("/")[-2:])
+                self.write_log(f"[{colour}]{escape(mark)}[/{colour}] {escape(name)}  [{style.DIM}]{escape(tail)}[/{style.DIM}]")
+            else:
+                self.write_log(f"[{colour}]{escape(mark)}[/{colour}] {escape(rest)}")
+        else:
+            self.write_log(f"[{style.MUTED}]{escape(self._short_paths(line))}[/{style.MUTED}]")
+
+    def _short_paths(self, text: str) -> str:
+        """Paths inside the output folder are shown relative to it, so a file name fits on its own line."""
+        try:
+            folder = self.output_dir()
+        except Exception:  # noqa: BLE001 - a half-filled form
+            folder = None
+        if folder is not None:
+            for prefix in {str(folder), str(Path(folder).resolve())}:
+                text = text.replace(prefix.rstrip("/") + "/", "")
+        return tilde(text)
+
     def flash(self, widget_id: str | None, message: str) -> None:
         if widget_id:
             try:
@@ -436,9 +465,13 @@ class ToolScreen(Screen):
         self.query_one("#stop-btn", Button).disabled = False
         self.query_one("#after-run").display = False
         self.query_one("#run-log", RichLog).clear()
-        self.query_one("#run-summary", Static).update("running…")
         bar = self.query_one("#run-progress", ProgressBar)
+        bar.display = True
         bar.update(total=self._planned or None, progress=0)
+        self._started = time.monotonic()
+        self._spin_i = 0
+        self._spinner_tick()
+        self._spin = self.set_interval(0.1, self._spinner_tick)
         self._run_worker([*self.global_argv(), *self.command_words(), *argv, "--json"], dry)
 
     @work(thread=True, exclusive=True, group="run")
@@ -464,7 +497,7 @@ class ToolScreen(Screen):
                 self.app.call_from_thread(self._on_item, item)
                 continue
             stderr_lines.append(line)
-            self.app.call_from_thread(self.write_log, escape(tilde(line)))
+            self.app.call_from_thread(self.write_status_line, line)
         code = proc.wait()
         reader.join(timeout=5)
         try:
@@ -472,6 +505,14 @@ class ToolScreen(Screen):
         except ValueError:
             report = {}
         self.app.call_from_thread(self._finished, report, code, "\n".join(stderr_lines), dry)
+
+    @while_shown
+    def _spinner_tick(self) -> None:
+        self._spin_i += 1
+        frame = style.SPINNER[self._spin_i % len(style.SPINNER)]
+        elapsed = time.monotonic() - self._started
+        self.query_one("#run-summary", Static).update(
+            Text.assemble((frame + " ", style.ACCENT), (f"running…  {elapsed:.1f} s", style.MUTED)))
 
     @while_shown
     def _on_item(self, item: dict[str, Any]) -> None:
@@ -487,15 +528,19 @@ class ToolScreen(Screen):
             return f"dry run — {len(items)} file(s) would be written, 0 written"
         text = f"done — {written} written"
         if existed:
-            text += f", {existed} already existed (enable Overwrite to replace)"
+            text += f"  ·  {existed} already existed (tick Overwrite to replace)"
         if failed:
-            text += f", {failed} failed"
+            text += f"  ·  {failed} failed"
         return text
 
     @while_shown
     def _finished(self, report: dict[str, Any], code: int, output: str, dry: bool) -> None:
         self._busy = False
         self._proc = None
+        if self._spin is not None:
+            self._spin.stop()
+            self._spin = None
+        elapsed = time.monotonic() - self._started if self._started else 0.0
         self.last_report = report
         self.last_output = output
         self.query_one("#run-btn", Button).disabled = False
@@ -531,5 +576,12 @@ class ToolScreen(Screen):
                 summary = f"failed (exit {code}) — {tilde(last.strip())}" if last else f"failed (exit {code})"
             color = "#F87171"
         self.last_summary_text = summary
-        self.query_one("#run-summary", Static).update(Text(summary, style=color))
+        mark = "✓" if color == "#4ADE80" else "⚠" if color == "#FBBF24" else "✗"
+        timing = f"  ·  {elapsed:.1f} s" if elapsed else ""
+        self.query_one("#run-summary", Static).update(
+            Text.assemble((mark + " ", color), (summary, color), (timing, style.DIM)))
+        if code == 0 and not dry:
+            self.app.notify(summary, title=self.HEADING, timeout=3)
+        elif code not in (0,) and code >= 0:
+            self.app.notify(summary, title=self.HEADING, severity="error", timeout=5)
         self._schedule_preview()

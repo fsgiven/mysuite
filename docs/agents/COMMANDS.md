@@ -947,6 +947,7 @@ Quick edits: trim, crop, rotate, flip, resize, pad, round corners, background (f
 
 Launch the interactive terminal dashboard.
 
+- `--welcome` (boolean) Show the animated intro page before the tools.
 
 ## `mysuite variants list`
 

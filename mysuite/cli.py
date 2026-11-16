@@ -142,10 +142,12 @@ def doctor() -> None:
 
 
 @app.command("tui", help="Launch the interactive terminal dashboard.")
-def tui() -> None:
+def tui(
+    welcome: bool = typer.Option(False, "--welcome", help="Show the animated intro page before the tools."),
+) -> None:
     from mysuite.tui.app import MysuiteApp  # lazy import — keeps `export`/`doctor` startup fast
 
-    MysuiteApp(show_welcome=True).run()
+    MysuiteApp(show_welcome=welcome).run()
 
 
 @app.command("schema", help="Describe every command's options, the --json result and exit codes (for agents).")

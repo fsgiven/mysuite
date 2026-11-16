@@ -1,39 +1,42 @@
-/* Palette reference (Textual CSS has no variables here — kept as literal hex,
-   matching the rest of this file — this block is just documentation):
-     background (screen)     #10121A
-     background (panel/input) #161822
-     background (deepest/log) #0D0E14
-     text (primary)           #E8E8E8
-     text (secondary/label)   #8B93A7
-     text (dim/hint)          #6B7280
-     border (neutral)         #2A2E3F
-     accent — export          #7DD3FC  (cyan)
-     accent — convert         #C4B5FD  (violet)
-     accent — cutout          #FCA5A5  (coral)
-     accent — watermark       #5EEAD4  (teal)
-     accent — metadata        #93C5FD  (periwinkle)
-     accent — compress        #FDE047  (amber-gold)
-     accent — enhance         #F9A8D4  (rose)
-     success                  #4ADE80
-     warning                  #FBBF24
-     error                    #F87171
-   Each tool's accent doubles as its screen's identity color — see the
-   "<ScreenClass> .field-group" rules below — so it's obvious at a glance
-   which tool is open. A new tool should pick an unused hue from this same
-   family (bright, desaturated pastel, reads clearly on #10121A) rather than
-   reusing an existing tool's color or the warning/error/success hues. */
+/* One visual system (mirrors mysuite/tui/style.py; Textual CSS here has no shared variables):
+     background        #10121A    surface (cards, inputs, bars)  #161822    surface, focused  #1D2333
+     text              #E8E8E8    muted (labels)                 #8B93A7    dim (hints)       #6B7280
+     border            #2A2E3F
+     accent            #7DD3FC    the ONLY accent: focus, section titles, selected chips, primary action
+     ok / warn / error #4ADE80 / #FBBF24 / #F87171 — status only, never decoration
+   Tools no longer get their own colours: a calm, consistent screen reads as a professional tool. */
 
 Screen {
     background: #10121A;
     color: #E8E8E8;
 }
 
-Header {
-    background: #161822;
-    color: #E8E8E8;
+* {
+    scrollbar-background: #10121A;
+    scrollbar-background-hover: #10121A;
+    scrollbar-background-active: #10121A;
+    scrollbar-color: #2A2E3F;
+    scrollbar-color-hover: #3A4055;
+    scrollbar-color-active: #7DD3FC;
+    scrollbar-size-vertical: 1;
 }
 
 Footer {
+    background: #161822;
+}
+
+Footer FooterKey {
+    background: #161822;
+}
+
+Footer FooterKey .footer-key--key {
+    color: #7DD3FC;
+    background: #161822;
+    text-style: bold;
+}
+
+Footer FooterKey .footer-key--description {
+    color: #8B93A7;
     background: #161822;
 }
 
@@ -74,13 +77,17 @@ Button.-primary:focus {
 
 Input {
     border: none;
-    background: #161822;
+    background: #1A1D29;
     color: #E8E8E8;
     padding: 0 1;
 }
 
+Input > .input--placeholder {
+    color: #5B6375;
+}
+
 Input:focus {
-    background: #1B1E2B;
+    background: #232838;
     border: none;
 }
 
@@ -101,7 +108,7 @@ Select {
 
 SelectCurrent {
     border: none;
-    background: #161822;
+    background: #1A1D29;
 }
 
 Select:focus > SelectCurrent {
@@ -122,8 +129,31 @@ ToggleButton, Checkbox {
     margin: 0 0 0 0;
 }
 
-ToggleButton:focus, Checkbox:focus {
-    background: #1B1E2B;
+/* Off: an empty box. On: a filled accent box with a tick. No more grey "X" in both states. */
+ToggleButton > .toggle--button {
+    color: #232838;
+    background: #232838;
+    text-style: bold;
+}
+
+ToggleButton.-on > .toggle--button {
+    color: #10121A;
+    background: #7DD3FC;
+}
+
+ToggleButton > .toggle--label {
+    color: #8B93A7;
+    background: transparent;
+}
+
+ToggleButton.-on > .toggle--label {
+    color: #E8E8E8;
+}
+
+ToggleButton:focus > .toggle--label {
+    color: #E8E8E8;
+    background: #232838;
+    text-style: none;
 }
 
 /* Titled field groups */
@@ -146,43 +176,26 @@ ToggleButton:focus, Checkbox:focus {
 /* Per-tool identity color — overrides .field-group's default accent above for
    each tool's own screen (see the palette reference comment at the top). */
 
-/* Home screen: cards + helper bar */
+/* Home screen: calm cards under group headings */
 
-#home-title {
-    height: 3;
-    padding: 1 3 0 3;
-}
-
-#cards-scroll {
+HomeScreen #cards-scroll {
     height: 1fr;
-    padding: 0 2;
+    padding: 0 3 1 3;
 }
 
-#cards {
-    layout: grid;
-    grid-size: 3;
-    grid-gutter: 1 2;
-    height: auto;
-    padding: 1 0;
-}
-
-#helper-bar {
-    dock: bottom;
-    height: 5;
-    margin-bottom: 1;
-    padding: 0 3;
-    background: #10121A;
-}
-
-#helper-mascot {
-    width: 13;
-    height: 4;
-}
-
-#helper-hint {
-    width: 1fr;
+HomeScreen .group-title {
+    height: 1;
+    margin: 1 0 1 0;
     color: #6B7280;
-    padding: 1 1;
+    text-style: bold;
+}
+
+HomeScreen .cards {
+    layout: grid;
+    grid-size: 4;
+    grid-gutter: 1 2;
+    grid-rows: 4;
+    height: auto;
 }
 
 /* Export screen */
@@ -411,7 +424,8 @@ ToolScreen .command-line {
 }
 ToolScreen .command-text { width: 1fr; color: #E8E8E8; }
 
-ToolScreen #run-progress { margin: 1 0 0 0; }
+ToolScreen #run-progress { margin: 1 0 0 0; height: 1; }
+ToolScreen #run-progress Bar { width: 1fr; }
 ToolScreen #run-log {
     height: 1fr;
     border: round #2A2E3F;

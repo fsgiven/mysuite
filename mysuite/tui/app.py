@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from textual.app import App
+from textual.widgets._toggle_button import ToggleButton
+
+ToggleButton.BUTTON_INNER = "✓"     # shown only when on (the off state hides it in theme.css)
 
 from mysuite.tui.screens.home import HomeScreen
 
@@ -12,6 +15,7 @@ _THEME_CSS_PATH = Path(__file__).parent / "theme.css"
 class MysuiteApp(App):
     CSS_PATH = str(_THEME_CSS_PATH)
     TITLE = "mysuite"
+    ENABLE_COMMAND_PALETTE = False
     BINDINGS = [("q", "quit", "Quit"), ("f1", "helper", "Help")]
 
     def __init__(self, *, show_welcome: bool = False) -> None:
