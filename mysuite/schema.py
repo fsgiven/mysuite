@@ -4,6 +4,7 @@ Built from the live Typer/Click command tree, so it cannot drift from the real o
 """
 from __future__ import annotations
 
+from pathlib import PurePath
 from typing import Any
 
 from mysuite.utils.jsonout import SCHEMA_VERSION
@@ -47,15 +48,54 @@ EXIT_CODES = {
 }
 
 
+# Click's ParamType.name for the plain Python annotations Typer maps (Click 8.2+ spelling).
+_ANNOTATION_NAMES = {str: "str", int: "int", float: "float", bool: "boolean"}
+
+
+def _type_and_choices(p: Any) -> tuple[str, list[Any] | None]:
+    """The parameter's type name and choices, the same under every Typer version.
+
+    Typer <0.29 (and plain Click) attach a Click ParamType as `p.type`. Typer 0.29+ bundles its own
+    Click and drops `.type`; it keeps `p.type_descriptor` (the annotation plus the Option/Argument
+    info) instead, so the names Click would have given are rebuilt from that.
+    """
+    ptype = getattr(p, "type", None)
+    if ptype is not None:
+        kind = getattr(ptype, "name", "string")
+        choices = getattr(ptype, "choices", None)
+        return kind, (list(choices or []) if choices is not None or kind == "choice" else None)
+    desc = getattr(p, "type_descriptor", None)
+    if desc is None:
+        return "string", None
+    if desc.choices is not None:
+        return "choice", list(desc.choices)
+    annotation = desc.annotation
+    if desc.is_list:  # list[X] -> X: repeatability is reported separately
+        annotation = getattr(annotation, "__args__", (str,))[0]
+    # `is_path` misses list[Path], and Typer spells a directory "dir" where Click says "directory".
+    if desc.is_path or (isinstance(annotation, type) and issubclass(annotation, PurePath)):
+        info = desc.parameter_info
+        if info.file_okay and not info.dir_okay:
+            return "file", None
+        if info.dir_okay and not info.file_okay:
+            return "directory", None
+        return "path", None
+    if desc.is_ranged:
+        return f"{desc.ranged_type_name} range", None
+    if annotation in _ANNOTATION_NAMES:
+        return _ANNOTATION_NAMES[annotation], None
+    return getattr(annotation, "__name__", "string").lower(), None
+
+
 def _param(p: Any) -> dict[str, Any]:
-    kind = getattr(p.type, "name", "string")
+    kind, choices = _type_and_choices(p)
     entry: dict[str, Any] = {"name": p.name, "type": kind}
     if getattr(p, "opts", None) and p.param_type_name == "option":
         entry["flags"] = list(p.opts) + list(getattr(p, "secondary_opts", []) or [])
     if p.param_type_name == "option" and getattr(p, "is_flag", False):
         entry["type"] = "boolean"
-    if getattr(p, "choices", None) is not None or kind == "choice":
-        entry["choices"] = list(getattr(p.type, "choices", []))
+    if choices is not None:
+        entry["choices"] = choices
     entry["required"] = bool(p.required)
     entry["repeatable"] = bool(getattr(p, "multiple", False)) or getattr(p, "nargs", 1) == -1
     default = p.default
