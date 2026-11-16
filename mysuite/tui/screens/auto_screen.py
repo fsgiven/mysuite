@@ -6,6 +6,7 @@ values per action, and the command's own output. It runs the real command, so th
 """
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,9 @@ from mysuite.tui.widgets.file_target import FileTarget
 HIDDEN = {"json", "json_output", "config", "config_path", "quiet", "help", "dry_run"}   # dry_run is the shell's "Preview only"
 MAX_VISIBLE_OPTIONS = 6
 _BLANK = (None, Select.BLANK, Select.NULL)
+# Secret options: masked on screen, never remembered, never on the command line (where `ps` and the live command
+# would show them). The command gets the value from the environment variable the CLI itself reads.
+SECRET_ENV = {("mark embed", "key"): "MYSUITE_MARK_KEY", ("mark detect", "key"): "MYSUITE_MARK_KEY"}
 
 
 @lru_cache(maxsize=1)
@@ -163,6 +167,9 @@ class AutoToolScreen(ToolScreen):
         self._fields[wid] = ("opt", opt)
         label = _label(opt["name"]) + (" *" if opt["required"] else "")
         hint = _short(opt.get("help", ""))
+        if self._secret_env(opt):
+            return [Label(label, classes="fl"),
+                    Input(placeholder="your secret key: hidden, never saved, not shown in the command", password=True, id=wid)]
         if opt["type"] == "boolean":
             return [Checkbox(_checkbox_text(opt["name"], hint), id=wid, value=opt.get("default") is True)]
         field = Input(placeholder=hint, id=wid)
@@ -177,10 +184,13 @@ class AutoToolScreen(ToolScreen):
         return [Label(label, classes="fl"), field]
 
     # ------------------------------------------------------------ remembered values per action
+    def _secret_env(self, entry: dict) -> str | None:
+        return SECRET_ENV.get((self._key, entry["name"]))
+
     def _apply_remembered(self) -> None:
         values = self._cmds.get(self._key, {})
         for wid, (kind, entry) in self._fields.items():
-            if kind != "opt" or entry["name"] not in values:
+            if kind != "opt" or entry["name"] not in values or self._secret_env(entry):
                 continue
             widget = self.query_one(f"#{wid}")
             value = values[entry["name"]]
@@ -192,7 +202,7 @@ class AutoToolScreen(ToolScreen):
     def _current_values(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
         for wid, (kind, entry) in self._fields.items():
-            if kind == "opt":
+            if kind == "opt" and not self._secret_env(entry):
                 widget = self.query_one(f"#{wid}")
                 out[entry["name"]] = widget.value
         return out
@@ -272,6 +282,10 @@ class AutoToolScreen(ToolScreen):
                     positional.append(value)
                 continue
             widget = self.query_one(f"#{wid}")
+            if (env_name := self._secret_env(entry)):            # goes to the child through child_env(), not argv
+                if not widget.value and not os.environ.get(env_name):
+                    raise FormError(f"{label} is required (it is passed privately: hidden, never saved)", wid)
+                continue
             if entry["type"] == "boolean":
                 default = entry.get("default") is True
                 if widget.value and not default:
@@ -295,6 +309,15 @@ class AutoToolScreen(ToolScreen):
         if any(p.startswith("-") for p in positional):
             return [*options, "--", *positional]
         return [*positional, *options]
+
+    def child_env(self) -> dict[str, str]:
+        env: dict[str, str] = {}
+        for wid, (kind, entry) in self._fields.items():
+            if kind == "opt" and (name := self._secret_env(entry)):
+                value = self.query_one(f"#{wid}", Input).value
+                if value:
+                    env[name] = value
+        return env
 
     # ---------------------------------------------------------------------------- results
     def idle_plan_text(self) -> str:

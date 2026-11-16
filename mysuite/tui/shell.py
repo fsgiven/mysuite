@@ -152,6 +152,10 @@ class ToolScreen(Screen):
         """Options that go before the command name (e.g. --profile NAME)."""
         return []
 
+    def child_env(self) -> dict[str, str]:
+        """Extra environment for the command (e.g. a secret key), so a secret never goes on the command line."""
+        return {}
+
     def plan_text(self, report: dict[str, Any]) -> str:
         items = report.get("items", [])
         return f"{len(items)} output(s) planned" if items else "nothing to do"
@@ -329,7 +333,7 @@ class ToolScreen(Screen):
         if self._busy:
             return
         plan.update("[dim]planning…[/dim]")
-        self._plan_worker([*argv, self.PLAN_FLAG, "--json"])
+        self._plan_worker([*argv, self.PLAN_FLAG, "--json"], self.child_env())
 
     def _display_argv(self) -> list[str]:
         argv = list(self.argv())
@@ -337,8 +341,8 @@ class ToolScreen(Screen):
             argv.append(self.PLAN_FLAG)
         return argv
 
-    def _child(self, argv: list[str], *, events: bool = False) -> subprocess.Popen:
-        env = engine._child_env()
+    def _child(self, argv: list[str], *, events: bool = False, extra_env: dict[str, str] | None = None) -> subprocess.Popen:
+        env = {**engine._child_env(), **(extra_env or {})}
         env["COLUMNS"] = "400"          # the child must not wrap paths; the log wraps for display
         env["NO_COLOR"] = "1"
         if events:
@@ -349,11 +353,11 @@ class ToolScreen(Screen):
         )
 
     @work(thread=True, exclusive=True, group="plan")
-    def _plan_worker(self, argv: list[str]) -> None:
+    def _plan_worker(self, argv: list[str], extra_env: dict[str, str] | None = None) -> None:
         try:
             proc = subprocess.run(
                 [sys.executable, "-m", "mysuite", *argv], capture_output=True, text=True, timeout=60,
-                stdin=subprocess.DEVNULL, env={**engine._child_env(), "NO_COLOR": "1", "COLUMNS": "100"},
+                stdin=subprocess.DEVNULL, env={**engine._child_env(), **(extra_env or {}), "NO_COLOR": "1", "COLUMNS": "100"},
             )
             report = json.loads(proc.stdout) if proc.stdout.strip() else {}
         except (subprocess.TimeoutExpired, ValueError, OSError):
@@ -472,12 +476,12 @@ class ToolScreen(Screen):
         self._spin_i = 0
         self._spinner_tick()
         self._spin = self.set_interval(0.1, self._spinner_tick)
-        self._run_worker([*self.global_argv(), *self.command_words(), *argv, "--json"], dry)
+        self._run_worker([*self.global_argv(), *self.command_words(), *argv, "--json"], dry, self.child_env())
 
     @work(thread=True, exclusive=True, group="run")
-    def _run_worker(self, argv: list[str], dry: bool) -> None:
+    def _run_worker(self, argv: list[str], dry: bool, extra_env: dict[str, str] | None = None) -> None:
         try:
-            proc = self._child(argv, events=True)
+            proc = self._child(argv, events=True, extra_env=extra_env)
         except OSError as exc:
             self.app.call_from_thread(self._finished, {}, 1, f"could not start: {exc}", dry)
             return

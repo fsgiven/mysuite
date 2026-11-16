@@ -3,6 +3,8 @@
 Stored only on this machine in ``~/.cache/mysuite/ui-state.json`` (override with ``MYSUITE_UI_STATE``;
 turn off with ``MYSUITE_NO_UI_STATE=1``). It holds field *values* and file *paths* — never file contents.
 Every read and write is best-effort: a missing, unreadable or corrupt file just means "no memory".
+Secrets (a field named ``key``, ``password``, ``passphrase`` or ``secret``) are never written, and any that an older
+version saved are removed from the file the next time it is read.
 """
 from __future__ import annotations
 
@@ -14,6 +16,25 @@ from typing import Any
 
 MAX_RECENT = 12
 _VERSION = 1
+SECRET_NAMES = frozenset({"key", "password", "passphrase", "secret"})
+
+
+def _scrub(value: Any) -> tuple[Any, bool]:
+    """``value`` without any dict entry whose name is in SECRET_NAMES (at any depth); True when one was dropped."""
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        changed = False
+        for k, v in value.items():
+            if k in SECRET_NAMES:
+                changed = True
+                continue
+            out[k], sub = _scrub(v)
+            changed = changed or sub
+        return out, changed
+    if isinstance(value, list):
+        items = [_scrub(v) for v in value]
+        return [v for v, _ in items], any(c for _, c in items)
+    return value, False
 
 
 def enabled() -> bool:
@@ -34,12 +55,18 @@ def _load() -> dict[str, Any]:
         data = json.loads(state_path().read_text())
     except (OSError, ValueError):
         return {}
-    return data if isinstance(data, dict) and data.get("version") == _VERSION else {}
+    if not (isinstance(data, dict) and data.get("version") == _VERSION):
+        return {}
+    data, had_secrets = _scrub(data)
+    if had_secrets:
+        _save(data)                      # an older version stored a secret in plain text: remove it from disk now
+    return data
 
 
 def _save(data: dict[str, Any]) -> None:
     if not enabled():
         return
+    data, _ = _scrub(data)
     data["version"] = _VERSION
     path = state_path()
     try:

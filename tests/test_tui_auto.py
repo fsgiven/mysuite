@@ -227,3 +227,69 @@ async def test_a_run_that_only_skipped_existing_files_says_so(tmp_path):
         screen.action_run()
         await finish(pilot)
         assert "already existed" in screen.last_summary_text and "written" not in screen.last_summary_text
+
+
+# ------------------------------------------------------------------ P0-4: the secret mark key stays secret
+SECRET = "hunter2-very-secret"
+
+
+@pytest.mark.asyncio
+async def test_mark_key_is_masked_never_on_the_command_line_and_never_remembered(tmp_path, monkeypatch):
+    import json
+    import subprocess as sp
+    from mysuite.tui import shell, ui_state
+    from mysuite.tui.widgets.command_line import CommandLine
+
+    state = tmp_path / "state.json"
+    monkeypatch.setenv("MYSUITE_UI_STATE", str(state))
+    monkeypatch.delenv("MYSUITE_NO_UI_STATE")
+    monkeypatch.delenv("MYSUITE_MARK_KEY", raising=False)
+    src = tmp_path / "a.png"
+    Image.new("RGB", (300, 300), (120, 140, 160)).save(src)
+
+    started: list[tuple[list[str], dict]] = []
+    real_popen = sp.Popen
+
+    def spy(cmd, *a, **kw):
+        started.append((list(cmd), dict(kw.get("env") or {})))
+        return real_popen(cmd, *a, **kw)
+
+    monkeypatch.setattr(shell.subprocess, "Popen", spy)
+    async with MysuiteApp().run_test(size=(150, 60)) as pilot:
+        screen = await open_tool(pilot, "protect")
+        screen.query_one("#action", Select).value = "Add an invisible ownership mark"
+        await pilot.pause(0.3)
+        ids = {e["name"]: w for w, (k, e) in screen._fields.items()}
+        key_input = screen.query_one(f"#{ids['key']}", Input)
+        assert key_input.password is True                                     # masked on screen
+        screen.query_one(f"#{ids['inputs']}", Input).value = str(src)
+        key_input.value = SECRET
+        await pilot.pause(0.6)
+        assert SECRET not in screen.query_one(CommandLine).command            # not in the live command
+        screen.action_run()
+        await finish(pilot)
+        assert screen.last_summary_text.startswith("done"), screen.last_summary_text
+    runs = [(cmd, env) for cmd, env in started if "embed" in cmd]
+    assert runs, started
+    cmd, env = runs[-1]
+    assert SECRET not in " ".join(cmd) and "--key" not in cmd                 # not in argv (ps)
+    assert env.get("MYSUITE_MARK_KEY") == SECRET                               # passed privately
+    assert (tmp_path / "a_marked.png").is_file()
+    assert SECRET not in state.read_text()                                     # never written to disk
+    assert ui_state.tool_values("protect")["cmds"]["mark embed"].get("key") in (None, "")
+
+
+def test_ui_state_drops_secrets_that_an_older_version_saved(tmp_path, monkeypatch):
+    import json
+    from mysuite.tui import ui_state
+
+    state = tmp_path / "state.json"
+    monkeypatch.setenv("MYSUITE_UI_STATE", str(state))
+    monkeypatch.delenv("MYSUITE_NO_UI_STATE")
+    state.write_text(json.dumps({"version": 1, "tools": {"protect": {"action": "x", "cmds": {
+        "mark embed": {"key": SECRET, "strength": "strong"}, "mark detect": {"key": SECRET}}}}}))
+    values = ui_state.tool_values("protect")
+    assert values["cmds"]["mark embed"] == {"strength": "strong"}
+    assert SECRET not in state.read_text()                                     # scrubbed from the file as well
+    ui_state.remember_tool("protect", {"cmds": {"mark embed": {"key": SECRET, "id": "x"}}})
+    assert SECRET not in state.read_text()
