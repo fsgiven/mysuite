@@ -45,7 +45,7 @@ from mysuite.export.units import (
 from mysuite.utils.subprocess_utils import MysuiteToolError
 from mysuite.utils import jsonout
 from mysuite.vector import imports as imp
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_skip, log_step
 
 
 def _parse_sizes(value: Optional[str], *, dpi: float, default_unit: str) -> Optional[list[Size]]:
@@ -500,7 +500,7 @@ def export(
                 for note in variant_notes:
                     jsonout.add_warning(f"{variant_name}: {note}")
                     if not quiet:
-                        log_skip(escape(f"{variant_name}: {note}"))
+                        log_note(escape(f"{variant_name}: {note}"))
             try:
                 result = renderer.execute(plan, render_svg, on_job_done=on_job_done)
             except CmykError as exc:
@@ -535,7 +535,7 @@ def export(
                     ],
                 })
             for note in result.cmyk_notes:
-                log_skip(escape(note))
+                log_note(escape(note))
             total_written += len(result.written)
             total_skipped_existing += len(result.skipped_existing)
 

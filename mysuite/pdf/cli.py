@@ -10,7 +10,7 @@ from rich.table import Table
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.pdf import ops
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
 app = typer.Typer(help="PDF toolbox: merge, split, extract, rotate, resize, number, stamp, strip, compress, images in/out.", no_args_is_help=True)
@@ -40,7 +40,7 @@ def _report(source, results: list[ops.OutFile], quiet: bool = False) -> int:
         jsonout.add_item(**item)
         if r.note and r.status != "failed":
             jsonout.add_warning(f"{r.path.name}: {r.note}")
-            log_skip(escape(f"{r.path.name}: {r.note}"))
+            log_note(escape(f"{r.path.name}: {r.note}"))
         if r.status == "failed":
             failed += 1
             log_error(escape(r.note or f"{r.path.name} failed"))

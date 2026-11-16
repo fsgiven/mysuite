@@ -12,7 +12,7 @@ from mysuite import sandbox
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.doctor import require_tools
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError, atomic_write_via
 from mysuite.vector import imports as imp
 from mysuite.vector.svgopt import OptimiseError, optimise
@@ -194,7 +194,7 @@ def optimise_command(
             line = f"{escape(str(target))}  [dim]{result.before} → {result.after} bytes, {result.saved_percent}% smaller[/dim]"
             (console.print(f"[dim]would write[/dim] {line}") if dry_run else log_step(line))
             for note in result.notes:
-                log_skip(escape(note))
+                log_note(escape(note))
     saved = round(100 * (1 - total_after / total_before), 1) if total_before else 0.0
     jsonout.set_extra(total_bytes_before=total_before, total_bytes_after=total_after, saved_percent=saved)
     console.print(f"\n[bold green]{'dry run' if dry_run else 'done'}[/bold green] — {written} written, {skipped} already existed, {failed} failed; {total_before} → {total_after} bytes ({saved}% smaller)")

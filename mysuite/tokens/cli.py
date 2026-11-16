@@ -13,7 +13,7 @@ from mysuite.tokens.match import match_palette
 from mysuite.tokens.model import TokenError
 from mysuite.tokens.sources import load_tokens
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip
+from mysuite.utils.console import console, log_error, log_note
 
 app = typer.Typer(help="Design tokens: list them, look one up, check a logo's colours against them.", no_args_is_help=True)
 
@@ -129,6 +129,6 @@ def check(
         if m.token and not m.exact:
             jsonout.add_warning(f"{m.colour} is only close to {m.token} (ΔE {m.delta_e})")
     if off:
-        log_skip(f"{off} colour(s) are not in the token set")
+        log_note(f"{off} colour(s) are not in the token set")
         if strict:
             raise typer.Exit(1)

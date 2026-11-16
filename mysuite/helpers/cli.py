@@ -13,7 +13,7 @@ from mysuite.convert._parsing import InvalidInputError, RASTER_FORMATS, detect_s
 from mysuite.doctor import require_tools
 from mysuite.helpers import core
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 
 CONFIG = typer.Option(None, "--config", "-c", help="Explicit path to mysuite.toml.")
 
@@ -176,7 +176,7 @@ def diff(
     jsonout.add_item(status="ok", input=first, compared=second, **result)
     if result["note"]:
         jsonout.add_warning(result["note"])
-        log_skip(escape(result["note"]))
+        log_note(escape(result["note"]))
     verdict = "identical" if result["identical"] else f"{result['changed_pct']}% of pixels changed"
     console.print(f"{verdict}  ·  mean difference {result['mean_abs_diff']}  ·  PSNR {result['psnr_db']} dB")
 

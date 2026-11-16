@@ -18,7 +18,7 @@ from mysuite.convert.converter import ConversionError, convert_file
 from mysuite.doctor import require_tools
 from mysuite.export._parsing import parse_csv
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
 
@@ -136,7 +136,7 @@ def convert(
                 if not quiet:
                     log_step(escape(str(outcome.output_path)))
                 if outcome.note:  # shown even with --quiet: it means data was left out
-                    log_skip(f"{escape(str(input_path))}: {escape(outcome.note)}")
+                    log_note(f"{escape(str(input_path))}: {escape(outcome.note)}")
 
     if not quiet:
         console.print(

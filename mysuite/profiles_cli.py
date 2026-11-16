@@ -11,7 +11,7 @@ from rich.table import Table
 from mysuite.config import MysuiteConfigError, _find_config_path, load_config
 from mysuite.profiles import Profile, ProfileError, parse_profile
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 
 app = typer.Typer(help="Company profiles: one named bundle of tokens, brand, variants, export defaults, metadata policy and allowed folders.", no_args_is_help=True)
 CONFIG = typer.Option(None, "--config", "-c", help="Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).")
@@ -210,7 +210,7 @@ def check(
     if p.tokens:
         remote = p.tokens.startswith(("git+", "figma:"))
         if remote and not online:
-            log_skip("token source is remote: not fetched (use --online)")
+            log_note("token source is remote: not fetched (use --online)")
             jsonout.add_warning("token source is remote: not fetched")
         else:
             try:

@@ -10,7 +10,7 @@ from rich.markup import escape
 from mysuite.convert._parsing import InvalidInputError, RASTER_FORMATS, detect_source_format, resolve_input_files
 from mysuite.mark import core
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 
 app = typer.Typer(help="Invisible ownership mark: embed it in your pictures, later check whether a picture carries it.", no_args_is_help=True)
 
@@ -65,7 +65,7 @@ def embed(
         log_step(f"{escape(str(r.path))}  [dim]{r.psnr_db} dB[/dim]")
         for n in r.notes or []:
             jsonout.add_warning(f"{f.name}: {n}")
-            log_skip(escape(n))
+            log_note(escape(n))
     if failed:
         raise typer.Exit(1)
 

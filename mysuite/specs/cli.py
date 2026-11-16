@@ -10,7 +10,7 @@ from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, RASTER_FORMATS, detect_source_format, resolve_input_files
 from mysuite.specs import core
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
 
@@ -75,7 +75,7 @@ def print_command(
         jsonout.add_item(input=f, output=r.path, status=r.status, **({"size": list(r.size), "dpi": r.dpi, "notes": r.notes} if r.status == "written" else {}))
         for n in r.notes:
             jsonout.add_warning(f"{f.name}: {n}")
-            log_skip(escape(f"{f.name}: {n}"))
+            log_note(escape(f"{f.name}: {n}"))
         if r.status == "written":
             log_step(f"{escape(str(r.path))}  [dim]{r.size[0]}x{r.size[1]} px @ {r.dpi:g} dpi[/dim]")
         else:
@@ -148,7 +148,7 @@ def sheet_command(
     if r["status"] == "written":
         log_step(f"{escape(str(r['path']))}  [dim]{r['images']} image(s)[/dim]")
         for name in r["failed"]:
-            log_skip(escape(f"couldn't draw {name}"))
+            log_note(escape(f"couldn't draw {name}"))
             jsonout.add_warning(f"couldn't draw {name}")
     else:
         console.print(f"[dim]— exists, skipped: {escape(str(r['path']))}[/dim]")
@@ -181,7 +181,7 @@ def profile_command(
         jsonout.add_item(input=f, output=r.path, status=r.status, **({"notes": r.notes} if r.notes else {}))
         for n in r.notes:
             jsonout.add_warning(f"{f.name}: {n}")
-            log_skip(escape(f"{f.name}: {n}"))
+            log_note(escape(f"{f.name}: {n}"))
         if r.status == "written":
             log_step(escape(str(r.path)))
         else:

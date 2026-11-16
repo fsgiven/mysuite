@@ -9,7 +9,7 @@ from rich.markup import escape
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.relight.relight import DIRECTIONS, PRESETS, RelightError, RelightSettings, output_path_for, relight_file
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 
 _RASTER = {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp", ".gif"}
 
@@ -69,7 +69,7 @@ def relight(
         written += 1
         jsonout.add_item(input=f, output=outcome.output_path, status="written", size=list(outcome.size), notes=outcome.notes)
         for note in outcome.notes:
-            log_skip(f"{escape(str(f))}: {escape(note)}")
+            log_note(f"{escape(str(f))}: {escape(note)}")
         if not quiet:
             log_step(escape(str(outcome.output_path)))
     if dry_run:

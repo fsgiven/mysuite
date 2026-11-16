@@ -10,7 +10,7 @@ from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.transform.transform import Ops, TransformError, output_path_for, transform_file
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.convert._parsing import detect_source_format
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
@@ -85,7 +85,7 @@ def transform(
         jsonout.add_item(input=f, output=outcome.output_path, status="written", applied=outcome.applied,
                          input_size=list(outcome.input_size), output_size=list(outcome.output_size), notes=outcome.notes)
         for note in outcome.notes:
-            log_skip(f"{escape(str(f))}: {escape(note)}")
+            log_note(f"{escape(str(f))}: {escape(note)}")
         if not quiet:
             log_step(f"{escape(str(outcome.output_path))}  [dim]{outcome.input_size[0]}x{outcome.input_size[1]} -> "
                      f"{outcome.output_size[0]}x{outcome.output_size[1]}[/dim]")
