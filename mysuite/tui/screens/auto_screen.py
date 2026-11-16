@@ -31,8 +31,28 @@ def _commands() -> dict:
     return schema.build()["commands"]
 
 
+_LABELS = {
+    "inputs": "Input files", "files": "Input files", "input": "Input file", "out": "Output",
+    "overwrite": "Overwrite existing files", "dry_run": "Preview only", "json": "JSON output",
+}
+
+
 def _label(name: str) -> str:
-    return name.replace("_", " ")
+    """A readable field label from an option name: out -> Output, keep_ids -> Keep ids."""
+    if name in _LABELS:
+        return _LABELS[name]
+    text = name.replace("_", " ").replace("-", " ").strip()
+    return text[:1].upper() + text[1:]
+
+
+def _checkbox_text(name: str, hint: str) -> str:
+    """One clear sentence for a tick box: the help text when there is one (it already names the option)."""
+    hint = hint.strip().rstrip(".")
+    if not hint:
+        return _label(name)
+    if hint.lower().startswith(_label(name).lower().split()[0]):
+        return hint[:1].upper() + hint[1:]
+    return f"{_label(name)} — {hint[:1].lower() + hint[1:]}"
 
 
 def _short(text: str, limit: int = 110) -> str:
@@ -144,7 +164,7 @@ class AutoToolScreen(ToolScreen):
         label = _label(opt["name"]) + (" *" if opt["required"] else "")
         hint = _short(opt.get("help", ""))
         if opt["type"] == "boolean":
-            return [Checkbox(f"{label} — {hint}" if hint else label, id=wid, value=opt.get("default") is True)]
+            return [Checkbox(_checkbox_text(opt["name"], hint), id=wid, value=opt.get("default") is True)]
         field = Input(placeholder=hint, id=wid)
         if opt["type"] in ("path", "file"):
             row = Horizontal(

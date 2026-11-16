@@ -86,36 +86,57 @@ async def test_overview_shows_one_card_per_tool_in_a_grid():
 
 
 @pytest.mark.asyncio
-async def test_arrows_move_between_cards_and_enter_opens_the_focused_one():
+async def test_arrows_move_between_cards_by_position_and_enter_opens_the_focused_one():
     app = MysuiteApp()
     async with app.run_test(size=(130, 40)) as pilot:
         await pilot.pause()
-        assert app.screen.query(ToolCard).first().has_focus
+        focused = lambda: next(c for c in app.screen.query(ToolCard) if c.has_focus)
+        assert focused().spec.key == "export"
         await pilot.press("right")
-        assert list(app.screen.query(ToolCard))[1].has_focus
-        await pilot.press("down")
-        cols = app.screen._columns
-        assert list(app.screen.query(ToolCard))[1 + cols].has_focus
-        await pilot.press("up", "left")
-        assert list(app.screen.query(ToolCard))[0].has_focus
+        assert focused().spec.key == "kits"
+        await pilot.press("down")                                        # next row, nearest card below
+        below = focused()
+        assert below.region.y > app.screen.query_one("#tool-kits").region.y
+        await pilot.press("down")                                        # across the group heading into Images
+        assert focused().spec.group == "Images"
+        await pilot.press("up", "up", "up")
+        assert focused().spec.group == "Logos & brand" and focused().region.y == app.screen.query_one("#tool-export").region.y
+        await pilot.press("left", "left", "left", "left")
+        assert focused().spec.key == "export"
         await pilot.press("right", "enter")
         await pilot.pause()
-        assert type(app.screen).__name__ == "ConvertScreen"
+        assert getattr(app.screen, "HEADING", "") == "Kits"
 
 
 @pytest.mark.asyncio
-async def test_number_keys_and_clicks_still_open_tools():
+async def test_number_keys_follow_the_cards_and_clicks_open_tools():
     app = MysuiteApp()
     async with app.run_test(size=(130, 40)) as pilot:
         await pilot.pause()
+        cards = list(app.screen.query(ToolCard))
+        assert [c.number for c in cards[:9]] == list(range(1, 10)) and all(c.number is None for c in cards[9:])
         await pilot.press("3")
         await pilot.pause()
-        assert type(app.screen).__name__ == "CutoutScreen"
+        assert getattr(app.screen, "HEADING", "") == cards[2].spec.label
         await pilot.press("escape")
         await pilot.pause()
         await pilot.click("#tool-watermark")
         await pilot.pause()
         assert type(app.screen).__name__ == "WatermarkScreen"
+
+
+@pytest.mark.asyncio
+async def test_cards_sit_under_their_group_headings_and_all_fit_at_a_normal_size():
+    from mysuite.tui.registry import GROUPS
+
+    app = MysuiteApp()
+    async with app.run_test(size=(140, 42)) as pilot:
+        await pilot.pause(0.5)
+        titles = [str(t.render()) for t in app.screen.query(".group-title")]
+        assert titles == [g.upper() for g in GROUPS]
+        scroll = app.screen.query_one("#cards-scroll")
+        assert scroll.max_scroll_y == 0                                  # 16 tools, no scrolling at 140x42
+        assert all(c.styles.opacity == 1.0 for c in app.screen.query(ToolCard))   # the fade-in finished
 
 
 @pytest.mark.asyncio

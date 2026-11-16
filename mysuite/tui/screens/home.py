@@ -1,67 +1,98 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import Grid, Horizontal, VerticalScroll
+from textual.containers import Grid, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Static
 
-from mysuite.tui import art
-from mysuite.tui.registry import TOOL_REGISTRY
+from mysuite.tui.registry import GROUPS, TOOL_REGISTRY
+from mysuite.tui.widgets.app_bar import AppBar
 from mysuite.tui.widgets.card import ToolCard
 
 CARD_MIN_WIDTH = 30
 MAX_COLUMNS = 4
+FADE_SECONDS = 0.25
+FADE_STAGGER = 0.012
 
 
 class HomeScreen(Screen):
-    """The tool overview: one card per tool (icon, name, one line), a helper mascot at the bottom."""
+    """The tool overview: calm cards under group headings. Arrows move by position, enter opens, 1-9 jump."""
 
-    BINDINGS = [("h", "helper", "Help")]
+    BINDINGS = [("enter", "open", "Open"), ("h", "helper", "Help")]
 
     def compose(self) -> ComposeResult:
-        yield Static("[b #E8E8E8]m y s u i t e[/]  [#8B93A7]pick a tool[/]", id="home-title")
+        yield AppBar("Tools")
         with VerticalScroll(id="cards-scroll"):
-            with Grid(id="cards"):
-                for i, spec in enumerate(TOOL_REGISTRY, start=1):
-                    yield ToolCard(spec, i if i <= 9 else None, id=f"tool-{spec.key}")
-        with Horizontal(id="helper-bar"):
-            yield Static(art.small_mascot(), id="helper-mascot")
-            yield Static(
-                "[b]h[/b] or [b]F1[/b] explain this screen  ·  arrows move  ·  enter opens  ·  1-9 jump  ·  q quit",
-                id="helper-hint",
-            )
-        yield Footer()
+            number = 0
+            for group in GROUPS:
+                specs = [s for s in TOOL_REGISTRY if s.group == group]
+                if not specs:
+                    continue
+                yield Static(group.upper(), classes="group-title")
+                with Grid(classes="cards"):
+                    for spec in specs:
+                        number += 1
+                        yield ToolCard(spec, number if number <= 9 else None, id=f"tool-{spec.key}")
+        yield Footer(show_command_palette=False)
 
     def on_mount(self) -> None:
         self.app.sub_title = "Tools"
         self._columns = 3
-        self.query_one(ToolCard).focus()
+        cards = list(self.query(ToolCard))
+        for i, card in enumerate(cards):              # a short, quiet fade-in; nothing to wait for
+            card.styles.opacity = 0.0
+            card.styles.animate("opacity", value=1.0, duration=FADE_SECONDS, delay=i * FADE_STAGGER)
+        cards[0].focus()
 
     # --------------------------------------------------------------- layout
     def on_resize(self) -> None:
         width = self.size.width
-        self._columns = max(1, min(MAX_COLUMNS, (width - 4) // CARD_MIN_WIDTH))
-        self.query_one("#cards", Grid).styles.grid_size_columns = self._columns
+        self._columns = max(1, min(MAX_COLUMNS, (width - 6) // CARD_MIN_WIDTH))
+        for grid in self.query(".cards").results(Grid):
+            grid.styles.grid_size_columns = self._columns
 
     # ------------------------------------------------------------- navigation
+    def _neighbour(self, card: ToolCard, key: str) -> ToolCard | None:
+        """The nearest card in that direction, by position on screen (works across group headings)."""
+        here = card.region
+        best, best_score = None, None
+        for other in self.query(ToolCard):
+            if other is card:
+                continue
+            r = other.region
+            if key in ("left", "right"):
+                if r.y != here.y or (r.x < here.x if key == "right" else r.x > here.x):
+                    continue
+                score = (abs(r.x - here.x), 0)
+            else:
+                dy = r.y - here.y
+                if (dy <= 0 if key == "down" else dy >= 0):
+                    continue
+                score = (abs(dy), abs(r.x - here.x))
+            if best_score is None or score < best_score:
+                best, best_score = other, score
+        return best
+
     def on_key(self, event) -> None:
         key = event.key
         cards = list(self.query(ToolCard))
-        focused = next((i for i, c in enumerate(cards) if c.has_focus), 0)
-        step = {"left": -1, "right": 1, "up": -self._columns, "down": self._columns}.get(key)
-        if step is not None:
-            target = focused + step
-            if 0 <= target < len(cards):
-                cards[target].focus()
-                cards[target].scroll_visible()
+        focused = next((c for c in cards if c.has_focus), cards[0])
+        if key in ("left", "right", "up", "down"):
+            target = self._neighbour(focused, key)
+            if target is not None:
+                target.focus()
+                target.scroll_visible()
             event.stop()
-        elif key == "enter":
-            self._open_tool(cards[focused].spec.key)
-            event.stop()
-        elif key.isdigit():
+        elif key.isdigit() and key != "0":
             index = int(key) - 1
-            if 0 <= index < len(TOOL_REGISTRY):
-                self._open_tool(TOOL_REGISTRY[index].key)
+            if 0 <= index < len(cards):
+                self._open_tool(cards[index].spec.key)
+                event.stop()
+
+    def action_open(self) -> None:
+        focused = next((c for c in self.query(ToolCard) if c.has_focus), None)
+        if focused is not None:
+            self._open_tool(focused.spec.key)
 
     def on_tool_card_chosen(self, message: ToolCard.Chosen) -> None:
         self._open_tool(message.key)
@@ -73,3 +104,4 @@ class HomeScreen(Screen):
 
     def action_helper(self) -> None:
         self.app.action_helper()
+
