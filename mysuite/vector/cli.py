@@ -115,7 +115,7 @@ def import_command(
             if not quiet:
                 log_step(escape(str(target)))
                 for note in notes:
-                    (log_skip if "raster" in note else lambda m: console.print(f"[dim]  {m}[/dim]"))(escape(f"{src.name}: {note}"))
+                    (log_note if "raster" in note else lambda m: console.print(f"[dim]  {m}[/dim]"))(escape(f"{src.name}: {note}"))
     if dry_run:
         return
     console.print(f"\n[bold green]done[/bold green] — {written} written, {skipped} already existed (use --overwrite to replace), {failed} failed")
