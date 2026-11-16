@@ -599,7 +599,7 @@ Remove title, author, producer, dates and the XMP packet.
 Run a pipeline file (TOML or JSON). Steps run in order; each takes the previous step's outputs.
 
 - argument `file` (file, required) Pipeline file (.toml or .json).
-- `--dry-run` (boolean) Validate everything and show the plan. Step 1 is planned exactly; later steps that consume earlier outputs are listed symbolically (their file names exist only after the run).
+- `--dry-run` (boolean) Validate everything and show the plan. Step 1 is planned exactly; later steps that consume earlier outputs are listed symbolically (their file names exist only after the run). A step whose command has no --dry-run of its own is not run at all (status skipped, with a warning), so a dry run never writes files.
 - `--config / -c` (path) Explicit path to mysuite.toml, passed to every step.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 

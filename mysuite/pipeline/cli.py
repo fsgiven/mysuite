@@ -20,7 +20,8 @@ def run(
     dry_run: bool = typer.Option(
         False, "--dry-run",
         help="Validate everything and show the plan. Step 1 is planned exactly; later steps that consume earlier "
-        "outputs are listed symbolically (their file names exist only after the run).",
+        "outputs are listed symbolically (their file names exist only after the run). A step whose command has no "
+        "--dry-run of its own is not run at all (status skipped, with a warning), so a dry run never writes files.",
     ),
     config_path: Optional[Path] = typer.Option(None, "--config", "-c", help="Explicit path to mysuite.toml, passed to every step."),
 ) -> None:
