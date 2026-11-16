@@ -13,7 +13,7 @@ from mysuite.tui.app import MysuiteApp
 from mysuite.tui.shell import ChipGroup
 from mysuite.tui.widgets.command_line import CommandLine
 from mysuite.tui.widgets.file_target import FileTarget, PathSuggester, describe, resolve_targets
-from tests.helpers import SIMPLE_SVG, cli
+from tests.helpers import SIMPLE_SVG, cli, settle
 
 need_tools = pytest.mark.skipif(any(shutil.which(t) is None for t in ("rsvg-convert", "gs", "magick")), reason="needs tools")
 SVG = frozenset({".svg"})
@@ -185,7 +185,7 @@ async def test_the_shown_command_is_exactly_what_the_cli_accepts(tmp_path):
         sc.query_one("#date-stamp", Checkbox).value = False
         sc.query_one("#dry-run", Checkbox).value = True
         await pilot.pause()
-        await pilot.pause(0.5)
+        await settle(pilot)
         command = sc.query_one(CommandLine).command
     assert command.startswith("mysuite export ")
     parts = shlex.split(command)[1:]                                               # what you would paste in a shell
@@ -219,9 +219,7 @@ async def test_plan_and_progress_follow_the_real_run(tmp_path):
         sc.query_one("#sizes", Input).value = "32,64,128"
         sc.query_one("#out-dir", Input).value = str(tmp_path / "out")
         sc.query_one("#formats", ChipGroup).select_only(["png"])
-        await pilot.pause(0.4)
-        await pilot.app.workers.wait_for_complete()
-        await pilot.pause()
+        await settle(pilot)
         assert "3 file(s)" in str(sc.query_one("#plan", Static).render())
         assert sc._planned == 3
         sc.action_run()
@@ -290,9 +288,7 @@ async def test_convert_screen_several_targets_and_the_shown_command(tmp_path):
         sc.query_one("#input-files", Input).value = str(photo)
         sc.query_one("#target-format", ChipGroup).select_only(["webp", "jpeg"])
         sc.query_one("#quality", Input).value = "80"
-        await pilot.pause(0.5)
-        await pilot.app.workers.wait_for_complete()
-        await pilot.pause()
+        await settle(pilot)
         assert "2 conversion(s)" in str(sc.query_one("#plan", Static).render())
         command = sc.query_one(CommandLine).command
         parts = shlex.split(command)[1:]
@@ -335,9 +331,7 @@ async def test_watermark_command_matches_the_cli_and_validates_numbers(tmp_path)
         sc.query_one("#logo", Input).value = str(logo)
         sc.query_one("#position", Select).value = "top-left"
         sc.query_one("#opacity", Input).value = "50"
-        await pilot.pause(0.5)
-        await pilot.app.workers.wait_for_complete()
-        await pilot.pause()
+        await settle(pilot)
         assert "1 watermarked" in str(sc.query_one("#plan", Static).render())
         parts = shlex.split(sc.query_one(CommandLine).command)[1:]
         assert parts[:2] == ["watermark", str(photo)] and "top-left" in parts and "--logo" in parts
@@ -422,9 +416,7 @@ async def test_metadata_credit_command_matches_the_cli(tmp_path):
         sc.query_one("#input-files", Input).value = str(photo)
         sc.query_one("#mode", Select).value = "declare"
         sc.query_one("#owner", Input).value = "Jane Doe"
-        await pilot.pause(0.5)
-        await pilot.app.workers.wait_for_complete()
-        await pilot.pause()
+        await settle(pilot)
         parts = shlex.split(sc.query_one(CommandLine).command)[1:]
         assert parts[:3] == ["metadata", "declare", str(photo)]
         doc = json.loads(cli(*parts, "--dry-run", "--json").stdout)
@@ -467,7 +459,7 @@ async def test_compress_dry_run_command_is_valid_cli(tmp_path):
         sc = await open_tool(pilot, "compress")
         sc.query_one("#input-files", Input).value = str(photo)
         sc.query_one("#preset", Select).value = "modern-web-avif"
-        await pilot.pause(0.5)
+        await settle(pilot)
         parts = shlex.split(sc.query_one(CommandLine).command)[1:]
         assert "--codec" in parts and parts[parts.index("--codec") + 1] == "avif" and "--speed" in parts
         result = cli(*parts, "--dry-run", "--json")

@@ -9,6 +9,7 @@ from mysuite.tui.registry import TOOL_REGISTRY
 from mysuite.tui.screens.welcome import TIPS
 from mysuite.tui.widgets.card import ToolCard
 from mysuite.tui.widgets.scene import Scene
+from tests.helpers import wait_until
 
 
 # ----------------------------------------------------------------------------- art
@@ -54,12 +55,11 @@ def test_scene_survives_tiny_and_huge_sizes():
 async def test_welcome_animates_and_any_key_opens_the_overview():
     app = MysuiteApp(show_welcome=True)
     async with app.run_test(size=(110, 36)) as pilot:
-        await pilot.pause(0.4)
+        await wait_until(pilot, lambda: type(pilot.app.screen).__name__ == "WelcomeScreen", what="the WelcomeScreen")
         assert type(app.screen).__name__ == "WelcomeScreen"
         scene = app.screen.query_one(Scene)
         first = scene.tick_count
-        await pilot.pause(0.5)
-        assert scene.tick_count > first                                  # it is moving
+        await wait_until(pilot, lambda: scene.tick_count > first, what="the welcome animation to tick")   # it is moving
         await pilot.press("x")
         await pilot.pause()
         assert type(app.screen).__name__ == "HomeScreen"
@@ -131,7 +131,9 @@ async def test_cards_sit_under_their_group_headings_and_all_fit_at_a_normal_size
 
     app = MysuiteApp()
     async with app.run_test(size=(140, 42)) as pilot:
-        await pilot.pause(0.5)
+        await pilot.wait_for_scheduled_animations()
+        await wait_until(pilot, lambda: all(c.styles.opacity == 1.0 for c in app.screen.query(ToolCard)),
+                         what="the cards to finish fading in")
         titles = [str(t.render()) for t in app.screen.query(".group-title")]
         assert titles == [g.upper() for g in GROUPS]
         scroll = app.screen.query_one("#cards-scroll")
@@ -154,7 +156,7 @@ async def test_h_on_the_overview_and_f1_in_a_tool_open_the_matching_help():
     async with app.run_test(size=(130, 40)) as pilot:
         await pilot.pause()
         await pilot.press("h")
-        await pilot.pause(0.6)
+        await wait_until(pilot, lambda: type(pilot.app.screen).__name__ == "HelperScreen", what="the HelperScreen")
         assert type(app.screen).__name__ == "HelperScreen"
         assert "toolbox" in str(app.screen.query_one("#helper-title", Static).render())
         await pilot.press("h")                                           # h closes it again
@@ -164,7 +166,7 @@ async def test_h_on_the_overview_and_f1_in_a_tool_open_the_matching_help():
         await pilot.press("1")                                           # Export
         await pilot.pause()
         await pilot.press("f1")
-        await pilot.pause(1.5)
+        await wait_until(pilot, lambda: type(pilot.app.screen).__name__ == "HelperScreen", what="the HelperScreen")
         helper = app.screen
         assert type(helper).__name__ == "HelperScreen"
         assert "Export" in str(helper.query_one("#helper-title", Static).render())

@@ -74,3 +74,27 @@ def pixel_rgb(path: Path, x: int, y: int) -> tuple[int, int, int]:
     ).stdout
     r, g, b = (int(v) for v in out.split(","))
     return r, g, b
+
+
+# ------------------------------------------------------------------ dashboard tests: wait for a condition, not a clock
+async def wait_until(pilot, condition, *, timeout: float = 15.0, what: str = "the condition") -> None:
+    """Pump the app until `condition()` is true. A fixed pause is too short on a slow CI runner."""
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"timed out after {timeout:g}s waiting for {what}")
+        await pilot.pause(0.05)
+
+
+async def settle(pilot) -> None:
+    """Let a tool screen's debounced live preview run, then its plan/run workers finish.
+
+    `workers.wait_for_complete()` alone returns at once if the debounce timer has not fired yet (no worker exists),
+    and the test then reads the previous command or plan.
+    """
+    await pilot.pause()                                         # deliver pending Changed messages (they start the timer)
+    await wait_until(pilot, lambda: getattr(pilot.app.screen, "_preview_timer", None) is None, what="the live preview")
+    await pilot.app.workers.wait_for_complete()
+    await pilot.pause()
