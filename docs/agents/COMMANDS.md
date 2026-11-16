@@ -441,7 +441,7 @@ Read the text in images (macOS Vision, on device).
 
 ## `mysuite pdf compress`
 
-Make a PDF smaller (Ghostscript): screen < ebook < printer < prepress.
+Make a PDF smaller (Ghostscript): screen < ebook < printer < prepress. A result that is not smaller is not written (status not_smaller).
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--level` (str, default `ebook`) screen (smallest), ebook, printer, prepress (best quality).

@@ -31,7 +31,9 @@ def _check_inputs(paths: list[Path]) -> list[Path]:
 def _report(source, results: list[ops.OutFile], quiet: bool = False) -> int:
     failed = 0
     for r in results:
-        item: dict = dict(input=source, output=r.path, status=r.status)
+        item: dict = dict(input=source, status=r.status)
+        if r.status != "not_smaller":                      # nothing was written, so there is no output file
+            item["output"] = r.path
         if r.pages is not None:
             item["pages"] = r.pages
         if r.note:
@@ -41,6 +43,8 @@ def _report(source, results: list[ops.OutFile], quiet: bool = False) -> int:
         if r.note and r.status != "failed":
             jsonout.add_warning(f"{r.path.name}: {r.note}")
             log_note(escape(f"{r.path.name}: {r.note}"))
+        if r.status == "not_smaller":
+            continue
         if r.status == "failed":
             failed += 1
             log_error(escape(r.note or f"{r.path.name} failed"))
@@ -215,7 +219,7 @@ def from_images(files: List[Path] = typer.Argument(..., exists=True, readable=Tr
         raise typer.Exit(1)
 
 
-@app.command("compress", help="Make a PDF smaller (Ghostscript): screen < ebook < printer < prepress.")
+@app.command("compress", help="Make a PDF smaller (Ghostscript): screen < ebook < printer < prepress. A result that is not smaller is not written (status not_smaller).")
 @jsonout.with_json("pdf-compress")
 def compress(files: List[Path] = PDFS, level: str = typer.Option("ebook", "--level", help="screen (smallest), ebook, printer, prepress (best quality)."),
              out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
