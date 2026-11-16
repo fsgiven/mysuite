@@ -502,3 +502,20 @@ async def test_enhance_command_is_the_preset_plus_what_you_changed(tmp_path):
         sc.action_run()
         await pilot.pause()
         assert "field-error" in sc.query_one("#scale", Input).classes
+
+
+async def test_late_callbacks_after_the_screen_is_closed_are_ignored():
+    # A plan/run worker thread can finish after its screen was popped (or the app quit); its callbacks then
+    # arrive on a screen whose widgets are gone. They must be dropped quietly, not crash the app.
+    async with MysuiteApp().run_test() as pilot:
+        sc = await open_tool(pilot, "enhance")
+        sc.action_go_back()
+        await pilot.pause()
+        await pilot.pause()
+        assert sc not in pilot.app.screen_stack
+        sc._show_plan({"items": [{"status": "planned"}]})
+        sc._refresh_preview()
+        sc.write_log("late line")
+        sc._on_item({"status": "written"})
+        sc._finished({}, 0, "", False)
+        await pilot.pause()

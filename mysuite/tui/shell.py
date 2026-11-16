@@ -11,6 +11,7 @@ import json
 import subprocess
 import sys
 import threading
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from rich.text import Text
 from textual import work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import (
@@ -38,6 +40,25 @@ def tilde(text: str) -> str:
     """Show the home folder as ~ (display only — the copyable command keeps real paths)."""
     home = str(Path.home())
     return text.replace(home, "~") if home and home != "/" else text
+
+
+def while_shown(method):
+    """Drop a late callback (worker thread or timer) that arrives after its screen was closed.
+
+    Textual never resets `is_mounted`, so look at `is_attached`; a NoMatches on a screen whose widgets are already
+    gone (being torn down) is the same race. On a live screen a NoMatches is a real bug and is raised as usual.
+    """
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        if not self.is_attached:
+            return None
+        try:
+            return method(self, *args, **kwargs)
+        except NoMatches:
+            if self.is_attached and self.children:
+                raise
+            return None
+    return wrapper
 
 
 class FormError(Exception):
@@ -288,6 +309,7 @@ class ToolScreen(Screen):
             argv.append(self.PLAN_FLAG)
         return argv
 
+    @while_shown
     def _refresh_preview(self) -> None:
         self._preview_timer = None
         command = self.query_one("#command", CommandLine)
@@ -337,6 +359,7 @@ class ToolScreen(Screen):
             report = {}
         self.app.call_from_thread(self._show_plan, report)
 
+    @while_shown
     def _show_plan(self, report: dict[str, Any]) -> None:
         plan = self.query_one("#plan", Static)
         if not report:
@@ -356,6 +379,7 @@ class ToolScreen(Screen):
         plan.update(text)
 
     # --------------------------------------------------------------------------- running
+    @while_shown
     def write_log(self, message: str) -> None:
         self.query_one("#run-log", RichLog).write(message)
 
@@ -449,6 +473,7 @@ class ToolScreen(Screen):
             report = {}
         self.app.call_from_thread(self._finished, report, code, "\n".join(stderr_lines), dry)
 
+    @while_shown
     def _on_item(self, item: dict[str, Any]) -> None:
         if item.get("status") != "planned":
             self.query_one("#run-progress", ProgressBar).advance(1)
@@ -467,6 +492,7 @@ class ToolScreen(Screen):
             text += f", {failed} failed"
         return text
 
+    @while_shown
     def _finished(self, report: dict[str, Any], code: int, output: str, dry: bool) -> None:
         self._busy = False
         self._proc = None
