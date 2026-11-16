@@ -10,9 +10,9 @@ telemetry.
 > only macOS has been tried. See [Status](#status-what-is-and-isnt-tested) for exactly what is and isn't.
 
 <p align="center">
-  <img src="docs/images/demo.gif" alt="Animated tour of the mysuite terminal dashboard: Enhance restoring a scratched photo, Metadata randomize, Compress, Export, and the file picker" width="860">
+  <img src="docs/images/screen-home.png" alt="The mysuite terminal dashboard: a title bar, then the tools as calm cards under four headings (Logos & brand, Images, Documents & privacy, Utilities)" width="860">
 </p>
-<p align="center"><sub>A real session in the terminal dashboard (<code>mysuite tui</code>), on synthetic demo images.</sub></p>
+<p align="center"><sub>The terminal dashboard (<code>mysuite tui</code>), captured at 140×42 on the generated test files.</sub></p>
 
 **Status key** (per tool, in both tables below): ✅ **Stable**: covered by automated tests and run for real on one machine, no known problem beyond the limits listed.
 🟡 **Caveats**: tested and usable, but a stated limit matters or part of it has never been run live (the row says which).
@@ -21,7 +21,7 @@ A row in the test table that covers several tools takes the weakest status among
 
 | Tool | Status | What it does |
 | --- | --- | --- |
-| `export` | ✅ Stable | One SVG → many sizes, formats (PNG/PDF/EPS/SVG/JPEG/WebP/TIFF/ICO/ICNS) and color profiles, with presets, recoloring and naming templates |
+| `export` | ✅ Stable | One SVG → many sizes, formats (PNG/PDF/EPS/SVG/JPEG/WebP/TIFF/ICO/ICNS) and color profiles, with presets, recoloring and naming templates; brand CMYK values (`--cmyk-map`) and sizes by height or width (`--size-by`) |
 | `convert` | ✅ Stable | Convert files between formats, in place beside the source |
 | `cutout` | 🟡 Caveats | Isolate a photo's subject onto a transparent background (macOS Vision) |
 | `watermark` | ✅ Stable | Stamp a logo onto images as a visible, scalable overlay |
@@ -40,7 +40,7 @@ A row in the test table that covers several tools takes the weakest status among
 | `shield` | 🧪 Experimental | **Experimental** image protection against AI editing (PhotoGuard-style encoder attack); read [docs/SHIELD.md](docs/SHIELD.md) first |
 | `install` | ✅ Stable | Fetch the heavier parts once, on demand (`tools`, `vision`, `cutout`, `shield`), into `~/.cache/mysuite` |
 | `testcases` | ✅ Stable | Generates a CC0 folder of test files (about 60) to try every tool, including the awkward cases |
-| `tokens`, `variants` | 🟡 Caveats | Design tokens (CSS variables, W3C JSON, pinned git repo, Figma): list/show/check a logo's colours, `token:NAME` recolors, and logo variants (negative/on-dark from the tokens' dark theme, mono, invert, grayscale) |
+| `tokens`, `variants` | 🟡 Caveats | Design tokens (CSS variables, W3C JSON, pinned git repo, Figma): list/show/check a logo's colours, `token:NAME` recolors, and logo variants (negative/on-dark from the tokens' dark theme, mono, invert, grayscale, `knockout`/`cutout` shapes, `mono:COLOUR`, named combinations) |
 | `transform` | ✅ Stable | Quick edits: trim, crop (box or aspect), rotate, flip, resize, pad, round corners, background — in a fixed, predictable order |
 | `relight` | 🧪 Experimental | *Experimental, classical (no AI model):* re-shade a cut-out/product/logo as if lit from another direction, with presets (key-left, dramatic, golden-hour…) |
 | `inspect` | ✅ Stable | Facts about a file (size, colour mode, transparency, palette, sharpness, GPS…) as numbers — for agents and humans |
@@ -53,7 +53,7 @@ Outputs are always written **beside the source** with a suffix (`_cutout`, `_str
 Developed and tested on macOS (Apple Silicon, Homebrew). `cutout` and `icns` export are macOS-only (`enhance` is plain Python and has no such limit).
 The rest wraps standard command-line tools, so it should work elsewhere, but that's untested.
 
-`mysuite tui` opens the dashboard: an animated front page (file-type tags drifting past, the suitcase mascot with two handles bobbing and talking), then the tools as cards (icon, name, one line; arrows or number keys). Press **h** (overview) or **F1** (any screen) and the mascot slides up and explains the tool you're in, with the same job as a terminal command.
+`mysuite tui` opens the dashboard straight on the tools: calm cards under four headings, all 16 on one screen at 140×42, opened with the arrow keys and Enter or a number key. Press **h** (overview) or **F1** (any screen) for a help panel on the right that explains the tool you're in and gives the same job as a terminal command. `mysuite tui --welcome` shows the animated intro page first.
 
 **Using it from an AI agent?** Every command has `--json`, there is a sandbox, a pipeline format and an MCP server. Start with [AGENTS.md](AGENTS.md) (rules, which command to use, tested examples) and [docs/agents/COMMANDS.md](docs/agents/COMMANDS.md).
 
@@ -105,17 +105,17 @@ Found a problem? Please open an issue with the exact command, the file type and 
 
 ## Screens
 
-The animated front page and the tool cards, then more screens. Real screenshots of the dashboard, run on synthetic images (a generated sunset harbour, a generated
-damaged "old scan" and a generated logo). File paths are shown as `~/…`.
+Real screenshots of the dashboard, captured headlessly at 140×42 on the files from `mysuite testcases make` (in `~/demo`).
+One accent colour, a title bar with the screen, folder and version, form on the left, plan / command / output on the right.
 
 | | |
 | --- | --- |
-| ![Home screen: tool cards with icons](docs/images/screen-home.png)<br>**Home** — one card per tool; arrows and Enter, or a number key; **h**/**F1** opens the helper | ![Enhance screen after restoring a scratched photo](docs/images/screen-enhance.png)<br>**Enhance** — preset applied, scratches filled, and it says face enhancement was skipped |
-| ![Metadata screen in randomize mode](docs/images/screen-metadata.png)<br>**Metadata** — strip, randomize or credit | ![Compress screen using the modern-web-webp preset](docs/images/screen-compress.png)<br>**Compress** — preset, codec options, result |
-| ![Export screen with SVG thumbnail and 14 written files](docs/images/screen-export.png)<br>**Export** — one SVG to many sizes and formats | ![File picker with Home, Desktop, Downloads and Root jumps](docs/images/screen-picker.png)<br>**File picker** — jumps, paste-a-path, hidden files off |
+| ![Home screen: tool cards under four headings](docs/images/screen-home.png)<br>**Home** — the tools under four headings; arrows and Enter, or a number key; **h**/**F1** opens help | ![Export screen after a run: 18 files written, brand CMYK values and a timed summary](docs/images/screen-export-run.png)<br>**Export, after a run** — brand CMYK (`#1D1D1B=75/65/65/80`), `knockout`/`cutout` variants, each file as ✓ name + folder, then `✓ done — 18 written · 3.3 s` |
+| ![Export screen filled in: formats, RGB and CMYK, brand CMYK and named variants](docs/images/screen-export.png)<br>**Export** — ticks show only when on; *Brand CMYK* and *More variants* fields | ![Help panel on the right with the Export explanation and the same job as a terminal command](docs/images/screen-help.png)<br>**Help** (**F1** / **h**) — a side panel with the terminal command for the same job |
+| ![Enhance screen after restoring a scratched photo](docs/images/screen-enhance.png)<br>**Enhance** — old-photo preset applied, and it says face enhancement was skipped | ![Compress screen after a run with the modern-web-webp preset](docs/images/screen-compress.png)<br>**Compress** — a preset fills the codec options |
+| ![Metadata screen in randomize mode](docs/images/screen-metadata.png)<br>**Metadata** — strip, randomize, credit, declare or apply a policy | ![File picker with Home, Desktop, Downloads and Root jumps](docs/images/screen-picker.png)<br>**File picker** — jumps, paste-a-path, hidden files off |
 | ![Convert screen](docs/images/screen-convert.png)<br>**Convert** | ![Watermark screen](docs/images/screen-watermark.png)<br>**Watermark** |
 | ![Cutout screen](docs/images/screen-cutout.png)<br>**Cutout** (macOS) | ![PDF screen generated from the CLI](docs/images/screen-pdf.png)<br>**PDF** — a screen generated from the command's own options |
-| ![Animated front page with the suitcase mascot](docs/images/screen-welcome.png)<br>**Front page** — drifting file-type tags, the suitcase blinks and talks | |
 
 ## Try it without your own pictures
 
@@ -257,6 +257,17 @@ mysuite export logo.svg --sizes 50,80 --unit mm    # same as --sizes 50mm,80mm
 `--unit` (px/mm/cm/in, also configurable as `default_unit` in `mysuite.toml`) only applies to sizes
 without their own explicit suffix — `--sizes 50,80,32px --unit mm` still exports `32px` as pixels.
 
+By default a size is the **longest side**: `--sizes 512` fits the logo into a 512×512 box, so a wide 876×512 logo
+comes out 512×300. To ask for a height (or a width) instead, use `--size-by`:
+
+```bash
+mysuite export logo.svg --sizes 512,1080,3000 --size-by height --formats svg,png,pdf          # exactly 512/1080/3000 px high
+mysuite export logo.svg --sizes 512 --size-by height --formats pdf --dpi 72                   # PDF at 1 px = 1 pt
+```
+
+The other side follows the aspect ratio (rsvg-convert rounds it up, e.g. 299.25 → 300). `size_by` also works in
+`[export]` and in a profile's `[export]`. ICO/ICNS bundles stay square.
+
 Preview without writing anything:
 
 ```bash
@@ -334,6 +345,26 @@ and `grayscale` need no tokens. Each variant of an export lands in its own folde
 result, mysuite reports every mapping it made and every colour it could not map. If you use a proprietary design system,
 keep its token files out of any public repository.
 
+### Knockout, cut-out and named variants
+
+A brand logo set is often more than recolours: the negative is the background shape with the letters punched out,
+and the cut-out is the letters without the shape. Two variant steps do that from the one positive logo, and `+` /
+`=` combine steps and name the output folder (`[NAME=]STEP[+STEP…]`):
+
+```bash
+mysuite export logo.svg --formats png,pdf --sizes 512 \
+    --variants 'positiv=default,negativ_bright=knockout+mono-white,negativ_dark=knockout+mono:#1D1D1B,cut_out_bright=cutout+mono-white,cut_out_dark=cutout+mono:#1D1D1B'
+```
+
+- `knockout`: the background shape stays and everything on it becomes holes (a one-colour negative).
+- `cutout`: the background shape is removed and everything on it stays.
+- `mono:COLOUR`: everything in one colour, e.g. `mono:#1D1D1B` (besides `mono-black` and `mono-white`).
+
+The background is found by rendering (the first shape that holds ≥97% of what is painted after it); a logo without
+one is a clear error. When the shapes are simple, the knockout is one flat even-odd path, so CMYK stays clean;
+otherwise it falls back to an SVG mask and says so (PDF/EPS then carry a soft mask). The specs work in `export
+--variants`, `variants make`, a profile's `variants`, the MCP tools and the dashboard's *More variants* field.
+
 ## Variants & recoloring
 
 `--variant` nests an export under the *same* name folder as the primary one, instead of getting
@@ -401,6 +432,20 @@ mysuite export logo.svg --formats pdf --profiles cmyk --cmyk-profile FOGRA39.icc
   not snapped to `clean` values (the export tells you when that happened); ink values in the PDF can wobble by
   about 0.1 % (Ghostscript prints 70 as 69.9); a CMYK TIFF can't hold transparency, so it is flattened on white
   unless you pass `--background`; spot colours are not supported.
+
+**Brand CMYK values.** A profile can only approximate a brand book's print values (with the default profile, `#DD0000`
+becomes 6.3/100/100/1.2 instead of 0/100/100/0). Pin them with `--cmyk-map`, and they are used as given in PDF, EPS
+and TIFF:
+
+```bash
+mysuite export logo.svg --formats pdf,eps,tiff --profiles cmyk \
+    --cmyk-map '#DD0000=0/100/100/0' --cmyk-map '#1D1D1B=75/65/65/80'
+```
+
+A pinned value is never rounded by `clean` and isn't turned into black-only ink. It matches the final colour (after
+`--recolor`), and colours within CIEDE2000 2 of it (anti-aliased edges) take it too. Put them in `mysuite.toml` as
+`cmyk_map = { "#DD0000" = "0/100/100/0" }` under `[export]` or a profile's `[export]`; the dashboard has a *Brand CMYK*
+field. In `--json` each CMYK colour has `"fixed": true|false`, and the text output labels pinned ones `(brand value)`.
 
 ## Presets
 
@@ -655,11 +700,14 @@ which files you processed is itself a trace.
 ## Terminal dashboard
 
 ```bash
-mysuite tui
+mysuite tui              # straight to the tools
+mysuite tui --welcome    # the animated intro page first
 ```
 
-Opens an interactive home screen listing the available tools as cards, each with its own accent colour.
-Press a number key to jump straight to a tool, or arrow keys + Enter; **h** / **F1** explains the screen you are on.
+Opens on the tools: one card per tool under four headings (*Logos & brand*, *Images*, *Documents & privacy*,
+*Utilities*), in one accent colour on neutral greys; green, amber and red are only used for status. A title bar shows
+the screen, the folder you are in, the active company profile and the version. Press a number key to jump straight to a
+tool, or arrow keys + Enter; **h** / **F1** opens a help panel on the right with the same job as a terminal command.
 
 The seven single-tool screens — **Export, Convert, Cutout, Watermark, Metadata, Compress, Enhance** — and the generated screens (Kits, PDF, Exact, Helpers, Tokens, Profiles, Protect, Parts; built from each command's own options) share one layout.
 Each form is a front end for the real `mysuite <tool> …` command, so the screen and the CLI can never disagree:
@@ -670,7 +718,9 @@ Each form is a front end for the real `mysuite <tool> …` command, so the scree
 - **Plan** (live): "4 file(s) from 1 SVG(s) → exports; png ×2, pdf ×2", asked from the command's own `--dry-run` while you edit.
 - **Command** (live, with a *Copy* button): the exact `mysuite export …` line the form stands for. Paste it into a script
   or hand it to an agent; only the values you changed appear, so config, presets and profiles keep their say.
-- **Output**: the command's own output, a progress bar that follows each finished file, and an *Open output folder* button.
+- **Output**: the command's own output with each finished file as `✓ name  folder`, a progress bar and an elapsed timer
+  while it runs, then a summary such as `✓ done — 18 written · 3.3 s` and an *Open output folder* button.
+  Tick boxes are empty when off and show a ✓ when on.
   *Preview only* runs the same command with `--dry-run`; *Stop* ends a long run.
 - **Remembers your last settings per tool** (sizes, formats, output folder, switches…) in `~/.cache/mysuite/ui-state.json` —
   values and paths only, never file contents. *Reset* forgets a tool's settings; `MYSUITE_NO_UI_STATE=1` turns the memory off.
