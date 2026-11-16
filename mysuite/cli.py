@@ -179,6 +179,12 @@ def mcp_command(
 
 
 def main() -> None:
+    import sys
+
+    from mysuite.utils.paths import expand_home_args
+
+    # `~/x` must mean the home folder even when no shell expanded it (dashboard, MCP, pipelines).
+    sys.argv[1:] = expand_home_args(sys.argv[1:])
     app()
 
 
