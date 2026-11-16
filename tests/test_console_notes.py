@@ -29,3 +29,20 @@ def test_print_auto_rotate_note_does_not_say_skipping_although_the_file_is_writt
     assert "turned" in res.output and "skipping" not in res.output.lower(), res.output
     res = runner.invoke(app, ["print", str(src), "--size", "200x300", "--auto-rotate", "--overwrite", "--json"])
     assert any("turned" in w for w in json.loads(res.stdout)["warnings"])     # still reported as a warning in JSON
+
+
+def test_every_log_helper_a_module_uses_is_imported_there():
+    """`(log_skip if … else …)(msg)` uses a helper without calling it by name; dropping its import broke svg import."""
+    import ast
+    from pathlib import Path
+
+    import mysuite
+
+    missing = []
+    for path in Path(mysuite.__file__).parent.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        defined = {a.asname or a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
+        defined |= {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        used = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id.startswith("log_")}
+        missing += [f"{path.name}: {name}" for name in used - defined]
+    assert not missing, missing
