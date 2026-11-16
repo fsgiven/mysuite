@@ -32,6 +32,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | print-ready CMYK | `… --profiles cmyk [--cmyk-mode clean] [--cmyk-profile ICC]` (pdf/eps/tiff only) |
 | CMYK must match the brand book (e.g. red 0/100/100/0) | `… --profiles cmyk --cmyk-map '#DD0000=0/100/100/0' --cmyk-map '#1D1D1B=75/65/65/80'` (or `cmyk_map` in a profile's `[export]`); pinned colours report `"fixed": true` |
 | another colour in the logo | `… --recolor "#dd0000=#0057b8"` (matches by value, small differences included) |
+| a colour removed from the logo (made transparent) | `… --recolor "#dd0000=transparent"` (`none` works too; only as the TO side) |
 | a favicon / macOS icon | `mysuite export logo.svg --preset favicon` / `--preset macos-icon` |
 | a different file format | `mysuite convert FILE --to png,webp --json` |
 | a watermark | `mysuite watermark FILE --logo logo.svg --position bottom-right --json` |

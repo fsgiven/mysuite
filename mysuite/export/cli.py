@@ -153,7 +153,8 @@ def export(
         None, "--recolor",
         help="Color substitution FROM=TO — hex (e.g. --recolor '#000000=#ffffff') or a named CSS "
         "color (e.g. --recolor 'white=black'). Repeatable, and each occurrence may itself hold "
-        "several space/comma-separated pairs, e.g. --recolor '#000=#fff white=black'. Applied to "
+        "several space/comma-separated pairs, e.g. --recolor '#000=#fff white=black'. TO may be "
+        "'transparent' (or 'none') to remove that colour, e.g. --recolor '#dd0000=transparent'. Applied to "
         "the SVG source before rendering.",
     ),
     recolor_tolerance: float = typer.Option(

@@ -185,7 +185,8 @@ def _first_page_png(path: Path, kind: str, tools: ToolPaths) -> Path:
     return out
 
 
-def thumbnail(path: Path, tools: ToolPaths, size: int = THUMB_MAX) -> Image.Image:
+def thumbnail(path: Path, tools: ToolPaths, size: int = THUMB_MAX, *, flatten: bool = True) -> Image.Image:
+    """A preview at most `size` px on its longer side: RGB flattened on white, or RGBA with `flatten=False`."""
     kind = detect_source_format(path)
     tmp: Path | None = None
     try:
@@ -195,14 +196,72 @@ def thumbnail(path: Path, tools: ToolPaths, size: int = THUMB_MAX) -> Image.Imag
         with Image.open(source) as im:
             im.seek(0)
             im = ImageOps.exif_transpose(im).convert("RGBA")
-        flat = Image.new("RGBA", im.size, (255, 255, 255, 255))
-        flat.alpha_composite(im)
-        flat = flat.convert("RGB")
-        flat.thumbnail((size, size))
-        return flat
+        if flatten:
+            flat = Image.new("RGBA", im.size, (255, 255, 255, 255))
+            flat.alpha_composite(im)
+            im = flat.convert("RGB")
+        im.thumbnail((size, size))
+        return im
     finally:
         if tmp:
             tmp.unlink(missing_ok=True)
+
+
+# Mid-grey squares: white artwork and black artwork both stay visible on them.
+CHECKER = ((160, 160, 160), (128, 128, 128))
+
+
+def on_checkerboard(im: Image.Image, square: int = 8) -> Image.Image:
+    """An RGBA picture with any transparency drawn over a checkerboard (RGB); an opaque one unchanged.
+    Flattening on white would hide white-on-transparent logos completely."""
+    rgba = im.convert("RGBA")
+    if rgba.getchannel("A").getextrema()[0] == 255:
+        return rgba.convert("RGB")
+    yy, xx = np.indices((rgba.height, rgba.width))
+    dark = ((yy // square + xx // square) % 2).astype(bool)
+    board = np.empty((rgba.height, rgba.width, 4), np.uint8)
+    board[...] = (*CHECKER[0], 255)
+    board[dark] = (*CHECKER[1], 255)
+    out = Image.fromarray(board, "RGBA")
+    out.alpha_composite(rgba)
+    return out.convert("RGB")
+
+
+def sheet_labels(paths: list[Path]) -> list[str]:
+    """One label per picture: the file name, or - where names repeat - the shortest path that tells them
+    apart, e.g. out/logo/invert/png/rgb/logo_512.png and out/logo/mono-white/png/rgb/logo_512.png become
+    "invert/…/logo_512.png" and "mono-white/…/logo_512.png"."""
+    parts = [Path(os.path.abspath(p)).parts for p in paths]
+    labels: list[str] = []
+    for mine in parts:
+        same_name = [o for o in parts if o[-1] == mine[-1] and o != mine]
+        depth = 1
+        while depth < len(mine) and any(o[-depth:] == mine[-depth:] for o in same_name):
+            depth += 1
+        if depth == 1 or any(o[-depth:] == mine[-depth:] for o in same_name):
+            labels.append(mine[-1])            # unique name, or the very same path given twice
+        elif depth == 2:
+            labels.append(f"{mine[-2]}/{mine[-1]}")
+        else:                                  # the top part differs, the ones below it are shared
+            labels.append(f"{mine[-depth]}/…/{mine[-1]}")
+    return labels
+
+
+def fit_label(text: str, font: Any, width: int) -> str:
+    """Shortens `text` in the middle until it fits `width` px, so both the distinguishing folder at the
+    start and the file name at the end stay readable."""
+    ellipsis = "…" if isinstance(font, ImageFont.FreeTypeFont) else "..."
+    text = text if ellipsis == "…" else text.replace("…", "...")
+    if font.getlength(text) <= width:
+        return text
+    keep = len(text)
+    while keep > 2:
+        keep -= 1
+        head = (keep + 1) // 2
+        short = text[:head] + ellipsis + text[len(text) - (keep - head):]
+        if font.getlength(short) <= width:
+            return short
+    return text[:1] + ellipsis
 
 
 def write_thumbnail(path: Path, out: Path, tools: ToolPaths) -> None:
@@ -221,14 +280,15 @@ def write_contact_sheet(paths: list[Path], out: Path, tools: ToolPaths, cell: in
     rows = (len(paths) + columns - 1) // columns
     sheet = Image.new("RGB", (columns * (cell + 10) + 10, rows * (cell + 30) + 10), "#1b1d22")
     draw = ImageDraw.Draw(sheet)
+    labels = sheet_labels(paths)
     for i, p in enumerate(paths):
         x, y = 10 + (i % columns) * (cell + 10), 10 + (i // columns) * (cell + 30)
         try:
-            t = thumbnail(p, tools, cell)
+            t = on_checkerboard(thumbnail(p, tools, cell, flatten=False))
             sheet.paste(t, (x + (cell - t.width) // 2, y + (cell - t.height) // 2))
         except Exception:  # noqa: BLE001 - a broken file still gets a labelled empty cell
             draw.rectangle([x, y, x + cell, y + cell], outline="#F87171")
-        draw.text((x, y + cell + 6), f"{i + 1}. {p.name}"[:34], fill="#e6e6e6", font=font)
+        draw.text((x, y + cell + 6), fit_label(f"{i + 1}. {labels[i]}", font, cell), fill="#e6e6e6", font=font)
 
     def write(tmp: Path) -> None:
         sheet.save(tmp, format="PNG")
