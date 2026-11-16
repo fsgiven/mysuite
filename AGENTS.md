@@ -243,7 +243,8 @@ use any MCP-capable client for it and point that client at `mysuite mcp`.
  "warnings": ["pdf/cmyk …"], "errors": []}
 ```
 
-- `items[].status`: `planned` | `written` | `skipped_existing` | `failed` (then `error` is set).
+- `items[].status`: `planned` | `written` | `skipped_existing` | `failed` (then `error` is set). `pdf compress` can
+  also say `not_smaller`: the result would not have been smaller, so nothing was written (no `output`).
 - `warnings` are things the user should know (e.g. "3 pages in the source; only the first was converted").
 - Export with CMYK adds `cmyk`: the mode, the profile and each colour's before/after (`delta_e` = colour shift; `fixed` = a `--cmyk-map` brand value, used as given).
 - Paths are absolute.

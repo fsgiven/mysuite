@@ -37,7 +37,7 @@ class PdfError(ValueError):
 @dataclass
 class OutFile:
     path: Path
-    status: str = "written"            # written | skipped_existing | planned
+    status: str = "written"            # written | skipped_existing | planned | not_smaller (compress: nothing written)
     pages: int | None = None
     note: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
@@ -127,11 +127,31 @@ def _plan_or_skip(path: Path, overwrite: bool) -> OutFile | None:
     return None
 
 
+def _same_file(a: Path, b: Path) -> bool:
+    a, b = Path(os.path.abspath(a)), Path(os.path.abspath(b))
+    if a == b:
+        return True
+    try:
+        return a.exists() and b.exists() and os.path.samefile(a, b)     # also a.pdf vs A.pdf, links, ../
+    except OSError:
+        return False
+
+
+def _refuse_inputs(target: Path, inputs: list[Path]) -> None:
+    """Originals are never modified: an output that is one of the inputs is an error, even with --overwrite."""
+    for src in inputs:
+        if _same_file(target, src):
+            raise PdfError(f"the output {target.name} is one of the input files; choose another --out")
+
+
 def _suffix_path(src: Path, suffix: str, out: Path | None) -> Path:
     if out is not None:
         out = Path(os.path.abspath(out))
-        return out / f"{src.stem}{suffix}.pdf" if out.suffix.lower() != ".pdf" else out
-    return src.with_name(f"{src.stem}{suffix}.pdf")
+        target = out / f"{src.stem}{suffix}.pdf" if out.suffix.lower() != ".pdf" else out
+    else:
+        target = src.with_name(f"{src.stem}{suffix}.pdf")
+    _refuse_inputs(target, [src])
+    return target
 
 
 # ---------------------------------------------------------------------------- read only
@@ -158,6 +178,7 @@ def merge(paths: list[Path], out: Path | None, overwrite: bool) -> OutFile:
     if len(paths) < 2:
         raise PdfError("merge needs at least two PDFs")
     target = _suffix_path(Path(os.path.abspath(paths[0])), "_merged", out)
+    _refuse_inputs(target, paths)
     if (skip := _plan_or_skip(target, overwrite)):
         return skip
     writer = PdfWriter()
@@ -521,16 +542,27 @@ def compress(path: Path, level: str, out: Path | None, overwrite: bool, tools: T
     if (skip := _plan_or_skip(target, overwrite)):
         return skip
 
+    before = Path(path).stat().st_size
+    sizes: dict[str, int] = {}
+
     def write(tmp: Path) -> None:
         run([tools.gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.6",
              f"-dPDFSETTINGS={levels[level]}", f"-sOutputFile={tmp}", str(Path(os.path.abspath(path)))])
+        sizes["after"] = tmp.stat().st_size
+        if sizes["after"] >= before:
+            raise _NotSmaller                     # atomic_write_via removes the temp file; nothing is written
 
     try:
         atomic_write_via(target, write, preserve_extension=True)
     except FileNotFoundError as exc:
         raise PdfError("compressing a PDF needs Ghostscript (gs) installed") from exc
-    before, after = Path(path).stat().st_size, target.stat().st_size
-    note = None
-    if after >= before:
-        note = f"not smaller ({before} -> {after} bytes): the file was already compact at this level"
-    return OutFile(target, pages=len(PdfReader(str(target)).pages), note=note, extra={"bytes_before": before, "bytes_after": after})
+    except _NotSmaller:
+        return OutFile(target, "not_smaller", note=(
+            f"not written: the result would not be smaller ({before} -> {sizes['after']} bytes at level {level}); "
+            "the original is already compact"), extra={"bytes_before": before, "bytes_after": sizes["after"]})
+    after = target.stat().st_size
+    return OutFile(target, pages=len(PdfReader(str(target)).pages), extra={"bytes_before": before, "bytes_after": after})
+
+
+class _NotSmaller(Exception):
+    pass

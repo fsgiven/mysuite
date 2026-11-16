@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 from PIL import Image
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
 
 from mysuite.cli import app
 from mysuite.pdf import ops
@@ -262,7 +262,7 @@ def test_from_images_native_and_paper_size(tmp_path):
 @need_gs
 def test_compress_reports_before_and_after(tmp_path):
     big = tmp_path / "big.pdf"
-    Image.effect_noise((900, 900), 40).convert("RGB").save(big, format="PDF", resolution=72.0)
+    Image.effect_noise((900, 900), 40).convert("RGB").save(big, format="PDF", resolution=300.0)   # screen downsamples it
     res, doc = run_pdf("compress", big, "--level", "screen")
     item = doc["items"][0]
     assert res.exit_code == 0 and item["bytes_before"] == big.stat().st_size and item["bytes_after"] > 0
@@ -314,3 +314,50 @@ def test_pdf_ops_in_a_pipeline(three, tmp_path):
     ]}, base=tmp_path)
     results = engine.run(pipe)
     assert [r.status for r in results] == ["ok", "ok"] and results[1].outputs[0].endswith("doc_pages_stripped.pdf")
+
+
+# ------------------------------------------------------------- P0-6: never replace an input, never write a bigger "compressed" file
+def _md5(p):
+    import hashlib
+    return hashlib.md5(p.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("which", [0, 1])
+def test_merge_refuses_an_output_that_is_one_of_its_inputs(tmp_path, which):
+    a = make_pdf(tmp_path / "a.pdf", [(300, 400)])
+    b = make_pdf(tmp_path / "b.pdf", [(300, 100)])
+    before = {p: _md5(p) for p in (a, b)}
+    res, doc = run_pdf("merge", a, b, "-o", (a, b)[which], "--overwrite")
+    assert res.exit_code == 1 and doc["items"][0]["status"] == "failed"
+    assert "input" in doc["items"][0]["error"]
+    assert {p: _md5(p) for p in (a, b)} == before                       # both inputs untouched
+
+
+def test_merge_refuses_the_same_file_spelled_differently(tmp_path):
+    a = make_pdf(tmp_path / "a.pdf", [(300, 400)])
+    b = make_pdf(tmp_path / "b.pdf", [(300, 100)])
+    before = _md5(a)
+    res, doc = run_pdf("merge", a, b, "-o", tmp_path / "sub" / ".." / "a.pdf", "--overwrite")
+    assert res.exit_code == 1 and _md5(a) == before
+
+
+def test_single_file_jobs_refuse_to_write_over_their_source(three):
+    before = _md5(three)
+    res, doc = run_pdf("rotate", three, "--degrees", "90", "-o", three, "--overwrite")
+    assert res.exit_code == 1 and "input" in doc["items"][0]["error"] and _md5(three) == before
+
+
+@need_gs
+def test_compress_does_not_write_a_result_that_is_not_smaller(tmp_path):
+    w = PdfWriter()
+    w.add_blank_page(200, 200)
+    tiny = tmp_path / "tiny.pdf"
+    w.write(str(tiny))                                                   # ~430 bytes; gs output is ~2.5 KB
+    res, doc = run_pdf("compress", tiny)
+    item = doc["items"][0]
+    assert res.exit_code == 0, doc
+    assert item["status"] == "not_smaller" and "output" not in item
+    assert item["bytes_after"] >= item["bytes_before"]
+    assert not (tmp_path / "tiny_compressed.pdf").exists()
+    assert not list(tmp_path.glob("*.tmp*"))                             # no leftover temp file
+    assert any("not written" in w for w in doc["warnings"])
