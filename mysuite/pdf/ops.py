@@ -258,7 +258,7 @@ def resize(path: Path, size: str, out: Path | None, overwrite: bool) -> OutFile:
 
 
 def strip_metadata(path: Path, out: Path | None, overwrite: bool) -> OutFile:
-    """Page content only: no /Info (title, author, producer, dates), no XMP packet."""
+    """Page content only: no /Info (title, author, producer, dates), no XMP packet, no annotation authors."""
     reader = open_pdf(path)
     target = _suffix_path(Path(os.path.abspath(path)), "_stripped", out)
     if (skip := _plan_or_skip(target, overwrite)):
@@ -269,14 +269,21 @@ def strip_metadata(path: Path, out: Path | None, overwrite: bool) -> OutFile:
     for key in ("/Metadata", "/PieceInfo", "/OpenAction"):
         if key in writer._root_object:
             del writer._root_object[key]
+    for page in writer.pages:
+        for key in ("/Metadata", "/PieceInfo"):
+            if key in page:
+                del page[key]
+        for ref in page.get("/Annots") or []:
+            annot = ref.get_object()
+            # /T on a markup annotation (note, highlight, ...) is its author; on a form field it is the field's
+            # name, which the form needs, so widgets keep it.
+            if annot.get("/Subtype") != "/Widget" and "/T" in annot:
+                del annot["/T"]
+    writer.metadata = None          # no /Info in the trailer at all (pypdf would otherwise add its /Producer)
 
     def write(tmp: Path) -> None:
         with open(tmp, "wb") as fh:
             writer.write(fh)
-        # pypdf always adds its own /Producer; drop the whole /Info dictionary from the trailer
-        data = tmp.read_bytes()
-        data = re.sub(rb"/Info\s+\d+\s+\d+\s+R", b"", data)
-        tmp.write_bytes(re.sub(rb"/Producer\s*\([^)]*\)", b"", data))      # the orphaned Info object, emptied
 
     atomic_write_via(target, write, preserve_extension=True)
     return OutFile(target, pages=len(reader.pages))
