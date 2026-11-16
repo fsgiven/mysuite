@@ -261,6 +261,7 @@ Batch-export an SVG into multiple sizes, formats, and color profiles.
 - `--recolor-tolerance` (float range, default `2.0`) How close (CIEDE2000 colour difference) a colour must be to a --recolor FROM to count as it; 0 = exact match only, 2 = just-noticeable difference (default). Catches anti-aliased or slightly-off brand colours.
 - `--cmyk-mode` (str) How CMYK numbers are chosen for --profiles cmyk (pdf/eps/tiff all use the same engine): 'exact' keeps the profile's values; 'clean' or 'clean:N' snaps every channel to a multiple of N (default 5, so 73/92 becomes 75/90) and prints the colour shift. Greys are always K-only.
 - `--cmyk-profile` (file) CMYK ICC profile (e.g. FOGRA39 or your printer's) used for the conversion and embedded as the PDF output intent. Default: Ghostscript's SWOP profile.
+- `--cmyk-map` (str, repeatable) Brand CMYK values, used as they are instead of computed: COLOUR=C/M/Y/K, e.g. '#DD0000=0/100/100/0'. Repeatable; one occurrence may hold several pairs. Matches the exact colour after --recolor and wins over --cmyk-mode (never rounded, greys not forced to K-only).
 - `--tokens` (str) Design tokens: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir (pinned, cached), or figma:FILEKEY. Lets --recolor use token:NAME and enables the negative variant.
 - `--brand` (str) Which brand of the token source (when it has several).
 - `--theme` (str) Which theme's token values --recolor token:NAME uses: light (default) or dark.

@@ -22,7 +22,7 @@ from mysuite.export._parsing import (
 )
 from mysuite.export.naming import resolve_naming_templates, resolve_path_template_for_variant
 from mysuite.export.planner import MysuitePlannerError, build_plan
-from mysuite.color.cmyk import CmykError, CmykSettings
+from mysuite.color.cmyk import CmykError, CmykSettings, parse_cmyk_map
 from mysuite.color.svg import DEFAULT_TOLERANCE
 from mysuite import profiles as profiles_mod
 from mysuite.color import variants as variant_mod
@@ -173,6 +173,12 @@ def export(
         help="CMYK ICC profile (e.g. FOGRA39 or your printer's) used for the conversion and embedded "
         "as the PDF output intent. Default: Ghostscript's SWOP profile.",
     ),
+    cmyk_map: Optional[List[str]] = typer.Option(
+        None, "--cmyk-map",
+        help="Brand CMYK values, used as they are instead of computed: COLOUR=C/M/Y/K, e.g. "
+        "'#DD0000=0/100/100/0'. Repeatable; one occurrence may hold several pairs. Matches the exact "
+        "colour after --recolor and wins over --cmyk-mode (never rounded, greys not forced to K-only).",
+    ),
     tokens: Optional[str] = typer.Option(
         None, "--tokens",
         help="Design tokens: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir (pinned, cached), or "
@@ -267,7 +273,8 @@ def export(
 
     try:
         resolved_cmyk = CmykSettings.parse(
-            cmyk_mode or settings.cmyk_mode, str(cmyk_profile) if cmyk_profile else settings.cmyk_profile
+            cmyk_mode or settings.cmyk_mode, str(cmyk_profile) if cmyk_profile else settings.cmyk_profile,
+            cmyk_map=parse_cmyk_map(cmyk_map) if cmyk_map else parse_cmyk_map(settings.cmyk_map),
         )
     except CmykError as exc:
         log_error(str(exc))
@@ -507,7 +514,7 @@ def export(
                     "profile": renderer._engine.description,
                     "colours": [
                         {"rgb": f"#{c.rgb[0]:02x}{c.rgb[1]:02x}{c.rgb[2]:02x}", "cmyk": list(c.cmyk),
-                         "delta_e": c.delta_e, "neutral": c.neutral}
+                         "delta_e": c.delta_e, "neutral": c.neutral, "fixed": c.fixed}
                         for c in sorted(result.cmyk_conversions, key=lambda c: c.rgb)
                     ],
                 })

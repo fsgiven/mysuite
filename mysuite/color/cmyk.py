@@ -10,25 +10,80 @@ same rules:
                  then <=3 -> 0 and >=97 -> 100. The colour shift (CIEDE2000) is reported.
 * neutrals (R=G=B) are always K-only, with the K that best matches that grey in the profile
   (#222 -> 0/0/0/98, #000 -> 0/0/0/100): no rich-black mixes.
+* brand values (``cmyk_map``, e.g. ``#DD0000=0/100/100/0``) win over all of the above: a brand book's
+  print values are used as they are, never computed, rounded or made K-only.
 """
 from __future__ import annotations
 
 import glob
 import os
+import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Iterable, Mapping
 
 from PIL import Image, ImageCms
 
 from mysuite.color.lab import delta_e_rgb
+from mysuite.color.parse import parse_color
 
 MODES = ("exact", "clean")
 TOTAL_INK_LIMIT = 300.0
+BRAND_TOLERANCE = 2.0  # CIEDE2000: a just-noticeable difference; nearer colours take the brand value
+
+RGB = tuple[int, int, int]
+CMYK = tuple[float, float, float, float]
 
 
 class CmykError(ValueError):
     pass
+
+
+_NUMBER = r"\d+(?:\.\d+)?"
+_PAIR_RE = re.compile(rf"\s*([^\s=,]+)\s*=\s*({_NUMBER}(?:\s*[/,\s]\s*{_NUMBER})*)\s*,?")
+
+
+def _parse_inks(colour: str, text: str) -> CMYK:
+    parts = re.split(r"\s*[/,\s]\s*", text.strip())
+    try:
+        values = tuple(float(p) for p in parts)
+    except ValueError as exc:
+        raise CmykError(f"--cmyk-map {colour}: CMYK must be four numbers like 0/100/100/0, got {text!r}") from exc
+    if len(values) != 4:
+        raise CmykError(f"--cmyk-map {colour}: CMYK needs four numbers (C/M/Y/K), got {len(values)} in {text!r}")
+    if any(not 0 <= v <= 100 for v in values):
+        raise CmykError(f"--cmyk-map {colour}: each CMYK value must be 0-100 percent, got {text!r}")
+    return tuple(int(v) if v.is_integer() else v for v in values)  # type: ignore[return-value]
+
+
+def _parse_colour(text: str) -> RGB:
+    colour = parse_color(text)
+    if colour is None:
+        raise CmykError(f"--cmyk-map: {text!r} is not a colour (use hex like #DD0000 or a CSS name)")
+    return (colour.r, colour.g, colour.b)
+
+
+def parse_cmyk_map(value: Iterable[str] | Mapping[str, str] | None) -> dict[RGB, CMYK]:
+    """Brand CMYK values: '#DD0000=0/100/100/0' (also 0,100,100,0 or 0 100 100 0), several pairs per item,
+    or a {colour: "c/m/y/k"} table from mysuite.toml. -> {(r, g, b): (c, m, y, k)} in percent."""
+    if not value:
+        return {}
+    if isinstance(value, Mapping):
+        return {_parse_colour(str(k)): _parse_inks(str(k), str(v)) for k, v in value.items()}
+    out: dict[RGB, CMYK] = {}
+    for item in value:
+        text, pos = str(item), 0
+        while pos < len(text.rstrip()):
+            m = _PAIR_RE.match(text, pos)
+            if not m or m.end() == pos:
+                raise CmykError(
+                    f"invalid --cmyk-map {text[pos:].strip()!r} - expected COLOUR=C/M/Y/K, e.g. '#DD0000=0/100/100/0'"
+                )
+            colour, inks = m.group(1), m.group(2)
+            out[_parse_colour(colour)] = _parse_inks(colour, inks)
+            pos = m.end()
+    return out
 
 
 @dataclass(frozen=True)
@@ -36,10 +91,11 @@ class CmykSettings:
     mode: str = "exact"
     step: int = 5
     profile: str | None = None  # path to an ICC file; None = auto-detect
+    cmyk_map: tuple[tuple[RGB, CMYK], ...] = ()  # brand values, used as they are
 
     @classmethod
-    def parse(cls, mode: str | None, profile: str | None = None) -> "CmykSettings":
-        """'exact' | 'clean' | 'clean:10'."""
+    def parse(cls, mode: str | None, profile: str | None = None, cmyk_map: Mapping[RGB, CMYK] | None = None) -> "CmykSettings":
+        """'exact' | 'clean' | 'clean:10'; cmyk_map from parse_cmyk_map()."""
         text = (mode or "exact").strip().lower()
         name, _, arg = text.partition(":")
         if name not in MODES:
@@ -54,7 +110,7 @@ class CmykSettings:
                 raise CmykError("CMYK clean step must be between 1 and 25")
         if name == "exact" and arg:
             raise CmykError("CMYK mode 'exact' takes no step")
-        return cls(name, step, profile)
+        return cls(name, step, profile, tuple(sorted((cmyk_map or {}).items())))
 
 
 def find_default_profile(gs_binary: str = "gs") -> Path | None:
@@ -76,10 +132,12 @@ class Conversion:
     cmyk: tuple[float, float, float, float]  # percent
     delta_e: float
     neutral: bool
+    fixed: bool = False  # True = a brand value from cmyk_map, not computed
 
     def label(self) -> str:
         c, m, y, k = (f"{v:g}" for v in self.cmyk)
-        return f"#{self.rgb[0]:02x}{self.rgb[1]:02x}{self.rgb[2]:02x} -> {c}/{m}/{y}/{k}  (dE {self.delta_e:.1f})"
+        note = "brand value" if self.fixed else f"dE {self.delta_e:.1f}"
+        return f"#{self.rgb[0]:02x}{self.rgb[1]:02x}{self.rgb[2]:02x} -> {c}/{m}/{y}/{k}  ({note})"
 
 
 @dataclass
@@ -107,6 +165,7 @@ class CmykEngine:
         self._to_cmyk = ImageCms.buildTransform(srgb, self._cmyk, "RGB", "CMYK", renderingIntent=intent, flags=flags)
         self._to_rgb = ImageCms.buildTransform(self._cmyk, srgb, "CMYK", "RGB", renderingIntent=intent, flags=flags)
         self._cache: dict[tuple[int, int, int], Conversion] = {}
+        self._fixed: dict[RGB, CMYK] = dict(self.settings.cmyk_map)
         self.description = ImageCms.getProfileDescription(self._cmyk).strip()
 
     @property
@@ -126,6 +185,12 @@ class CmykEngine:
         if hit:
             return hit
         neutral = max(key) - min(key) <= 1
+        brand = key if key in self._fixed else self._nearest_brand(key)
+        if brand is not None:
+            fixed = self._fixed[brand]
+            result = Conversion(key, fixed, self._delta_e(key, fixed), neutral, fixed=True)
+            self._cache[key] = result
+            return result
         if neutral:
             cmyk = (0.0, 0.0, 0.0, self._neutral_k(round((r + g + b) / 3)))
         else:
@@ -136,6 +201,16 @@ class CmykEngine:
         result = Conversion(key, cmyk, self._delta_e(key, cmyk), neutral)  # type: ignore[arg-type]
         self._cache[key] = result
         return result
+
+    def _nearest_brand(self, rgb: RGB) -> RGB | None:
+        """A brand colour this one is indistinguishable from (anti-aliased edge pixels like #dd0101 next to
+        #dd0000), so raster edges don't get a rim of computed, off-brand inks."""
+        best, best_de = None, BRAND_TOLERANCE
+        for brand in self._fixed:
+            de = delta_e_rgb(rgb, brand)
+            if de <= best_de:
+                best, best_de = brand, de
+        return best
 
     def _neutral_k(self, level: int) -> float:
         """K for a grey: the K whose printed colour is closest to that grey in this profile.

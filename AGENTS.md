@@ -30,6 +30,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | to see it | `mysuite inspect FILE --thumb out.png` or `--sheet sheet.png` (several files) |
 | a logo as PNG/PDF/EPS/SVG/JPEG/WebP/TIFF/ICO/ICNS at several sizes | `mysuite export logo.svg --formats png,pdf --sizes 64,512 --out DIR --json` |
 | print-ready CMYK | `… --profiles cmyk [--cmyk-mode clean] [--cmyk-profile ICC]` (pdf/eps/tiff only) |
+| CMYK must match the brand book (e.g. red 0/100/100/0) | `… --profiles cmyk --cmyk-map '#DD0000=0/100/100/0' --cmyk-map '#1D1D1B=75/65/65/80'` (or `cmyk_map` in a profile's `[export]`); pinned colours report `"fixed": true` |
 | another colour in the logo | `… --recolor "#dd0000=#0057b8"` (matches by value, small differences included) |
 | a favicon / macOS icon | `mysuite export logo.svg --preset favicon` / `--preset macos-icon` |
 | a different file format | `mysuite convert FILE --to png,webp --json` |
@@ -241,7 +242,7 @@ use any MCP-capable client for it and point that client at `mysuite mcp`.
 
 - `items[].status`: `planned` | `written` | `skipped_existing` | `failed` (then `error` is set).
 - `warnings` are things the user should know (e.g. "3 pages in the source; only the first was converted").
-- Export with CMYK adds `cmyk`: the mode, the profile and each colour's before/after (`delta_e` = colour shift).
+- Export with CMYK adds `cmyk`: the mode, the profile and each colour's before/after (`delta_e` = colour shift; `fixed` = a `--cmyk-map` brand value, used as given).
 - Paths are absolute.
 
 ## CMYK in one paragraph
