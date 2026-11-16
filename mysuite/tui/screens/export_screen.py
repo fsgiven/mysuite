@@ -15,6 +15,7 @@ from textual.widgets import Button, Checkbox, Collapsible, Input, Label, Select,
 
 from mysuite import profiles as profiles_mod
 from mysuite.color import variants as variant_mod
+from mysuite.color.cmyk import CmykError, parse_cmyk_map
 from mysuite.config import Config, load_config
 from mysuite.config_write import save_preset
 from mysuite.export._parsing import VALID_FORMATS
@@ -45,7 +46,7 @@ class ExportScreen(ToolScreen):
     HEADING = "Export"
 
     PERSIST = (
-        "sizes", "unit", "dpi", "formats", "profiles", "cmyk-mode", "variants", "out-dir", "background",
+        "sizes", "unit", "dpi", "formats", "profiles", "cmyk-mode", "cmyk-map", "variants", "out-dir", "background",
         "quality", "png-compression", "padding", "margin-top", "margin-right", "margin-bottom", "margin-left",
         "variant", "tokens", "brand", "theme", "overwrite", "strict", "normalize-png", "date-stamp", "recursive",
     )
@@ -79,6 +80,10 @@ class ExportScreen(ToolScreen):
                 "CMYK numbers", Select[str]([(m, m) for m in CMYK_MODES], id="cmyk-mode", prompt="exact (default)"),
                 classes="grow",
             )
+        yield field(
+            "Brand CMYK (used as given, e.g. #DD0000=0/100/100/0 #1D1D1B=75/65/65/80)",
+            Input(placeholder="none: computed from the profile", id="cmyk-map"),
+        )
         yield field("Colour variants (none ticked = just the logo as it is)", ChipGroup(list(variant_mod.ALL), id="variants", columns=4))
 
         yield Label("Where", classes="section")
@@ -198,6 +203,13 @@ class ExportScreen(ToolScreen):
         if profiles and profiles != [p for p in PROFILE_OPTIONS if p in self._default_profiles]:
             opt("--profiles", ",".join(profiles))
         opt("--cmyk-mode", _select_value(self.query_one("#cmyk-mode", Select)))
+        brand_cmyk = self._text("cmyk-map")
+        if brand_cmyk:
+            try:
+                parse_cmyk_map([brand_cmyk])
+            except CmykError as exc:
+                raise FormError(str(exc), "cmyk-map") from exc
+            opt("--cmyk-map", brand_cmyk)
         variants = self.query_one("#variants", ChipGroup).selected
         if variants:
             opt("--variants", ",".join(variants))
@@ -294,6 +306,13 @@ class ExportScreen(ToolScreen):
         cmyk = _select_value(self.query_one("#cmyk-mode", Select))
         if cmyk:
             settings["cmyk_mode"] = cmyk
+        if self._text("cmyk-map"):
+            try:
+                settings["cmyk_map"] = {f"#{r:02x}{g:02x}{b:02x}": "/".join(f"{v:g}" for v in inks)
+                                        for (r, g, b), inks in parse_cmyk_map([self._text("cmyk-map")]).items()}
+            except CmykError as exc:
+                self.flash("cmyk-map", str(exc))
+                return
         try:
             dpi = self._number("dpi", "DPI", whole=False, low=1)
             quality = self._number("quality", "Quality", whole=True, low=0, high=100)

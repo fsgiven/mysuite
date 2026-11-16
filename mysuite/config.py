@@ -77,6 +77,9 @@ class ExportSettings:
     cmyk_profile: str | None = None
     """ICC profile used for RGB->CMYK and embedded as the PDF output intent. Default:
     Ghostscript's CMYK SWOP profile (else macOS Generic CMYK)."""
+    cmyk_map: dict[str, str] = field(default_factory=dict)
+    """Brand CMYK values used as they are instead of computed: {"#DD0000": "0/100/100/0"}.
+    Matched on the final colour (after recolor), exact RGB value; wins over cmyk_mode."""
 
 
 @dataclass

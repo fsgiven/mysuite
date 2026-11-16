@@ -76,17 +76,17 @@ class MysuiteServer:
         def mysuite_inspect(paths: list[str], thumb: str | None = None, sheet: str | None = None) -> dict[str, Any]:
             return self._call(["inspect"], paths, {"thumb": thumb, "sheet": sheet})
 
-        @mcp.tool(description="Export an SVG logo to many sizes/formats (png,pdf,eps,svg,jpeg,webp,tiff,ico,icns), RGB and CMYK. cmyk_mode: exact | clean | clean:N. recolor: list of 'FROM=TO' colour swaps (TO or FROM may be 'token:NAME' with tokens=<design token source>, theme light|dark). variants: comma list of default, negative (token-driven on-dark, needs tokens), invert, mono-black, mono-white, grayscale - each variant gets its own folder.")
+        @mcp.tool(description="Export an SVG logo to many sizes/formats (png,pdf,eps,svg,jpeg,webp,tiff,ico,icns), RGB and CMYK. cmyk_mode: exact | clean | clean:N. cmyk_map: brand print values used as they are, list of 'COLOUR=C/M/Y/K' (e.g. '#DD0000=0/100/100/0'); prefer it whenever the brand book gives CMYK numbers. recolor: list of 'FROM=TO' colour swaps (TO or FROM may be 'token:NAME' with tokens=<design token source>, theme light|dark). variants: comma list of default, negative (token-driven on-dark, needs tokens), invert, mono-black, mono-white, grayscale - each variant gets its own folder.")
         def mysuite_export(inputs: list[str], formats: list[str] | None = None, sizes: list[str] | None = None,
                            profiles: list[str] | None = None, out: str | None = None, preset: str | None = None,
                            recolor: list[str] | None = None, cmyk_mode: str | None = None, cmyk_profile: str | None = None,
-                           background: str | None = None, tokens: str | None = None, brand: str | None = None,
+                           cmyk_map: list[str] | None = None, background: str | None = None, tokens: str | None = None, brand: str | None = None,
                            theme: str | None = None, variants: str | None = None, negative_map: list[str] | None = None,
                            dry_run: bool = False, overwrite: bool = False, options: dict[str, Any] | None = None,
                            profile: str | None = None) -> dict[str, Any]:
             opts = {"formats": formats, "sizes": sizes, "profiles": profiles, "out": out, "preset": preset,
-                    "recolor": recolor, "cmyk_mode": cmyk_mode, "cmyk_profile": cmyk_profile, "background": background,
-                    "tokens": tokens, "brand": brand, "theme": theme, "variants": variants, "negative_map": negative_map,
+                    "recolor": recolor, "cmyk_mode": cmyk_mode, "cmyk_profile": cmyk_profile, "cmyk_map": cmyk_map,
+                    "background": background, "tokens": tokens, "brand": brand, "theme": theme, "variants": variants, "negative_map": negative_map,
                     **(options or {})}
             return self._call(["export"], inputs, opts, dry_run=dry_run, overwrite=overwrite, profile=profile)
 

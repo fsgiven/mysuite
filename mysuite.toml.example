@@ -84,3 +84,11 @@ variant = "negative"
 # denoise = 0.4
 # restore_scratches = true
 # output_format = "png"
+
+# Brand print values, used as they are instead of computed from the CMYK profile
+# (`mysuite --profile bild export logo.svg --profiles cmyk`, or `--cmyk-map '#DD0000=0/100/100/0'` per run).
+# [profiles.bild.export]
+# profiles = ["rgb", "cmyk"]
+# [profiles.bild.export.cmyk_map]
+# "#DD0000" = "0/100/100/0"
+# "#1D1D1B" = "75/65/65/80"
