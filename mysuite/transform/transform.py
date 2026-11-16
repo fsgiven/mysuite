@@ -23,6 +23,7 @@ from mysuite.color.parse import parse_color
 from mysuite.config import ToolPaths
 from mysuite.convert._parsing import RASTER_FORMATS, detect_source_format
 from mysuite.enhance.enhance import _bit_depth
+from mysuite.utils import imageio
 from mysuite.utils.subprocess_utils import atomic_write_via, run
 
 FORMATS = {"png": ".png", "jpeg": ".jpg", "webp": ".webp", "tiff": ".tiff"}
@@ -375,8 +376,9 @@ def transform_file(input_path: Path, ops: Ops, *, tools: ToolPaths, suffix: str 
                 icc = opened.info.get("icc_profile")
                 if opened.mode == "CMYK":
                     notes.append("CMYK source converted to RGB")
-                im = opened.convert("RGBA") if opened.mode in ("RGBA", "LA", "PA") or "transparency" in opened.info \
-                    else opened.convert("RGB") if opened.mode in ("CMYK", "P", "1", "I", "I;16", "F") else opened.copy()
+                src = imageio.to_8bit(opened)                  # 16-bit grey: scaled, not clipped to white
+                im = src.convert("RGBA") if src.mode in ("RGBA", "LA", "PA") or "transparency" in src.info \
+                    else src.convert("RGB") if src.mode in ("CMYK", "P", "1") else src.copy()
                 if im.mode in ("L",):
                     im = im.convert("RGB")
                 im.load()

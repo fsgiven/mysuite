@@ -11,13 +11,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageCms, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageCms, ImageDraw, ImageFont
 
 from mysuite.color.cmyk import CmykEngine, CmykSettings
 from mysuite.color.parse import parse_color
 from mysuite.config import ToolPaths
 from mysuite.convert._parsing import RASTER_FORMATS, detect_source_format
 from mysuite.enhance.enhance import _bit_depth
+from mysuite.utils import imageio
 from mysuite.utils.subprocess_utils import atomic_write_via, run
 
 MAX_PIXELS = 200_000_000
@@ -99,7 +100,7 @@ def _load_raster(path: Path, tools: ToolPaths, target: tuple[int, int], fit: str
                 if im.width * im.height > MAX_PIXELS:
                     raise SpecError("source image is too large")
                 im.seek(0)
-                out = ImageOps.exif_transpose(im).convert("RGBA")
+                out = imageio.normalize(im).convert("RGBA")
                 out.info["bit_depth"] = _bit_depth(im, source)
                 return out
         except SpecError:
@@ -371,7 +372,7 @@ def convert_profile(path: Path, to: str, *, tools: ToolPaths, cmyk_mode: str = "
             opened.seek(0)
             icc = opened.info.get("icc_profile")
             mode = opened.mode
-            src = ImageOps.exif_transpose(opened)
+            src = imageio.normalize(opened)
             src.load()
             alpha = src.getchannel("A") if src.mode in ("RGBA", "LA") else None
             base = src.convert("RGB") if src.mode not in ("CMYK",) else src.copy()
