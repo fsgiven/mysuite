@@ -10,7 +10,7 @@ from mysuite import schema
 from mysuite.tui.app import MysuiteApp
 from mysuite.tui.registry import TOOL_REGISTRY
 from mysuite.tui.screens.auto_screen import HIDDEN, AutoToolScreen
-from tests.helpers import SIMPLE_SVG
+from tests.helpers import SIMPLE_SVG, settle
 
 KEYS = [s.key for s in TOOL_REGISTRY]
 AUTO = [s for s in TOOL_REGISTRY if s.commands]
@@ -192,9 +192,7 @@ async def test_generated_screens_have_plan_command_and_remembered_values(tmp_pat
         ids = {e["name"]: w for w, (k, e) in screen._fields.items()}
         screen.query_one(f"#{ids['inputs']}", Input).value = str(src)
         screen.query_one(f"#{ids['size']}", Input).value = "50x50"
-        await pilot.pause(0.6)
-        await pilot.app.workers.wait_for_complete()
-        await pilot.pause()
+        await settle(pilot)
         parts = shlex.split(screen.query_one(CommandLine).command)[1:]
         assert parts[0] == "print" and "--size" in parts
         doc = json.loads(cli(*parts, "--dry-run", "--json").stdout)           # the shown command is valid CLI
@@ -264,7 +262,7 @@ async def test_mark_key_is_masked_never_on_the_command_line_and_never_remembered
         assert key_input.password is True                                     # masked on screen
         screen.query_one(f"#{ids['inputs']}", Input).value = str(src)
         key_input.value = SECRET
-        await pilot.pause(0.6)
+        await settle(pilot)
         assert SECRET not in screen.query_one(CommandLine).command            # not in the live command
         screen.action_run()
         await finish(pilot)

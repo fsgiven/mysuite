@@ -11,7 +11,7 @@ from mysuite.tui.app import MysuiteApp
 from mysuite.tui.screens.auto_screen import _checkbox_text, _label
 from mysuite.tui.widgets.app_bar import AppBar
 from mysuite.tui.widgets.card import two_lines
-from tests.helpers import SIMPLE_SVG
+from tests.helpers import SIMPLE_SVG, wait_until
 
 need_tools = pytest.mark.skipif(any(shutil.which(t) is None for t in ("rsvg-convert", "magick")), reason="needs tools")
 
@@ -37,7 +37,8 @@ async def test_title_bar_names_the_screen_and_shows_the_version():
         bar = str(app.screen.query_one(AppBar).render())
         assert bar.startswith("mysuite") and "Tools" in bar and f"v{style.version()}" in bar
         app.screen._open_tool("export")
-        await pilot.pause(0.5)
+        await wait_until(pilot, lambda: type(pilot.app.screen).__name__ == "ExportScreen", what="the Export screen")
+        await pilot.pause()
         assert "Export" in str(app.screen.query_one(AppBar).render())
 
 
@@ -47,7 +48,7 @@ async def test_help_is_a_side_panel_without_the_mascot():
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
         await pilot.press("h")
-        await pilot.pause(0.4)
+        await wait_until(pilot, lambda: type(pilot.app.screen).__name__ == "HelperScreen", what="the HelperScreen")
         helper = app.screen
         assert type(helper).__name__ == "HelperScreen"
         assert not helper.query("#helper-face")
