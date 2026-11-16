@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 from mysuite.color.parse import parse_color
-from mysuite.color.svg import DEFAULT_TOLERANCE, recolor_text
+from mysuite.color.svg import DEFAULT_TOLERANCE, TRANSPARENT, recolor_text
 
 _HEX_RE = re.compile(r"^#?[0-9a-fA-F]{3}$|^#?[0-9a-fA-F]{4}$|^#?[0-9a-fA-F]{6}$|^#?[0-9a-fA-F]{8}$")
 
@@ -47,12 +47,24 @@ class InvalidRecolorError(ValueError):
     pass
 
 
-def _normalize_color(value: str) -> str:
+_NO_PAINT = frozenset({"transparent", "none"})
+
+
+def _normalize_color(value: str, *, target: bool = False) -> str:
     """Normalizes a FROM/TO color spec — either a hex color (returned as
     "#hex") or a recognized CSS/SVG named color (returned lowercased, with no
     "#" — this absence of "#" is what apply_recolor() uses downstream to pick
-    the matching strategy)."""
+    the matching strategy). As a TO (`target=True`), `transparent` and `none`
+    mean "no paint" and become TRANSPARENT; as a FROM they are refused, since
+    they are not a colour a logo could be matched on."""
     stripped = value.strip()
+    if stripped.lower() in _NO_PAINT:
+        if target:
+            return TRANSPARENT
+        raise InvalidRecolorError(
+            f"{stripped!r} can only be the TO side of --recolor: it is not a colour, so nothing can be "
+            f"matched on it — name the colour to remove instead, e.g. #dd0000=transparent"
+        )
     if _HEX_RE.match(stripped):
         return stripped if stripped.startswith("#") else f"#{stripped}"
     lowered = stripped.lower()
@@ -64,7 +76,7 @@ def _normalize_color(value: str) -> str:
         return stripped
     raise InvalidRecolorError(
         f"invalid color {value!r} — expected a hex color like #fff, #ffffff, #ffffffaa, "
-        f"or a named CSS color like white, black, red"
+        f"a named CSS color like white, black, red, or (as a target) transparent"
     )
 
 
@@ -80,7 +92,7 @@ def parse_recolor_pairs(pairs: list[str]) -> dict[str, str]:
                 f"invalid --recolor {pair!r} — expected FROM=TO, e.g. #000000=#ffffff or white=black"
             )
         from_raw, to_raw = pair.split("=", 1)
-        mapping[_normalize_color(from_raw)] = _normalize_color(to_raw)
+        mapping[_normalize_color(from_raw)] = _normalize_color(to_raw, target=True)
     return mapping
 
 

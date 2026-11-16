@@ -304,7 +304,7 @@ def run_rename(plans: list[RenamePlan], *, move: bool, overwrite: bool) -> list[
 # ------------------------------------------------------------------------------------- sheet
 def contact_sheet(paths: list[Path], out: Path, tools: ToolPaths, *, columns: int = 4, cell: int = 240, labels: bool = True,
                   background: str = "#1b1d22", title: str | None = None, overwrite: bool = False) -> dict[str, Any]:
-    from mysuite.inspect.inspect import thumbnail
+    from mysuite.inspect.inspect import fit_label, on_checkerboard, sheet_labels, thumbnail
 
     if not paths:
         raise SpecError("no images")
@@ -329,16 +329,17 @@ def contact_sheet(paths: list[Path], out: Path, tools: ToolPaths, *, columns: in
     if title:
         draw.text((pad, 12), title, fill=ink, font=font)
     failed: list[str] = []
+    names = sheet_labels(paths)
     for i, p in enumerate(paths):
         x, y = pad + (i % columns) * (cell + pad), head + pad + (i // columns) * (cell + label_h + pad)
         try:
-            t = thumbnail(p, tools, cell)
+            t = on_checkerboard(thumbnail(p, tools, cell, flatten=False))   # transparency shows as a checkerboard
             sheet.paste(t, (x + (cell - t.width) // 2, y + (cell - t.height) // 2))
         except Exception:  # noqa: BLE001 - one bad file must not sink the sheet
             draw.rectangle([x, y, x + cell, y + cell], outline="#F87171")
             failed.append(p.name)
         if labels:
-            draw.text((x, y + cell + 5), f"{i + 1}. {p.name}"[: max(8, cell // 6)], fill=ink, font=font)
+            draw.text((x, y + cell + 5), fit_label(f"{i + 1}. {names[i]}", font, cell), fill=ink, font=font)
     fmt = {".png": "PNG", ".pdf": "PDF", ".jpg": "JPEG", ".jpeg": "JPEG"}[target.suffix.lower()]
 
     def write(tmp: Path) -> None:

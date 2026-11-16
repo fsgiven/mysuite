@@ -21,6 +21,11 @@ from mysuite.color.parse import Color, parse_color
 
 DEFAULT_TOLERANCE = 2.0  # CIEDE2000; ~ the smallest difference a person notices
 
+# Recolor TARGET meaning "no paint". Written as `none` for fill/stroke (the SVG 1.1 keyword every tool
+# understands) and as `transparent` elsewhere: `stop-color="none"` is invalid and would fall back to black.
+TRANSPARENT = "transparent"
+_NONE_PROPS = frozenset({"fill", "stroke"})
+
 _PROPS = r"fill|stroke|stop-color|flood-color|lighting-color|color"
 _ATTR_RE = re.compile(rf"(?<![\w:-])({_PROPS})(\s*=\s*)([\"'])(.*?)\3", re.DOTALL)
 _STYLE_ATTR_RE = re.compile(r"(?<![\w:-])(style\s*=\s*)([\"'])(.*?)\2", re.DOTALL)
@@ -62,25 +67,28 @@ def _find(color: Color, sources: list[_Source], tolerance: float) -> _Source | N
     return best[1] if best else None
 
 
-def _map_value(value: str, fn: Callable[[str, Color], str | None]) -> str:
+_Fn = Callable[[str, Color, str], "str | None"]
+
+
+def _map_value(value: str, fn: _Fn, prop: str) -> str:
     def repl(m: re.Match[str]) -> str:
         token = m.group(0)
         color = parse_color(token)
         if color is None:
             return token
-        replacement = fn(token, color)
+        replacement = fn(token, color, prop.lower())
         return token if replacement is None else replacement
 
     return _TOKEN_RE.sub(repl, value)
 
 
-def _walk(text: str, fn: Callable[[str, Color], str | None]) -> str:
-    """Applies fn(token, colour) to every colour literal in a colour context."""
+def _walk(text: str, fn: _Fn) -> str:
+    """Applies fn(token, colour, property) to every colour literal in a colour context."""
     def decls(content: str) -> str:
-        return _DECL_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{_map_value(m.group(3), fn)}", content)
+        return _DECL_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{_map_value(m.group(3), fn, m.group(1))}", content)
 
     text = _ATTR_RE.sub(
-        lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}{_map_value(m.group(4), fn)}{m.group(3)}", text
+        lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}{_map_value(m.group(4), fn, m.group(1))}{m.group(3)}", text
     )
     text = _STYLE_ATTR_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{decls(m.group(3))}{m.group(2)}", text)
     return _STYLE_BLOCK_RE.sub(lambda m: f"{m.group(1)}{decls(m.group(2))}{m.group(3)}", text)
@@ -88,18 +96,23 @@ def _walk(text: str, fn: Callable[[str, Color], str | None]) -> str:
 
 def map_colours(text: str, fn: Callable[[str, Color], str | None]) -> str:
     """Rewrites every colour literal in an SVG through fn(token, colour) -> replacement or None (keep)."""
-    return _walk(text, fn)
+    return _walk(text, lambda token, color, _prop: fn(token, color))
 
 
 def recolor_text(text: str, mapping: dict[str, str], tolerance: float = DEFAULT_TOLERANCE) -> str:
-    """Rewrites every colour that equals (or is within `tolerance` CIEDE2000 of) a FROM key."""
+    """Rewrites every colour that equals (or is within `tolerance` CIEDE2000 of) a FROM key.
+    A TO of TRANSPARENT removes the paint (see TRANSPARENT)."""
     if not mapping:
         return text
     sources = _build(mapping)
 
-    def fn(_token: str, color: Color) -> str | None:
+    def fn(_token: str, color: Color, prop: str) -> str | None:
         hit = _find(color, sources, tolerance)
-        return hit.target if hit else None
+        if hit is None:
+            return None
+        if hit.target == TRANSPARENT:
+            return "none" if prop in _NONE_PROPS else TRANSPARENT
+        return hit.target
 
     return _walk(text, fn)
 
@@ -108,7 +121,7 @@ def palette(text: str) -> list[tuple[str, int]]:
     """Distinct colours used (opaque hex), most used first. Alpha is reported in the hex (#rrggbbaa)."""
     counts: Counter[str] = Counter()
 
-    def fn(_token: str, color: Color) -> None:
+    def fn(_token: str, color: Color, _prop: str) -> None:
         if color.alpha is None or color.alpha >= 1:
             counts[color.hex()] += 1
         else:
