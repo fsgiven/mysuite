@@ -146,6 +146,44 @@ def test_strip_removes_title_and_producer(three, tmp_path):
     assert PdfReader(str(three)).metadata.title == "Secret Title"                  # the original keeps it
 
 
+def _with_annotations(src, dst):
+    """A copy of src with a sticky note by "Jane Reviewer" and a form field named "signature" on page 1."""
+    from pypdf import PdfWriter
+    from pypdf.generic import ArrayObject, DictionaryObject, FloatObject, NameObject, TextStringObject
+    writer = PdfWriter(clone_from=str(src))
+    page = writer.pages[0]
+    rect = ArrayObject([FloatObject(10), FloatObject(10), FloatObject(40), FloatObject(40)])
+    note = DictionaryObject({NameObject("/Type"): NameObject("/Annot"), NameObject("/Subtype"): NameObject("/Text"),
+                             NameObject("/Rect"): rect, NameObject("/T"): TextStringObject("Jane Reviewer"),
+                             NameObject("/Contents"): TextStringObject("looks good")})
+    field = DictionaryObject({NameObject("/Type"): NameObject("/Annot"), NameObject("/Subtype"): NameObject("/Widget"),
+                              NameObject("/FT"): NameObject("/Tx"), NameObject("/Rect"): rect,
+                              NameObject("/T"): TextStringObject("signature")})
+    page[NameObject("/Annots")] = ArrayObject([writer._add_object(note), writer._add_object(field)])
+    with open(dst, "wb") as fh:
+        writer.write(fh)
+    return dst
+
+
+def test_strip_writes_a_valid_pdf_that_a_strict_reader_accepts(three, tmp_path):
+    res, doc = run_pdf("strip", three)
+    out = tmp_path / "doc_stripped.pdf"
+    reader = PdfReader(str(out), strict=True)                  # "Broken xref table" before the fix
+    assert len(reader.pages) == 3 and not (reader.metadata or {})
+    assert "/Info" not in reader.trailer
+
+
+def test_strip_removes_annotation_authors_but_keeps_form_field_names(three, tmp_path):
+    src = _with_annotations(three, tmp_path / "annotated.pdf")
+    res, doc = run_pdf("strip", src)
+    out = tmp_path / "annotated_stripped.pdf"
+    assert b"Jane Reviewer" not in out.read_bytes()
+    annots = [a.get_object() for a in PdfReader(str(out), strict=True).pages[0]["/Annots"]]
+    by_type = {a["/Subtype"]: a for a in annots}
+    assert "/T" not in by_type["/Text"] and by_type["/Text"]["/Contents"] == "looks good"
+    assert by_type["/Widget"]["/T"] == "signature"             # a form field's /T is its name, not an author
+
+
 @need_rsvg
 def test_number_pages_with_format_and_start(three, tmp_path):
     res, doc = run_pdf("number", three, "--format", "Page {n} of {total}", "--start", "1")
