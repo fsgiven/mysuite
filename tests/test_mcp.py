@@ -296,3 +296,16 @@ async def test_mark_and_declare_through_mcp(work):
         if shutil.which("exiftool"):
             dec = await call(c, "mysuite_metadata", inputs=[str(work / "pic.png")], action="declare", policy="prohibited", owner="Me")
             assert dec["ok"] and dec["items"][0]["output"].endswith("pic_declared.png")
+
+
+@pytest.mark.asyncio
+async def test_pipeline_dry_run_never_writes_through_mcp(work):
+    from PIL import Image
+    Image.new("RGB", (100, 140), "white").save(work / "doc.pdf", format="PDF")
+    before = sorted(p.name for p in work.iterdir())
+    pipeline = {"inputs": ["doc.pdf"], "step": [{"tool": "pdf", "action": "rotate", "degrees": 90}]}
+    async with server(work) as c:
+        plan = await call(c, "mysuite_pipeline_run", pipeline=pipeline, dry_run=True)
+    assert sorted(p.name for p in work.iterdir()) == before, "a dry run wrote files"
+    assert plan["ok"] is True and plan["items"][0]["status"] == "skipped"
+    assert any("not run" in w for w in plan["warnings"])

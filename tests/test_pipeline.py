@@ -282,3 +282,39 @@ def test_unreadable_pipeline_file(tmp_path):
     bad.write_text("this is = = not toml")
     res = runner.invoke(app, ["pipeline", "run", str(bad), "--json"])
     assert res.exit_code == 1 and "can't read pipeline" in json.loads(res.stdout)["errors"][0]
+
+
+# ------------------------------------------- P0-1: a dry run never writes, even for steps without --dry-run
+def _two_page_pdf(path):
+    from PIL import Image
+    Image.new("RGB", (100, 140), "white").save(path, format="PDF", save_all=True,
+                                              append_images=[Image.new("RGB", (100, 140), "red")])
+    return path
+
+
+def test_dry_run_does_not_run_a_step_whose_command_has_no_dry_run(work):
+    _two_page_pdf(work / "doc.pdf")
+    p = write_pipeline(work, '''
+inputs = ["doc.pdf"]
+
+[[step]]
+tool = "pdf"
+action = "rotate"
+degrees = 90
+
+[[step]]
+tool = "compress"
+codec = "oxipng"
+''')
+    before = sorted(f.name for f in work.iterdir())
+    res, doc = run_pipeline(p, "--dry-run")
+    assert sorted(f.name for f in work.iterdir()) == before, "a dry run wrote files"
+    assert res.exit_code == 0, doc
+    step1 = doc["items"][0]
+    assert step1["status"] == "skipped" and step1["exit_code"] is None
+    assert "--dry-run" in step1["note"] and "not run" in step1["note"]
+    assert any("step 1" in w and "not run" in w for w in doc["warnings"])
+    assert doc["items"][1]["status"] == "planned"            # later steps stay symbolic
+    # the real run still works
+    res, real = run_pipeline(p)
+    assert real["items"][0]["status"] == "ok" and (work / "doc_rotated.pdf").is_file()

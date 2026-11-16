@@ -172,6 +172,17 @@ def _flag_for(key: str, spec: dict[str, Any]) -> tuple[str, bool]:
     return target, False
 
 
+def has_dry_run(step: Step, commands: dict[str, Any]) -> bool:
+    """True when the step's command can plan without writing (it has a real `--dry-run`)."""
+    spec = commands[" ".join(step.command)]
+    return any("--dry-run" in o["flags"] for o in spec["options"])
+
+
+def not_previewed_note(step: Step) -> str:
+    return (f"not run: `{' '.join(step.command)}` has no --dry-run yet, so a dry run can't preview it "
+            "without writing files")
+
+
 def build_argv(step: Step, inputs: list[Path | str], *, overwrite: bool, dry_run: bool, commands: dict[str, Any] | None = None) -> list[str]:
     commands = commands or schema.build()["commands"]
     spec = commands[" ".join(step.command)]
@@ -220,7 +231,7 @@ def resolve_inputs(pipeline: Pipeline) -> list[Path]:
 @dataclass
 class StepResult:
     step: Step
-    status: str                      # ok | failed | skipped | planned
+    status: str                      # ok | failed | skipped | planned (skipped in a dry run = not previewable)
     exit_code: int | None = None
     inputs: list[str] = field(default_factory=list)
     outputs: list[str] = field(default_factory=list)
@@ -292,6 +303,14 @@ def run(pipeline: Pipeline, *, dry_run: bool = False, config: Path | None = None
         if not inputs:
             results.append(StepResult(step, "failed", note=f"no usable input files from {key!r}"))
             failed = True
+            continue
+        if dry_run and not has_dry_run(step, commands):
+            # A dry run must never write. Without --dry-run the child would do the real work, so don't start it.
+            results.append(StepResult(step, "skipped", None, [str(p) for p in inputs], [], None, note=not_previewed_note(step)))
+            outputs_by[f"step{step.index}"] = []
+            previous_key = f"step{step.index}"
+            if step.id:
+                outputs_by[step.id] = []
             continue
         argv = build_argv(step, inputs, overwrite=pipeline.overwrite, dry_run=dry_run, commands=commands)
         if config:

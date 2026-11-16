@@ -136,7 +136,7 @@ class MysuiteServer:
                         "errors": ["credit needs author (or a profile that has one)"]}
             return self._call(["metadata", action], inputs, opts, dry_run=dry_run, overwrite=overwrite, profile=profile)
 
-        @mcp.tool(description="Run several tools in order, each on the previous step's outputs. 'pipeline' is the same structure as a pipeline file: {inputs:[...], step:[{tool:'export', formats:[...]}, {tool:'metadata', action:'strip'}, ...]}. Relative paths are relative to the first allowed folder. dry_run plans step 1 exactly.")
+        @mcp.tool(description="Run several tools in order, each on the previous step's outputs. 'pipeline' is the same structure as a pipeline file: {inputs:[...], step:[{tool:'export', formats:[...]}, {tool:'metadata', action:'strip'}, ...]}. Relative paths are relative to the first allowed folder. dry_run plans step 1 exactly; a step whose command has no dry run is not run at all (status 'skipped', with a warning).")
         def mysuite_pipeline_run(pipeline: dict[str, Any], dry_run: bool = False, profile: str | None = None) -> dict[str, Any]:
             if profile:
                 pipeline = {**pipeline, "profile": profile}
@@ -150,9 +150,11 @@ class MysuiteServer:
                 return {"schema_version": 1, "ok": False, "exit_code": 1, "items": [], "warnings": [], "errors": [str(exc)]}
             items = [{"step": r.step.index, "tool": " ".join(r.step.command), "status": r.status, "exit_code": r.exit_code,
                       "inputs": r.inputs, "outputs": r.outputs, "note": r.note, "result": r.doc} for r in results]
-            ok = all(r.status in ("ok", "planned") for r in results)
+            ok = not any(r.status == "failed" for r in results)
+            not_previewed = [f"step {r.step.index}: {r.note}" for r in results
+                             if dry_run and r.status == "skipped" and r.exit_code is None and r.inputs]
             return {"schema_version": 1, "command": "pipeline", "ok": ok, "exit_code": 0 if ok else 1, "items": items,
-                    "warnings": [w for r in results for w in (r.doc or {}).get("warnings", [])],
+                    "warnings": not_previewed + [w for r in results for w in (r.doc or {}).get("warnings", [])],
                     "errors": [e for r in results for e in (r.doc or {}).get("errors", [])]}
 
         @mcp.tool(description="Quick edits, applied in a fixed order (trim, crop, rotate, flip, resize, pad, round, background): trim=true cuts a uniform border; crop='WxH+X+Y' or crop_aspect='16:9'; rotate=degrees clockwise; flip=horizontal|vertical|both; resize='512' | 'x512' | '512x512' | '50%' with resize_mode fit|fill|exact; pad='1:1' or '1200x630' with pad_color; round_corners='24' or '50%'; background=colour; format png|jpeg|webp|tiff. Output goes beside the source as <name>_transformed.<ext>.")
