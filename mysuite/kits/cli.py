@@ -11,7 +11,7 @@ from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.kits.kits import KITS, KitError, make_kit, retina_kit
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
 app = typer.Typer(help="Make a whole set of files with exact, well-known specs from one logo (favicons, app icons, social images, retina).", no_args_is_help=True)
@@ -87,7 +87,7 @@ def make(
             elif f.status == "planned" and not quiet:
                 console.print(f"[dim]{escape(str(f.path))}[/dim]")
             if f.note and not quiet:
-                log_skip(escape(f.note))
+                log_note(escape(f.note))
     if dry_run:
         return
     if not quiet:

@@ -12,7 +12,7 @@ from mysuite.color.svg import palette
 from mysuite.tokens.context import build_context
 from mysuite.tokens.model import TokenError
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import atomic_write_via
 
 app = typer.Typer(help="Colour variants of an SVG logo: negative / on-dark (from design tokens), invert, mono black/white, grayscale.", no_args_is_help=True)
@@ -112,6 +112,6 @@ def make(
             log_step(escape(str(target)))
             for n in notes:
                 jsonout.add_warning(f"{logo.name} {v}: {n}")
-                log_skip(escape(f"{v}: {n}"))
+                log_note(escape(f"{v}: {n}"))
     if failed:
         raise typer.Exit(1)

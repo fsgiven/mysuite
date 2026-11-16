@@ -32,8 +32,15 @@ def log_step(message: str) -> None:
 
 
 def log_skip(message: str) -> None:
+    """Something was NOT done (a step, a format). For anything else use log_note."""
     _record("warning", message)
     console.print(f"[{WARNING}]⚠ skipping[/{WARNING}] {message}")
+
+
+def log_note(message: str) -> None:
+    """Something the user should know about work that WAS done (a rotation, a colour shift, a leftover)."""
+    _record("warning", message)
+    console.print(f"[{WARNING}]⚠[/{WARNING}] {message}")
 
 
 def log_error(message: str) -> None:

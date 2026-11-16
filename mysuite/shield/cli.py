@@ -11,7 +11,7 @@ from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, RASTER_FORMATS, detect_source_format, resolve_input_files
 from mysuite.shield.core import STRENGTHS, ShieldError, estimate_seconds, output_path_for, shield_file
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_skip, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from PIL import Image
 
 
@@ -75,6 +75,6 @@ def shield(
         log_step(f"{escape(str(r.output_path))}  [dim]{r.metrics.get('psnr_db')} dB, {r.metrics.get('seconds')} s on {r.metrics.get('device')}[/dim]")
         for n in r.notes:
             jsonout.add_warning(f"{f.name}: {n}")
-            log_skip(escape(n))
+            log_note(escape(n))
     if failed:
         raise typer.Exit(1)
