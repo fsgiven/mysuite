@@ -226,7 +226,8 @@ class ExportScreen(ToolScreen):
             except variant_mod.VariantError as exc:
                 raise FormError(str(exc), "variant-specs" if extra else "variants") from exc
             opt("--variants", ",".join(variants))
-        opt("--out", self._text("out-dir") or None)
+        out_dir = self._text("out-dir")
+        opt("--out", str(Path(out_dir).expanduser()) if out_dir else None)   # no shell here to expand ~
         opt("--preset", _select_value(self.query_one("#preset", Select)))
         opt("--background", self._text("background") or None)
         opt("--quality", self._number("quality", "Quality", whole=True, low=0, high=100))
