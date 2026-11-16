@@ -3,9 +3,13 @@ from __future__ import annotations
 import re
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from mysuite.color.parse import parse_color
 from mysuite.color.svg import DEFAULT_TOLERANCE, TRANSPARENT, recolor_text
+
+if TYPE_CHECKING:
+    from mysuite.color.variants import VariantSpec
 
 _HEX_RE = re.compile(r"^#?[0-9a-fA-F]{3}$|^#?[0-9a-fA-F]{4}$|^#?[0-9a-fA-F]{6}$|^#?[0-9a-fA-F]{8}$")
 
@@ -167,21 +171,32 @@ def resolve_token_refs(mapping: dict[str, str], tokens, brand: str | None, theme
     return {one(k): one(v) for k, v in mapping.items()}
 
 
-def make_variant_svg(path: Path, is_temp: bool, variant: str, view, *, overrides: dict[str, str] | None = None, tolerance: float = 5.0) -> tuple[Path, bool, list[str]]:
-    """Writes the variant of an SVG to a temp file; returns (path, is_temp, notes). The input temp file is removed."""
+def make_variant_svg(path: Path, is_temp: bool, variant: "str | VariantSpec", view, *, overrides: dict[str, str] | None = None,
+                     tolerance: float = 5.0) -> tuple[Path, bool, list[str]]:
+    """Writes the variant of an SVG to a temp file; returns (path, is_temp, notes). The input temp file is removed.
+    `variant` is a VariantSpec or a spec string (`mono-white`, `knockout+mono:#1D1D1B`, ...); steps run in order."""
     from mysuite.color import variants as v
     from mysuite.color.svg import palette
 
+    spec = v.parse_spec(variant) if isinstance(variant, str) else variant
     text = path.read_text(encoding="utf-8")
     notes: list[str] = []
-    if variant in v.ALGORITHMIC:
-        out = v.apply_algorithmic(variant, text)
-    else:
-        hexes = [h[:7] for h, _ in palette(text)]
-        out, notes = v.apply_negative(text, view, hexes, tolerance=tolerance, overrides=overrides)
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".svg", prefix=f"mysuite-variant-{variant}-", delete=False)
+    for step in spec.steps:
+        if step in v.SHAPE:
+            from mysuite.color import knockout as ko
+
+            text, step_notes = (ko.knockout if step == "knockout" else ko.cutout)(text)
+        elif step in v.TOKEN_DRIVEN:
+            if view is None:
+                raise v.VariantError("the negative variant is driven by design tokens: pass --tokens SOURCE (or use knockout / invert / mono-white)")
+            hexes = [h[:7] for h, _ in palette(text)]
+            text, step_notes = v.apply_negative(text, view, hexes, tolerance=tolerance, overrides=overrides)
+        else:
+            text, step_notes = v.apply_algorithmic(step, text), []
+        notes += step_notes
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".svg", prefix=f"mysuite-variant-{spec.label}-", delete=False)
     try:
-        tmp.write(out)
+        tmp.write(text)
     finally:
         tmp.close()
     if is_temp:

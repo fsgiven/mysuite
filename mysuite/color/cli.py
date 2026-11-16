@@ -29,17 +29,22 @@ def list_variants() -> None:
         "mono-black": "everything black, transparency kept",
         "mono-white": "everything white, transparency kept",
         "grayscale": "luminance-only version",
+        "knockout": "the background shape stays and everything on it is punched out (a one-colour negative; combine: knockout+mono-white)",
+        "cutout": "the background shape is removed, everything on it stays (combine: cutout+mono:#1D1D1B)",
     }
     for name in variant_mod.ALL:
         jsonout.add_item(variant=name, description=about[name], needs_tokens=name in variant_mod.TOKEN_DRIVEN, status="ok")
         console.print(f"[bold]{name}[/bold]  [dim]{about[name]}[/dim]")
+    jsonout.add_item(variant="mono:COLOUR", description="everything in one colour, e.g. mono:#1D1D1B", needs_tokens=False, status="ok")
+    console.print("[bold]mono:COLOUR[/bold]  [dim]everything in one colour, e.g. mono:#1D1D1B[/dim]")
+    console.print("[dim]Combine steps with + and name the output folder with =, e.g. negativ_dark=knockout+mono:#1D1D1B[/dim]")
 
 
 @app.command("make", help="Write SVG variants of a logo: `mysuite variants make logo.svg --variants negative,mono-white --tokens tokens/ --brand acme`.")
 @jsonout.with_json("variants")
 def make(
     inputs: List[Path] = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="SVG logo(s)."),
-    variants: str = typer.Option("negative,mono-white,mono-black", "--variants", help=f"Comma-separated: {', '.join(variant_mod.ALL[1:])}."),
+    variants: str = typer.Option("negative,mono-white,mono-black", "--variants", help=f"Comma-separated: {', '.join(variant_mod.ALL[1:])}, mono:COLOUR; combine with + and name with =, e.g. negativ=knockout+mono:#fff."),
     tokens: Optional[str] = typer.Option(None, "--tokens", help="Design tokens: file/folder (.css/.json), git+https://…@REF#path=dir, or figma:KEY. Needed for negative."),
     brand: Optional[str] = typer.Option(None, "--brand", help="Which brand of the token source."),
     negative_map: Optional[List[str]] = typer.Option(None, "--negative-map", help="LOGOCOLOUR=token:NAME: use that token's DARK value for that logo colour (repeatable)."),
@@ -51,11 +56,15 @@ def make(
 ) -> None:
     from mysuite.export.recolor import make_variant_svg
 
-    names = [v.strip().lower() for v in variants.split(",") if v.strip()]
-    bad = [v for v in names if v not in variant_mod.ALL or v == "default"]
-    if not names or bad or len(set(names)) != len(names):
-        log_error("variants must be unique and from: " + ", ".join(variant_mod.ALL[1:]) + (f" (got {', '.join(bad)})" if bad else ""))
+    try:
+        specs = {s.label: s for s in variant_mod.parse_specs(variants) if not s.is_default}
+    except variant_mod.VariantError as exc:
+        log_error(escape(str(exc)))
+        raise typer.Exit(1) from exc
+    if not specs:
+        log_error("name at least one variant (default is the logo itself)")
         raise typer.Exit(1)
+    names = list(specs)
     ctx = None
     if tokens:
         try:
@@ -64,7 +73,7 @@ def make(
             log_error(escape(str(exc)))
             raise typer.Exit(1) from exc
         jsonout.set_extra(tokens={"source": ctx.loaded.description, "commit": ctx.loaded.commit, "brand": ctx.brand})
-    elif any(v in variant_mod.TOKEN_DRIVEN for v in names):
+    elif any(s.needs_tokens for s in specs.values()):
         log_error("the negative variant is driven by design tokens: pass --tokens SOURCE (or use invert / mono-white)")
         raise typer.Exit(1)
 
@@ -87,7 +96,7 @@ def make(
                 console.print(f"[dim]— exists, skipped: {escape(str(target))}[/dim]")
                 continue
             try:
-                tmp_svg, _, notes = make_variant_svg(Path(os.path.abspath(logo)), False, v, ctx.view if ctx else None,
+                tmp_svg, _, notes = make_variant_svg(Path(os.path.abspath(logo)), False, specs[v], ctx.view if ctx else None,
                                                      overrides=ctx.overrides if ctx else None, tolerance=negative_tolerance)
             except (variant_mod.VariantError, TokenError, UnicodeDecodeError) as exc:
                 failed += 1

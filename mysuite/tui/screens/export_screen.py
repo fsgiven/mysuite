@@ -5,6 +5,8 @@ The form is a front end for `mysuite export …`; see mysuite.tui.shell. Field i
 """
 from __future__ import annotations
 
+import re
+
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -46,7 +48,7 @@ class ExportScreen(ToolScreen):
     HEADING = "Export"
 
     PERSIST = (
-        "sizes", "unit", "dpi", "formats", "profiles", "cmyk-mode", "cmyk-map", "variants", "out-dir", "background",
+        "sizes", "unit", "dpi", "formats", "profiles", "cmyk-mode", "cmyk-map", "variants", "variant-specs", "out-dir", "background",
         "quality", "png-compression", "padding", "margin-top", "margin-right", "margin-bottom", "margin-left",
         "variant", "tokens", "brand", "theme", "overwrite", "strict", "normalize-png", "date-stamp", "recursive",
     )
@@ -84,7 +86,11 @@ class ExportScreen(ToolScreen):
             "Brand CMYK (used as given, e.g. #DD0000=0/100/100/0 #1D1D1B=75/65/65/80)",
             Input(placeholder="none: computed from the profile", id="cmyk-map"),
         )
-        yield field("Colour variants (none ticked = just the logo as it is)", ChipGroup(list(variant_mod.ALL), id="variants", columns=4))
+        yield field("Colour variants (none ticked = just the logo as it is)", ChipGroup(list(variant_mod.ALL), id="variants", columns=5))
+        yield field(
+            "More variants: NAME=STEP+STEP (e.g. negativ_dark=knockout+mono:#1D1D1B cut_out=cutout+mono-white)",
+            Input(placeholder="optional", id="variant-specs"),
+        )
 
         yield Label("Where", classes="section")
         with Horizontal(classes="field-row"):
@@ -210,8 +216,15 @@ class ExportScreen(ToolScreen):
             except CmykError as exc:
                 raise FormError(str(exc), "cmyk-map") from exc
             opt("--cmyk-map", brand_cmyk)
-        variants = self.query_one("#variants", ChipGroup).selected
+        variants = list(self.query_one("#variants", ChipGroup).selected)
+        extra = [part for part in re.split(r"[\s,]+", self._text("variant-specs")) if part]
+        if extra:
+            variants = (variants or ["default"]) + extra
         if variants:
+            try:
+                variant_mod.parse_specs(",".join(variants))
+            except variant_mod.VariantError as exc:
+                raise FormError(str(exc), "variant-specs" if extra else "variants") from exc
             opt("--variants", ",".join(variants))
         opt("--out", self._text("out-dir") or None)
         opt("--preset", _select_value(self.query_one("#preset", Select)))

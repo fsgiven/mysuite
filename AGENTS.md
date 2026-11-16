@@ -30,6 +30,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | to see it | `mysuite inspect FILE --thumb out.png` or `--sheet sheet.png` (several files) |
 | a logo as PNG/PDF/EPS/SVG/JPEG/WebP/TIFF/ICO/ICNS at several sizes | `mysuite export logo.svg --formats png,pdf --sizes 64,512 --out DIR --json` |
 | print-ready CMYK | `… --profiles cmyk [--cmyk-mode clean] [--cmyk-profile ICC]` (pdf/eps/tiff only) |
+| a brand logo set from one positive logo on a background shape (negative = letters punched out, cut-out = letters only) | `mysuite export logo.svg --variants 'default,negativ_bright=knockout+mono-white,negativ_dark=knockout+mono:#1D1D1B,cut_out_bright=cutout+mono-white,cut_out_dark=cutout+mono:#1D1D1B'` (`knockout`/`cutout` find the background shape by rendering; a note says when a mask had to be used) |
 | CMYK must match the brand book (e.g. red 0/100/100/0) | `… --profiles cmyk --cmyk-map '#DD0000=0/100/100/0' --cmyk-map '#1D1D1B=75/65/65/80'` (or `cmyk_map` in a profile's `[export]`); pinned colours report `"fixed": true` |
 | another colour in the logo | `… --recolor "#dd0000=#0057b8"` (matches by value, small differences included) |
 | a colour removed from the logo (made transparent) | `… --recolor "#dd0000=transparent"` (`none` works too; only as the TO side) |
