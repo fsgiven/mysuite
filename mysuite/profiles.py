@@ -62,7 +62,7 @@ class Profile:
 
 
 def parse_profile(name: str, data: Any) -> Profile:
-    from mysuite.color.variants import ALL as VARIANTS
+    from mysuite.color.variants import VariantError, parse_specs
     from mysuite.config import ExportSettings
 
     if not isinstance(data, dict):
@@ -89,9 +89,10 @@ def parse_profile(name: str, data: Any) -> Profile:
     if profile.theme not in (None, "light", "dark"):
         raise ProfileError(f"profile {name!r}: theme must be light or dark")
     if profile.variants:
-        bad_v = [v for v in profile.variants.split(",") if v.strip() and v.strip() not in VARIANTS]
-        if bad_v:
-            raise ProfileError(f"profile {name!r}: unknown variant(s) {', '.join(bad_v)}")
+        try:
+            parse_specs(profile.variants)
+        except VariantError as exc:
+            raise ProfileError(f"profile {name!r}: unknown variant(s) - {exc}") from exc
     bad_p = [p for p in profile.policy if p not in POLICIES]
     if bad_p or (meta.get("policy") is not None and not profile.policy):
         raise ProfileError(f"profile {name!r}: metadata policy must be a list of {', '.join(POLICIES)}")

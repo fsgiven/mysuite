@@ -265,7 +265,7 @@ Batch-export an SVG into multiple sizes, formats, and color profiles.
 - `--tokens` (str) Design tokens: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir (pinned, cached), or figma:FILEKEY. Lets --recolor use token:NAME and enables the negative variant.
 - `--brand` (str) Which brand of the token source (when it has several).
 - `--theme` (str) Which theme's token values --recolor token:NAME uses: light (default) or dark.
-- `--variants` (str) Several colour variants in one run, each in its own folder: default, negative (token-driven, needs --tokens), invert, mono-black, mono-white, grayscale. E.g. default,negative,mono-white.
+- `--variants` (str) Several variants in one run, each in its own folder: default, negative (token-driven, needs --tokens), invert, mono-black, mono-white, grayscale, mono:COLOUR, knockout (shapes punched out of the background shape), cutout (background shape removed). Combine steps with + and name the folder with =, e.g. 'default,negativ_dark=knockout+mono:#1D1D1B,cut_out=cutout+mono-white'.
 - `--negative-map` (str, repeatable) For the negative variant: LOGOCOLOUR=token:NAME makes that logo colour take the token's DARK value, e.g. '#1d1d1b=token:--headline-text-color'. Repeatable. Use it when several tokens share a colour but differ in dark mode.
 - `--negative-tolerance` (float range, default `5.0`) How close (CIEDE2000) a logo colour must be to a token's light value for the negative variant to use that token.
 - `--tokens-refresh` (boolean) Fetch a git token source again instead of using the cached copy.
@@ -958,7 +958,7 @@ The available variants and what each does.
 Write SVG variants of a logo: `mysuite variants make logo.svg --variants negative,mono-white --tokens tokens/ --brand acme`.
 
 - argument `inputs` (file, required, repeatable) SVG logo(s).
-- `--variants` (str, default `negative,mono-white,mono-black`) Comma-separated: invert, mono-black, mono-white, grayscale, negative, on-dark.
+- `--variants` (str, default `negative,mono-white,mono-black`) Comma-separated: invert, mono-black, mono-white, grayscale, negative, on-dark, knockout, cutout, mono:COLOUR; combine with + and name with =, e.g. negativ=knockout+mono:#fff.
 - `--tokens` (str) Design tokens: file/folder (.css/.json), git+https://…@REF#path=dir, or figma:KEY. Needed for negative.
 - `--brand` (str) Which brand of the token source.
 - `--negative-map` (str, repeatable) LOGOCOLOUR=token:NAME: use that token's DARK value for that logo colour (repeatable).

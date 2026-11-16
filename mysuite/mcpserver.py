@@ -76,7 +76,7 @@ class MysuiteServer:
         def mysuite_inspect(paths: list[str], thumb: str | None = None, sheet: str | None = None) -> dict[str, Any]:
             return self._call(["inspect"], paths, {"thumb": thumb, "sheet": sheet})
 
-        @mcp.tool(description="Export an SVG logo to many sizes/formats (png,pdf,eps,svg,jpeg,webp,tiff,ico,icns), RGB and CMYK. cmyk_mode: exact | clean | clean:N. cmyk_map: brand print values used as they are, list of 'COLOUR=C/M/Y/K' (e.g. '#DD0000=0/100/100/0'); prefer it whenever the brand book gives CMYK numbers. recolor: list of 'FROM=TO' colour swaps (TO or FROM may be 'token:NAME' with tokens=<design token source>, theme light|dark). variants: comma list of default, negative (token-driven on-dark, needs tokens), invert, mono-black, mono-white, grayscale - each variant gets its own folder.")
+        @mcp.tool(description="Export an SVG logo to many sizes/formats (png,pdf,eps,svg,jpeg,webp,tiff,ico,icns), RGB and CMYK. cmyk_mode: exact | clean | clean:N. cmyk_map: brand print values used as they are, list of 'COLOUR=C/M/Y/K' (e.g. '#DD0000=0/100/100/0'); prefer it whenever the brand book gives CMYK numbers. recolor: list of 'FROM=TO' colour swaps (TO or FROM may be 'token:NAME' with tokens=<design token source>, theme light|dark). variants: comma list of default, negative (token-driven on-dark, needs tokens), invert, mono-black, mono-white, grayscale, mono:COLOUR, knockout (shapes punched out of the background shape: a one-colour negative), cutout (background shape removed) - combine steps with + and name the folder with =, e.g. 'default,negativ_dark=knockout+mono:#1D1D1B,cut_out=cutout+mono-white'; each variant gets its own folder.")
         def mysuite_export(inputs: list[str], formats: list[str] | None = None, sizes: list[str] | None = None,
                            profiles: list[str] | None = None, out: str | None = None, preset: str | None = None,
                            recolor: list[str] | None = None, cmyk_mode: str | None = None, cmyk_profile: str | None = None,
@@ -263,7 +263,7 @@ class MysuiteServer:
             return {"schema_version": 1, "ok": False, "exit_code": 2, "items": [], "warnings": [],
                     "errors": ["action must be list, show (needs name) or check (needs logo)"]}
 
-        @mcp.tool(description="Write SVG variants of a logo next to it (or in out): variants = comma list of negative (token-driven on-dark, needs tokens + brand), invert, mono-black, mono-white, grayscale. negative_map: ['#1d1d1b=token:--headline-text-color'] picks the token whose dark value a logo colour should take.")
+        @mcp.tool(description="Write SVG variants of a logo next to it (or in out): variants = comma list of negative (token-driven on-dark, needs tokens + brand), invert, mono-black, mono-white, grayscale, mono:COLOUR, knockout, cutout; combine with + and name with = (negativ=knockout+mono:#fff). negative_map: ['#1d1d1b=token:--headline-text-color'] picks the token whose dark value a logo colour should take.")
         def mysuite_variants(inputs: list[str], variants: str | None = None, tokens: str | None = None, brand: str | None = None,
                              negative_map: list[str] | None = None, out: str | None = None, dry_run: bool = False,
                              overwrite: bool = False) -> dict[str, Any]:

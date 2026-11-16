@@ -189,8 +189,10 @@ def export(
     theme: Optional[str] = typer.Option(None, "--theme", help="Which theme's token values --recolor token:NAME uses: light (default) or dark."),
     variants: Optional[str] = typer.Option(
         None, "--variants",
-        help="Several colour variants in one run, each in its own folder: default, negative (token-driven, needs --tokens), "
-        "invert, mono-black, mono-white, grayscale. E.g. default,negative,mono-white.",
+        help="Several variants in one run, each in its own folder: default, negative (token-driven, needs --tokens), "
+        "invert, mono-black, mono-white, grayscale, mono:COLOUR, knockout (shapes punched out of the background shape), "
+        "cutout (background shape removed). Combine steps with + and name the folder with =, e.g. "
+        "'default,negativ_dark=knockout+mono:#1D1D1B,cut_out=cutout+mono-white'.",
     ),
     negative_map: Optional[List[str]] = typer.Option(
         None, "--negative-map",
@@ -370,26 +372,27 @@ def export(
         cmyk=resolved_cmyk,
     )
 
-    variant_names = [v.strip().lower() for v in (variants or "default").split(",") if v.strip()] or ["default"]
-    bad_variants = [v for v in variant_names if v not in variant_mod.ALL]
-    if bad_variants or len(set(variant_names)) != len(variant_names):
-        log_error("variants must be unique and from: " + ", ".join(variant_mod.ALL) + (f" (got {', '.join(bad_variants)})" if bad_variants else ""))
-        raise typer.Exit(1)
+    try:
+        variant_specs = {spec.label: spec for spec in variant_mod.parse_specs(variants)}
+    except VariantError as exc:
+        log_error(escape(str(exc)))
+        raise typer.Exit(1) from exc
+    variant_names = list(variant_specs)
     if variants and resolved_variant:
         log_error("use either --variant (one folder name) or --variants (a list of colour variants), not both")
         raise typer.Exit(1)
     if theme not in ("light", "dark"):
         log_error("--theme must be light or dark")
         raise typer.Exit(1)
-    label_for = {v: (resolved_variant or "") if v == "default" else v for v in variant_names}
+    label_for = {v: (resolved_variant or "") if v == "default" and variant_specs[v].is_default else v for v in variant_names}
     path_templates = {
         v: resolve_path_template_for_variant(settings.path_template, variant=label_for[v] or None, default_path_template=DEFAULT_PATH_TEMPLATE)
         for v in variant_names
     }
     token_view = token_ctx.view if token_ctx else None
     negative_overrides = token_ctx.overrides if token_ctx else {}
-    if token_view is None and any(v in variant_mod.TOKEN_DRIVEN for v in variant_names):
-        log_error("the negative variant is driven by design tokens: pass --tokens SOURCE (or use invert / mono-white)")
+    if token_view is None and any(spec.needs_tokens for spec in variant_specs.values()):
+        log_error("the negative variant is driven by design tokens: pass --tokens SOURCE (or use knockout / invert / mono-white)")
         raise typer.Exit(1)
 
     batch = len(input_files) > 1
@@ -476,9 +479,9 @@ def export(
             else:
                 source_svg = input_svg
             render_svg, is_temp = apply_recolor(source_svg, resolved_recolor_map, resolved_recolor_tolerance)
-            if variant_name != "default":
+            if not variant_specs[variant_name].is_default:
                 try:
-                    render_svg, is_temp, variant_notes = make_variant_svg(render_svg, is_temp, variant_name, token_view, overrides=negative_overrides, tolerance=negative_tolerance)
+                    render_svg, is_temp, variant_notes = make_variant_svg(render_svg, is_temp, variant_specs[variant_name], token_view, overrides=negative_overrides, tolerance=negative_tolerance)
                 except (VariantError, TokenError) as exc:
                     log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
                     raise typer.Exit(1) from exc

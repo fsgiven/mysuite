@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Callable
 
 from mysuite.color.parse import Color, parse_color
@@ -9,13 +10,82 @@ from mysuite.color.svg import map_colours, recolor_text
 
 ALGORITHMIC = ("invert", "mono-black", "mono-white", "grayscale")
 TOKEN_DRIVEN = ("negative", "on-dark")
-ALL = ("default", *ALGORITHMIC, *TOKEN_DRIVEN)
+SHAPE = ("knockout", "cutout")
+ALL = ("default", *ALGORITHMIC, *TOKEN_DRIVEN, *SHAPE)
 
 _ROOT = re.compile(r"<svg\b[^>]*>", re.I | re.S)
 
 
 class VariantError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class VariantSpec:
+    """One output variant: `label` names its folder, `steps` are applied in order (empty = the logo as it is).
+
+    Written as ``[LABEL=]STEP[+STEP...]``, e.g. ``mono-white``, ``knockout+mono:#1D1D1B`` or
+    ``negativ_dark=knockout+mono:#1D1D1B``. A step is a named variant, knockout, cutout or mono:COLOUR."""
+    label: str
+    steps: list[str]
+
+    @property
+    def needs_tokens(self) -> bool:
+        return any(s in TOKEN_DRIVEN for s in self.steps)
+
+    @property
+    def is_default(self) -> bool:
+        return not self.steps
+
+
+_LABEL_RE = re.compile(r"^[\w.-]+$")
+
+
+def _step(raw: str) -> str:
+    step = raw.strip().lower()
+    if step.startswith("mono:"):
+        colour = parse_color(raw.strip()[5:])
+        if colour is None:
+            raise VariantError(f"mono:{raw.strip()[5:]} - not a colour (use hex like mono:#1D1D1B or a name like mono:white)")
+        return f"mono:{colour.hex()}"
+    if step not in ALL or step == "default":
+        raise VariantError(f"variants must be from {', '.join(ALL)} or mono:COLOUR, combined with + "
+                           f"(unknown: {raw.strip()!r})")
+    return step
+
+
+def parse_spec(text: str) -> VariantSpec:
+    raw = text.strip()
+    label, sep, body = raw.partition("=")
+    if not sep:
+        label, body = "", raw
+    label = label.strip()
+    if sep and not label:
+        raise VariantError(f"variant {raw!r}: the name before '=' is empty")
+    if label and not _LABEL_RE.match(label):
+        raise VariantError(f"variant name {label!r} may only use letters, digits, _ . and -")
+    if body.strip().lower() == "default":
+        return VariantSpec(label or "default", [])
+    parts = body.split("+")
+    if any(not p.strip() for p in parts):
+        raise VariantError(f"variant {raw!r}: empty step (use knockout+mono:#fff, not knockout+)")
+    steps = [_step(p) for p in parts]
+    if len(set(steps)) != len(steps):
+        raise VariantError(f"variant {raw!r} repeats a step")
+    if "knockout" in steps and "cutout" in steps:
+        raise VariantError(f"variant {raw!r}: knockout and cutout exclude each other")
+    auto = "+".join(s.replace("mono:#", "mono-") for s in steps)
+    return VariantSpec(label or auto, steps)
+
+
+def parse_specs(text: str | None) -> list[VariantSpec]:
+    """A comma list of specs; labels must be unique."""
+    specs = [parse_spec(part) for part in (text or "default").split(",") if part.strip()] or [VariantSpec("default", [])]
+    labels = [s.label for s in specs]
+    dupes = sorted({x for x in labels if labels.count(x) > 1})
+    if dupes:
+        raise VariantError(f"variant names must be unique (twice: {', '.join(dupes)})")
+    return specs
 
 
 def _fmt(rgb: tuple[int, int, int], alpha: float | None) -> str:
@@ -30,6 +100,11 @@ def _algo(name: str) -> Callable[[Color], tuple[int, int, int]]:
         return lambda c: (0, 0, 0)
     if name == "mono-white":
         return lambda c: (255, 255, 255)
+    if name.startswith("mono:"):
+        fixed = parse_color(name[5:])
+        if fixed is None:
+            raise VariantError(f"unknown variant {name!r}")
+        return lambda c: (fixed.r, fixed.g, fixed.b)
     if name == "grayscale":
         def gray(c: Color) -> tuple[int, int, int]:
             y = round(0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b)
