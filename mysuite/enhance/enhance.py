@@ -5,12 +5,13 @@ import time
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-from PIL import Image, ImageCms, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageCms, UnidentifiedImageError
 
 from mysuite.enhance import color, lighting, scratch
 from mysuite.enhance._parsing import OUTPUT_EXTENSIONS, output_path_for
 from mysuite.enhance.presets import ENHANCE_DEFAULTS
 from mysuite.enhance.upscalers import get_upscaler
+from mysuite.utils import imageio
 from mysuite.utils.subprocess_utils import atomic_write_via
 
 MAX_OUTPUT_MEGAPIXELS = 250.0
@@ -120,7 +121,7 @@ def _load(input_path: Path, notes: list[str]) -> tuple[Image.Image, Image.Image 
 
     if _bit_depth(image, input_path) > 8:
         notes.append("source is more than 8 bits per channel; the output is 8-bit")
-    image = ImageOps.exif_transpose(image)
+    image = imageio.normalize(image)               # upright, 16-bit grey scaled to 8 bits
     icc = image.info.get("icc_profile")
     alpha = None
     if image.mode in ("RGBA", "LA", "PA") or "transparency" in image.info:

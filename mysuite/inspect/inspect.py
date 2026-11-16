@@ -10,12 +10,13 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
 from mysuite.color.svg import palette as svg_palette
 from mysuite.config import ToolPaths
 from mysuite.convert._parsing import RASTER_FORMATS, detect_source_format
 from mysuite.enhance.enhance import _bit_depth
+from mysuite.utils import imageio
 from mysuite.utils.subprocess_utils import MysuiteToolError, run
 
 THUMB_MAX = 512
@@ -85,10 +86,10 @@ def _inspect_raster(path: Path, tools: ToolPaths) -> dict[str, Any]:
             icc = im.info.get("icc_profile")
             im.seek(0)
             im.load()
-            rgba = im.convert("RGBA")
+            rgba = imageio.to_8bit(im).convert("RGBA")
             alpha_present = mode in ("RGBA", "LA", "PA") or "transparency" in im.info
             alpha_min = rgba.getchannel("A").getextrema()[0] if alpha_present else 255
-            upright = ImageOps.exif_transpose(im)
+            upright = imageio.normalize(im)
             info: dict[str, Any] = {
                 "format": fmt, "width": size[0], "height": size[1],
                 "megapixels": round(size[0] * size[1] / 1e6, 2),
@@ -195,7 +196,7 @@ def thumbnail(path: Path, tools: ToolPaths, size: int = THUMB_MAX, *, flatten: b
             tmp = source = _first_page_png(path, kind or "", tools)
         with Image.open(source) as im:
             im.seek(0)
-            im = ImageOps.exif_transpose(im).convert("RGBA")
+            im = imageio.normalize(im).convert("RGBA")
         if flatten:
             flat = Image.new("RGBA", im.size, (255, 255, 255, 255))
             flat.alpha_composite(im)

@@ -19,10 +19,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 
 from mysuite.color.parse import parse_color
 from mysuite.enhance.enhance import _bit_depth
+from mysuite.utils import imageio
 from mysuite.utils.subprocess_utils import atomic_write_via
 
 DIRECTIONS = {
@@ -184,7 +185,7 @@ def relight_file(input_path: Path, settings: RelightSettings, *, overwrite: bool
                 notes.append("source is more than 8 bits per channel; the output is 8-bit")
             opened.seek(0)
             icc = opened.info.get("icc_profile")
-            image = ImageOps.exif_transpose(opened).convert("RGBA")
+            image = imageio.normalize(opened).convert("RGBA")
     except RelightError:
         raise
     except Exception as exc:  # noqa: BLE001
