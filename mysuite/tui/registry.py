@@ -272,13 +272,16 @@ TOOL_REGISTRY: list[ToolSpec] = [
         key="metadata",
         group="Documents & privacy",
         label="Metadata",
-        description="Strip hidden data, fake a camera, or credit the author.",
+        description="Strip hidden data, credit the author, or protect & credit in one go.",
         screen_factory=_metadata_screen_factory,
         accent="#93C5FD",  # periwinkle
         help=(
-            "Strip removes everything (GPS, serial numbers, camera, software). Randomize then writes one plausible "
-            "decoy camera identity (never a location). Credit embeds author and copyright as a C2PA record "
-            "(signed with a test certificate).\nWorks on copies: your original stays as it is."
+            "Strip removes GPS, camera, serial numbers, software, dates and comments; the colour profile stays (tick the box to "
+            "remove it too), and 'keep author, copyright and credit line' removes only the private data. Credit writes author, "
+            "copyright, credit line, source and usage terms as IPTC Core, the fields picture desks read; a C2PA record is added "
+            "only when c2patool is installed (signed with its test certificate). Declare adds a 'no AI training' notice and "
+            "removes nothing. Protect & credit does strip, credit and declare (and your mark) in one go, into one file.\n"
+            "Works on copies: your original stays as it is. Folder runs skip files mysuite wrote earlier."
         ),
         cli="mysuite metadata strip photo.jpg",
     ),
@@ -307,21 +310,22 @@ TOOL_REGISTRY: list[ToolSpec] = [
         key="protect",
         group="Documents & privacy",
         label="Protect",
-        description="Ownership mark, no-AI declaration, experimental shield against AI editing.",
+        description="Protect & credit in one go, invisible ownership mark, no-AI declaration.",
         screen_factory=_auto_factory("protect"),
         accent="#C7D2FE",  # periwinkle-white
         commands=(
+            ("Protect & credit in one go", ("metadata", "protect")),
             ("Add an invisible ownership mark", ("mark", "embed")),
             ("Check a picture for my mark", ("mark", "detect")),
             ("Declare 'no AI use' in the file", ("metadata", "declare")),
-            ("Shield against AI editing (experimental)", ("shield",)),
         ),
         help=(
-            "Four layers, from dependable to experimental. MARK hides a keyed pattern in the picture that survives JPEG, resizing, "
-            "cropping, mirroring and noise, so you can later prove a copy came from you (keep your key secret; heavy blur, rotation or "
-            "AI regeneration erase it). DECLARE writes a 'no AI training/mining' notice into a copy; only cooperating crawlers honour it. "
-            "SHIELD is experimental: it makes Stable Diffusion-style editors produce something else from your picture, needs a one-time "
-            "~1.4 GB part (Parts card), takes about a minute per 512 px tile and is largely undone by resizing. See docs/PROTECTION.md."
+            "PROTECT & CREDIT removes GPS, camera and serial numbers (your credit and the colour profile stay), writes your credit "
+            "(IPTC Core), declares 'no AI training / data mining' and, if you tick it, adds your mark: one file, <name>_protected. "
+            "MARK hides a keyed pattern in the picture that survives JPEG, resizing, cropping, mirroring and noise, so you can later "
+            "prove a copy came from you (keep your key secret; heavy blur, rotation or AI regeneration erase it). DECLARE writes the "
+            "notice only; cooperating crawlers honour it, nothing enforces it. None of these stop someone copying the file. "
+            "See docs/PROTECTION.md. (The experimental `mysuite shield` is CLI-only: see docs/SHIELD.md.)"
         ),
         cli="mysuite mark embed photo.png --key YOUR-SECRET",
     ),

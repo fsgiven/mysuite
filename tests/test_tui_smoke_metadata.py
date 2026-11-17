@@ -4,7 +4,7 @@ import shutil
 import subprocess
 
 import pytest
-from textual.widgets import Input, Select, Static
+from textual.widgets import Checkbox, Input, Select, Static
 
 from mysuite.tui.app import MysuiteApp
 from mysuite.tui.registry import TOOL_REGISTRY
@@ -29,7 +29,7 @@ async def test_credit_fields_only_visible_in_credit_mode():
     async with MysuiteApp().run_test() as pilot:
         screen = await _open(pilot)
         mode = screen.query_one("#mode", Select)
-        for value, visible in (("strip", False), ("randomize", False), ("credit", True)):
+        for value, visible in (("strip", False), ("declare", False), ("credit", True), ("protect", True)):
             mode.value = value
             await pilot.pause()
             assert screen.query_one("#group-credit").display is visible, value
@@ -37,22 +37,41 @@ async def test_credit_fields_only_visible_in_credit_mode():
 
 @pytest.mark.slow
 @skip_if_tools_missing
-async def test_randomize_run_writes_output_beside_source(tmp_path):
+async def test_protect_run_writes_one_file_with_the_credit(tmp_path):
     photo = tmp_path / "photo.jpg"
     subprocess.run(["magick", "-size", "80x60", "xc:#3388ff", str(photo)], check=True)
-    subprocess.run(["exiftool", "-q", "-overwrite_original", "-Artist=Frank", str(photo)], check=True)
+    subprocess.run(["exiftool", "-q", "-overwrite_original", "-GPSLatitude=52.5", "-GPSLatitudeRef=N", str(photo)], check=True)
 
     async with MysuiteApp().run_test() as pilot:
         screen = await _open(pilot)
         screen.query_one("#input-files", Input).value = str(photo)
-        screen.query_one("#mode", Select).value = "randomize"
+        screen.query_one("#mode", Select).value = "protect"
+        screen.query_one("#author", Input).value = "Jane Doe"
         await pilot.pause()
         screen.action_run()
         await pilot.app.workers.wait_for_complete()
         await pilot.pause()
 
-        out = photo.with_name("photo_randomized.jpg")
-        assert out.exists()
+        out = photo.with_name("photo_protected.jpg")
+        assert out.exists() and sorted(p.name for p in tmp_path.iterdir()) == ["photo.jpg", "photo_protected.jpg"]
         assert "1 written" in str(screen.query_one("#run-summary", Static).render())
-        artist = subprocess.run(["exiftool", "-s3", "-Artist", str(out)], capture_output=True, text=True).stdout.strip()
-        assert artist == ""
+        t = subprocess.run(["exiftool", "-s3", "-IPTC:By-line", "-GPSLatitude", str(out)], capture_output=True, text=True).stdout
+        assert t.strip() == "Jane Doe"
+
+
+async def test_the_mark_key_goes_through_the_environment_not_the_command(tmp_path):
+    photo = tmp_path / "photo.jpg"
+    photo.write_bytes(b"x")
+    async with MysuiteApp().run_test() as pilot:
+        screen = await _open(pilot)
+        screen.query_one("#input-files", Input).value = str(photo)
+        screen.query_one("#mode", Select).value = "protect"
+        screen.query_one("#author", Input).value = "Jane Doe"
+        screen.query_one("#mark", Checkbox).value = True
+        screen.query_one("#key", Input).value = "correct horse battery"
+        await pilot.pause()
+        argv = screen.argv()
+        assert "--mark" in argv and "correct horse battery" not in " ".join(argv)
+        assert screen.child_env() == {"MYSUITE_MARK_KEY": "correct horse battery"}
+        assert screen.query_one("#key", Input).password
+        assert "key" not in screen.PERSIST

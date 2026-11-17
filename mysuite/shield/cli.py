@@ -27,7 +27,9 @@ def shield(
     overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show the files and a time estimate, change nothing."),
 ) -> None:
-    """EXPERIMENTAL: make an image resist AI image editing (PhotoGuard-style). Read docs/SHIELD.md for what it does and does not do."""
+    """EXPERIMENTAL: disturb Stable Diffusion 1.x/2.x-style image-to-image editing (PhotoGuard-style). It does NOT stop
+    ChatGPT, Gemini, Midjourney or other closed services, nor AI training, scraping or copying; resizing removes most of
+    it. Read docs/SHIELD.md before relying on it."""
     try:
         files = [f for f in resolve_input_files(inputs, recursive=recursive) if detect_source_format(f) in RASTER_FORMATS]
         if not files:
@@ -43,6 +45,11 @@ def shield(
         jsonout.set_extra(missing_components=[{"component": "shield", "install": "mysuite install shield --yes"}])
         log_error("the shield component is not installed (PyTorch + weights, about 1.4 GB, fetched once): run `mysuite install shield`")
         raise typer.Exit(jsonout.EXIT_MISSING_TOOL)
+    if not dry_run:
+        caveat = ("experimental: aimed at Stable Diffusion-style editors; it does not stop ChatGPT, Gemini, Midjourney, "
+                  "AI training or copying, and resizing removes most of it (docs/SHIELD.md)")
+        jsonout.add_warning(caveat)
+        log_note(escape(caveat))
     failed = 0
     for f in files:
         try:

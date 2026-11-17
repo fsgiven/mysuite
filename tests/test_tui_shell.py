@@ -386,6 +386,7 @@ async def test_metadata_modes_pick_the_subcommand_and_show_their_fields(tmp_path
             ("strip", ("metadata", "strip"), set()),
             ("credit", ("metadata", "credit"), {"group-credit", "group-credit-extra"}),
             ("declare", ("metadata", "declare"), {"group-declare"}),
+            ("protect", ("metadata", "protect"), {"group-credit", "group-declare"}),
             ("apply", ("metadata", "apply"), {"group-credit", "group-apply"}),
         ):
             mode.value = value
