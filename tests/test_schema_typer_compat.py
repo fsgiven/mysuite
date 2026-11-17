@@ -86,3 +86,8 @@ def test_enum_members_and_defaults_become_plain_values():
 
     entry = schema._param(_p(type=NS(name="choice", choices=[Level.low]), default=Level.low))
     assert entry["choices"] == ["low"] and entry["default"] == "low"
+
+
+def test_path_defaults_are_shown_as_text():
+    entry = schema._param(_p(type=NS(name="path"), default=Path("qr.png")))
+    assert entry["default"] == "qr.png"

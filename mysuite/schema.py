@@ -239,6 +239,8 @@ def _param(p: Any) -> dict[str, Any]:
     default = p.default
     if isinstance(default, enum.Enum):
         default = default.value
+    if isinstance(default, PurePath):
+        default = str(default)
     if default is not None and not callable(default) and not isinstance(default, (tuple, list)) or default == ():
         entry["default"] = default if isinstance(default, (str, int, float, bool)) else None
     help_text = getattr(p, "help", None)

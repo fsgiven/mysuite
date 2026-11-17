@@ -481,7 +481,7 @@ Make a kit from a logo: `mysuite kit make logo.svg --kit favicon`.
 
 - argument `inputs` (path, required, repeatable) Logo file(s): SVG, PNG, JPEG, WebP, PDF, EPS…
 - `--kit / -k` (str) Which kit: favicon, ios-app-icon, android-icons, social, retina. See `mysuite kit list`.
-- `--out / -o` (path) Output folder. Files go to <out>/<logo name>/<kit>/…
+- `--out / -o` (path, default `kits`) Output folder. Files go to <out>/<logo name>/<kit>/…
 - `--name` (str) Name used in the folder and file names (default: the logo's file name).
 - `--background` (str) Colour behind the logo (e.g. '#ffffff'). Needed for social images; opaque icons default to white.
 - `--padding` (float) Empty border around the logo, percent of the canvas (0-49).
@@ -1191,7 +1191,7 @@ Make a QR code: `mysuite qr make "https://example.com" --out qr.png`.
 *writes files · no `--dry-run` · `--json`*
 
 - argument `text` (str, required) What the code should say (a URL, text, Wi-Fi string…).
-- `--out / -o` (path) Output file: .png, .svg, .jpg, .pdf or .eps (the extension picks the format).
+- `--out / -o` (path, default `qr.png`) Output file: .png, .svg, .jpg, .pdf or .eps (the extension picks the format).
 - `--scale` (int, default `10`) Pixels per module (PNG) / units (SVG), 1-100.
 - `--border` (int, default `4`) Quiet-zone modules around the code (the spec wants 4).
 - `--error` (choice, default `m`, one of `l`, `m`, `q`, `h`) Error correction: l (7%), m (15%), q (25%), h (30%).
@@ -1298,7 +1298,7 @@ Contact sheet: many pictures on one labelled page.
 *writes files · no `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Images / folders to put on one sheet.
-- `--out / -o` (path) Output file: .png, .jpg or .pdf.
+- `--out / -o` (path, default `contact-sheet.png`) Output file: .png, .jpg or .pdf.
 - `--columns` (int, default `4`) Pictures per row (1-20).
 - `--cell` (int, default `240`) Size of each picture's box in pixels (32-1200).
 - `--no-labels` (boolean) Leave out the file names.
@@ -1409,7 +1409,7 @@ Generate the test folder (about 60 files, 10 MB, a few seconds). Nothing is down
 
 *writes files · no `--dry-run` · `--json`*
 
-- `--out / -o` (path) Folder to create.
+- `--out / -o` (path, default `mysuite-testcases`) Folder to create.
 - `--overwrite / --no-overwrite` (boolean) Write into a folder that already exists.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
