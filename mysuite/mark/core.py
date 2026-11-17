@@ -147,6 +147,17 @@ def _cmyk_to_srgb(image: Image.Image, icc: bytes | None) -> tuple[Image.Image, b
     return image.convert("RGB"), ImageCms.ImageCmsProfile(srgb).tobytes()
 
 
+def _rgb_profile(icc: bytes) -> bool:
+    import io
+
+    from PIL import ImageCms
+
+    try:
+        return ImageCms.ImageCmsProfile(io.BytesIO(icc)).profile.xcolor_space.strip() == "RGB"
+    except (ImageCms.PyCMSError, OSError, ValueError):
+        return False
+
+
 def copy_metadata(src: Path, dst: Path, exiftool: str | None, *, icc: bool = True) -> bool:
     """Every tag from the original (EXIF, IPTC, XMP: author, copyright, the no-AI declaration …) onto the marked copy,
     with Orientation reset to 1 because the pixels were turned upright. False when exiftool is not installed."""
@@ -158,7 +169,9 @@ def copy_metadata(src: Path, dst: Path, exiftool: str | None, *, icc: bool = Tru
     if not tool:
         return False
     run([tool, "-q", "-q", "-m", "-overwrite_original", "-tagsfromfile", str(src), "-all:all", "-unsafe",
-         *(["-icc_profile"] if icc else ["--icc_profile:all"]), "-Orientation#=1", str(dst)])
+         *(["-icc_profile"] if icc else ["--icc_profile:all"]), "-Orientation#=1",
+         # the embedded previews show the UNMARKED picture (and anything cropped away): never carry them over
+         "-ThumbnailImage=", "-PreviewImage=", "-JpgFromRaw=", str(dst)])
     return True
 
 
@@ -196,6 +209,8 @@ def embed_file(path: Path, *, key: str, ident: str | None = None, strength: str 
                 upright, icc = _cmyk_to_srgb(upright, icc)
                 converted = True
                 notes.append("CMYK source: the marked copy is RGB (sRGB); keep the CMYK original for print")
+            elif icc and not _rgb_profile(icc):
+                icc, converted = None, True                    # a grey/other profile can't describe RGB pixels
             image = upright.convert("RGBA")
     except MarkError:
         raise
