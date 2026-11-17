@@ -136,7 +136,7 @@ def test_white_on_transparent_logo_is_visible_on_the_sheet(tmp_path, command):
     logo.write_text(WHITE_LOGO)
     _, doc = run("export", logo, "--formats", "png", "--sizes", "200", "--variants", "default,invert", "--out", tmp_path / "o")
     pngs = sorted(Path(i["output"]) for i in doc["items"])
-    assert len(pngs) == 2 and pngs[0].name == pngs[1].name
+    assert sorted(p.name for p in pngs) == ["logo_200.png", "logo_invert_200.png"]     # the variant is in the file name
     sheet = tmp_path / "s.png"
     if command == "sheet":
         res, _ = run("sheet", *pngs, "--out", sheet, "--columns", "2", "--cell", "200", "--background", "#ffffff")
