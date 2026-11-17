@@ -143,7 +143,7 @@ def test_export_then_metadata_then_compress_chain(work):
 
 @need
 def test_second_run_skips_instead_of_overwriting(work):
-    p = write_pipeline(work, RELEASE)
+    p = write_pipeline(work, "keep_intermediate = true\n" + RELEASE)
     run_pipeline(p)
     first = {f: md5(f) for f in (work / "dist").rglob("*.png")}
     res, doc = run_pipeline(p)
@@ -316,5 +316,5 @@ codec = "oxipng"
     assert any("step 1" in w and "not run" in w for w in doc["warnings"])
     assert doc["items"][1]["status"] == "planned"            # later steps stay symbolic
     # the real run still works
-    res, real = run_pipeline(p)
+    res, real = run_pipeline(p, "--keep-intermediate")
     assert real["items"][0]["status"] == "ok" and (work / "doc_rotated.pdf").is_file()
