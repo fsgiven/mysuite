@@ -4,6 +4,10 @@ Pillow opens a 16-bit greyscale PNG/TIFF as mode ``I;16`` (or ``I``/``F``), and 
 *clips* every value above 255, so a normal photo comes out solid white. Use :func:`to_8bit` (or
 :func:`normalize` / :func:`open_image`) before any ``convert`` so the tones are scaled instead.
 16-bit RGB(A) PNGs are already reduced to 8 bits correctly by Pillow and pass through unchanged.
+
+House rule for **web output** (compress / "Save for web", see mysuite.compress.prep): the file is upright, its pixels
+are sRGB and the sRGB profile is embedded; GPS, serial numbers, camera and dates are stripped; the copyright and author
+are kept. Other tools that write web images should follow the same rule.
 """
 from __future__ import annotations
 
