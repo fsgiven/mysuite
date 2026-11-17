@@ -21,7 +21,8 @@ from mysuite.color.cmyk import CmykError, parse_cmyk_map
 from mysuite.config import Config, load_config
 from mysuite.config_write import save_preset
 from mysuite.export._parsing import VALID_FORMATS
-from mysuite.export.units import VALID_UNITS
+from mysuite.export.naming import NamingError, check_template
+from mysuite.export.units import SIZE_BY, VALID_UNITS
 from mysuite.tui.shell import ChipGroup, FormError, ToolScreen, field
 from mysuite.tui.widgets.file_target import FileTarget
 from mysuite.tui.widgets.recolor_row import RecolorRow
@@ -30,7 +31,9 @@ from mysuite.utils.paths import show_path
 FORMAT_OPTIONS = ["png", "pdf", "eps", "svg", "jpeg", "webp", "tiff", "ico", "icns"]
 PROFILE_OPTIONS = ["rgb", "cmyk"]
 UNIT_OPTIONS = ["px", "mm", "cm", "in"]
-CMYK_MODES = ["exact", "clean", "clean:10", "tokens"]
+CMYK_MODES = ["exact", "clean", "clean:10"]
+# "on-dark" is another name for "negative" (same token-driven variant): one chip for it is enough.
+VARIANT_CHIPS = [v for v in variant_mod.ALL if v != "on-dark"]
 assert set(UNIT_OPTIONS) == VALID_UNITS
 assert set(FORMAT_OPTIONS) == set(VALID_FORMATS)
 
@@ -48,7 +51,8 @@ class ExportScreen(ToolScreen):
     HEADING = "Export"
 
     PERSIST = (
-        "sizes", "unit", "dpi", "formats", "profiles", "cmyk-mode", "cmyk-map", "variants", "variant-specs", "out-dir", "background",
+        "sizes", "unit", "dpi", "size-by", "vector-size", "formats", "profiles", "cmyk-mode", "cmyk-map", "cmyk-profile",
+        "variants", "variant-specs", "negative-map", "naming", "path", "name-folder", "out-dir", "background",
         "quality", "png-compression", "padding", "margin-top", "margin-right", "margin-bottom", "margin-left",
         "variant", "tokens", "brand", "theme", "overwrite", "strict", "normalize-png", "date-stamp", "recursive",
     )
@@ -75,6 +79,10 @@ class ExportScreen(ToolScreen):
             yield field("Sizes", Input(placeholder="e.g. 64,512,1024", id="sizes"), classes="grow")
             yield field("Unit", Select[str]([(u, u) for u in UNIT_OPTIONS], id="unit", prompt="default"), classes="narrow")
             yield field("DPI", Input(placeholder="300", id="dpi"), classes="narrow")
+        with Horizontal(classes="pair"):
+            yield field("A size sets the", Select[str]([(v, v) for v in SIZE_BY], id="size-by", prompt="longest side (default)"),
+                        classes="grow")
+            yield field("SVG/PDF/EPS sizes", Input(placeholder="artwork (its own size, once)", id="vector-size"), classes="grow")
         yield field("Formats", ChipGroup(FORMAT_OPTIONS, id="formats", columns=5))
         with Horizontal(classes="pair"):
             yield field("Colour", ChipGroup(PROFILE_OPTIONS, id="profiles", columns=2), classes="narrow")
@@ -86,7 +94,8 @@ class ExportScreen(ToolScreen):
             "Brand CMYK, used as given",
             Input(placeholder="e.g. #DD0000=0/100/100/0 #1D1D1B=75/65/65/80", id="cmyk-map"),
         )
-        yield field("Colour variants (none ticked = just the logo as it is)", ChipGroup(list(variant_mod.ALL), id="variants", columns=4))
+        yield field("CMYK profile (.icc; blank = built-in SWOP)", Input(placeholder="e.g. ~/ICC/ISOcoated_v2_eci.icc", id="cmyk-profile"))
+        yield field("Colour variants (none ticked = just the logo as it is)", ChipGroup(VARIANT_CHIPS, id="variants", columns=4))
         yield field(
             "More variants: NAME=STEP+STEP",
             Input(placeholder="e.g. negativ_dark=knockout+mono:#1D1D1B", id="variant-specs"),
@@ -121,10 +130,19 @@ class ExportScreen(ToolScreen):
             with Horizontal(classes="pair"):
                 yield field("Brand", Input(id="brand"))
                 yield field("Theme", Select[str]([("light", "light"), ("dark", "dark")], id="theme", prompt="light"))
+            yield field(
+                "Negative: logo colour = token (dark value)",
+                Input(placeholder="e.g. #1d1d1b=token:--headline-text-color", id="negative-map"),
+            )
         with Collapsible(title="Names & safety", collapsed=True, id="adv-names"):
             with Horizontal(classes="pair"):
                 yield field("Name (single file only)", Input(id="name"))
                 yield field("Variant folder", Input(id="variant"))
+            yield field("File name", Input(placeholder="{name}_{variant}_{size}{ext}", id="naming"))
+            yield field("Folders", Input(placeholder="{format}/{colorspace}/{naming}", id="path"))
+            yield Label("Tokens: {name} {variant} {size} {width} {height} {format} {colorspace} {date} {ext}; "
+                        "CAPITALS = capitalised, e.g. {FORMAT}", classes="fl")
+            yield Checkbox("A folder per logo (out/<name>/…)", value=True, id="name-folder")
             yield Checkbox("Date stamp in file names (YYYYMMDD)", id="date-stamp")
             yield Checkbox("Replace files that already exist", id="overwrite")
             yield Checkbox("Strict: error instead of skipping", id="strict")
@@ -146,6 +164,10 @@ class ExportScreen(ToolScreen):
         self.query_one("#dpi", Input).placeholder = str(settings.dpi)
         self.query_one("#out-dir", Input).placeholder = settings.out_dir
         self.query_one("#normalize-png", Checkbox).value = settings.normalize_png
+        self.query_one("#name-folder", Checkbox).value = settings.name_folder
+        self.query_one("#naming", Input).placeholder = settings.naming_template
+        self.query_one("#path", Input).placeholder = settings.path_template
+        self.query_one("#vector-size", Input).placeholder = ",".join(str(v) for v in settings.vector_sizes)
 
     def extra_state(self) -> dict[str, Any]:
         return {"recolor": [[r.from_input.value, r.to_input.value] for r in self.query(RecolorRow) if r.from_input.value or r.to_input.value]}
@@ -202,6 +224,8 @@ class ExportScreen(ToolScreen):
         unit = _select_value(self.query_one("#unit", Select))
         opt("--unit", unit)
         opt("--dpi", self._number("dpi", "DPI", whole=False, low=1))
+        opt("--size-by", _select_value(self.query_one("#size-by", Select)))
+        opt("--vector-size", self._text("vector-size") or None)
         formats = self.query_one("#formats", ChipGroup).selected
         if formats and formats != [f for f in FORMAT_OPTIONS if f in self._default_formats]:
             opt("--formats", ",".join(formats))
@@ -216,6 +240,12 @@ class ExportScreen(ToolScreen):
             except CmykError as exc:
                 raise FormError(str(exc), "cmyk-map") from exc
             opt("--cmyk-map", brand_cmyk)
+        icc = self._text("cmyk-profile")
+        if icc:
+            icc_path = Path(icc).expanduser()
+            if not icc_path.is_file():
+                raise FormError(f"no such ICC profile: {icc}", "cmyk-profile")
+            opt("--cmyk-profile", str(icc_path))
         variants = list(self.query_one("#variants", ChipGroup).selected)
         extra = [part for part in re.split(r"[\s,]+", self._text("variant-specs")) if part]
         if extra:
@@ -241,6 +271,17 @@ class ExportScreen(ToolScreen):
                 raise FormError("a name only works with a single file", "name")
             opt("--name", name)
         opt("--variant", self._text("variant") or None)
+        for wid, flag, is_path in (("naming", "--naming", False), ("path", "--path", True)):
+            template = self._text(wid)
+            if template:
+                try:
+                    check_template(template, path=is_path)
+                except NamingError as exc:
+                    raise FormError(str(exc), wid) from exc
+                opt(flag, template)
+        default_name_folder = self._config.export.name_folder if self._config else True
+        if self.query_one("#name-folder", Checkbox).value != default_name_folder:
+            out.append("--name-folder" if self.query_one("#name-folder", Checkbox).value else "--no-name-folder")
         for row in self.query(RecolorRow):
             src, dst = row.from_input.value.strip(), row.to_input.value.strip()
             if src and dst:
@@ -250,6 +291,11 @@ class ExportScreen(ToolScreen):
         opt("--tokens", self._text("tokens") or None)
         opt("--brand", self._text("brand") or None)
         opt("--theme", _select_value(self.query_one("#theme", Select)))
+        for pair in re.split(r"[\s,]+", self._text("negative-map")):
+            if pair:
+                if "=" not in pair:
+                    raise FormError(f"{pair!r}: write LOGOCOLOUR=token:NAME", "negative-map")
+                out.extend(["--negative-map", pair])
         if self.query_one("#recursive", Checkbox).value:
             out.append("--recursive")
         if self.query_one("#date-stamp", Checkbox).value:
@@ -320,6 +366,12 @@ class ExportScreen(ToolScreen):
         cmyk = _select_value(self.query_one("#cmyk-mode", Select))
         if cmyk:
             settings["cmyk_mode"] = cmyk
+        size_by = _select_value(self.query_one("#size-by", Select))
+        if size_by:
+            settings["size_by"] = size_by
+        vector = self._text("vector-size")
+        if vector:
+            settings["vector_sizes"] = [v.strip() for v in vector.split(",") if v.strip()]
         if self._text("cmyk-map"):
             try:
                 settings["cmyk_map"] = {f"#{r:02x}{g:02x}{b:02x}": "/".join(f"{v:g}" for v in inks)
@@ -342,6 +394,7 @@ class ExportScreen(ToolScreen):
             settings["png_compression"] = int(compression)
         for key, wid in (
             ("out_dir", "out-dir"), ("background", "background"), ("padding", "padding"), ("variant", "variant"),
+            ("cmyk_profile", "cmyk-profile"), ("naming_template", "naming"), ("path_template", "path"),
             ("margin_top", "margin-top"), ("margin_right", "margin-right"),
             ("margin_bottom", "margin-bottom"), ("margin_left", "margin-left"),
         ):
@@ -355,6 +408,7 @@ class ExportScreen(ToolScreen):
         settings["overwrite"] = self.query_one("#overwrite", Checkbox).value
         settings["normalize_png"] = self.query_one("#normalize-png", Checkbox).value
         settings["date_stamp"] = self.query_one("#date-stamp", Checkbox).value
+        settings["name_folder"] = self.query_one("#name-folder", Checkbox).value
 
         target = Path.cwd() / "mysuite.toml"
         save_preset(target, name, settings)
