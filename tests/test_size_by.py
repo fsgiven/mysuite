@@ -57,9 +57,14 @@ def test_width_sets_the_width(tmp_path):
 
 
 @need
-def test_height_at_native_size_keeps_the_original_svg(tmp_path):
+def test_height_at_native_size_keeps_the_svg_drawing(tmp_path):
+    from mysuite.config import ToolPaths
+    from mysuite.vector.verify import renders_same
+
     out = _export(tmp_path, "--size-by", "height", "--vector-size", "512")
-    assert (out / "svg" / "rgb" / "bug_512.svg").read_text() == (tmp_path / "bug.svg").read_text()
+    text = (out / "svg" / "rgb" / "bug_512.svg").read_text()
+    assert _svg_dims(out / "svg" / "rgb" / "bug_512.svg") == (876, 512) and "<rect" in text   # the source, not a re-render
+    assert renders_same((tmp_path / "bug.svg").read_text(), text, ToolPaths())[0]
 
 
 def test_bad_size_by_is_rejected(tmp_path):
