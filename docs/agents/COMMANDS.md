@@ -944,8 +944,9 @@ Run a pipeline file (TOML or JSON). Steps run in order; each takes the previous 
 *writes files · has `--dry-run` · `--json`*
 
 - argument `file` (file, required) Pipeline file (.toml or .json).
-- `--dry-run` (boolean) Validate everything and show the plan. Step 1 is planned exactly; later steps that consume earlier outputs are listed symbolically (their file names exist only after the run). A step whose command has no --dry-run of its own is not run at all (status skipped, with a warning), so a dry run never writes files.
+- `--dry-run` (boolean) Validate everything and show the plan; nothing is written. Step 1 is planned exactly; later steps that consume earlier outputs are listed symbolically (their file names exist only after the run). Read-only steps (inspect, dupes, contrast, pdf info…) really run. A step that could write files and has no --dry-run of its own is not run at all (status skipped, with a warning).
 - `--config / -c` (path) Explicit path to mysuite.toml, passed to every step.
+- `--keep-intermediate` (boolean) Keep the files earlier steps wrote and later steps replaced (by default they are deleted after a successful run; the file's `keep_intermediate = true` does the same). Files that already existed are never deleted.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
 Examples:
@@ -953,6 +954,21 @@ Examples:
 ```bash
 mysuite pipeline run release.toml --dry-run --json
 mysuite pipeline run release.toml --json
+```
+
+## `mysuite pipeline validate`
+
+Check a pipeline file without running anything: tools, actions, option names and values (with 'did you mean'), step ids and input globs. Exit 0 when it would start.
+
+*read only · no `--dry-run` · `--json`*
+
+- argument `file` (file, required) Pipeline file (.toml or .json).
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pipeline validate release.toml --json
 ```
 
 ## `mysuite preset list`
