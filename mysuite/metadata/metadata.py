@@ -9,6 +9,7 @@ from pathlib import Path
 from mysuite.config import ToolPaths
 from mysuite.metadata._parsing import output_path_for
 from mysuite.metadata.camera_profiles import build_decoy_tags
+from mysuite.metadata.hidden import CREDIT_TAGS
 from mysuite.utils.subprocess_utils import atomic_write_via, run
 
 
@@ -30,47 +31,57 @@ def _tmp_sibling(input_path: Path, suffix: str) -> Path:
 _TIFF_SUFFIXES = {".tif", ".tiff"}
 
 
-def _strip_into(input_path: Path, tmp_path: Path, tools: ToolPaths) -> None:
-    """Writes a metadata-free copy of input_path to tmp_path.
+def _strip_into(input_path: Path, tmp_path: Path, tools: ToolPaths, *, keep_icc: bool = True, keep_credit: bool = False) -> None:
+    """Writes a copy of input_path without hidden data (hidden.REMOVED) to tmp_path.
 
-    exiftool -all= removes everything except what's structurally required,
-    with two exceptions handled here:
-    - Orientation is deliberately kept: it's a 1-8 rotation flag with no
-      identifying content, and dropping it leaves phone photos displayed
-      sideways.
-    - exiftool can't delete a TIFF's IFD0, so Artist/Copyright/Software/
-      ImageDescription would survive; TIFFs get a magick -strip pass first
-      (with -auto-orient so the rotation is baked into the pixels instead,
-      since magick -strip drops the flag too)."""
+    exiftool -all= removes everything except what's structurally required; then some tags are copied back from the
+    original:
+    - Orientation: a 1-8 rotation flag with no identifying content; dropping it leaves phone photos sideways.
+    - ICC_Profile (unless keep_icc=False): the colour profile. Without it a Display P3 or Adobe RGB photo is read as
+      sRGB and looks dull or wrong. It describes colours, not the person or the camera.
+    - the credit fields (hidden.CREDIT_TAGS) with keep_credit=True: author, copyright, credit line, source.
+    exiftool can't delete a TIFF's IFD0, so Artist/Copyright/Software/ImageDescription would survive; TIFFs get a
+    magick -strip pass first (with -auto-orient so the rotation is baked into the pixels instead, since magick -strip
+    drops the flag too)."""
     source = input_path
     mid: Path | None = None
     if input_path.suffix.lower() in _TIFF_SUFFIXES:
         mid = _tmp_sibling(input_path, input_path.suffix)
         run([tools.magick, str(input_path), "-auto-orient", "-strip", str(mid)])
         source = mid
+    copy_back = (["-ICC_Profile"] if keep_icc else []) + ([f"-{t}" for t in CREDIT_TAGS] if keep_credit else [])
     try:
-        run([tools.exiftool, "-all=", "-tagsfromfile", "@", "-Orientation#", str(source), "-o", str(tmp_path)])
+        run([tools.exiftool, "-charset", "iptc=UTF8", "-all=", "-tagsfromfile", "@", "-Orientation#",
+             *(["-tagsfromfile", str(input_path), *copy_back] if copy_back else []),
+             *(["-IPTC:CodedCharacterSet=UTF8"] if keep_credit else []),
+             str(source), "-o", str(tmp_path)])
     finally:
         if mid is not None:
             mid.unlink(missing_ok=True)
 
 
-def strip_file(input_path: Path, *, tools: ToolPaths, overwrite: bool = False) -> MetadataOutcome:
-    """Strips standard EXIF/IPTC/XMP/ICC metadata via exiftool, writing a new
-    file beside the source (name_stripped.ext) — never mutates the source.
-    Because the output is a brand-new file, macOS extended attributes on the
-    source (quarantine flag, download-URL "where from") don't carry over.
-    This does not necessarily remove a C2PA provenance manifest embedded by
-    credit_file() below: that's a distinct JUMBF-based segment exiftool's
-    metadata model doesn't fully own, so a doubly-processed file (credited,
-    then stripped) may still carry a C2PA claim. Good enough for the common
-    "strip camera/author/GPS metadata for privacy" case this targets."""
+def strip_file(input_path: Path, *, tools: ToolPaths, overwrite: bool = False, keep_icc: bool = True,
+               keep_credit: bool = False) -> MetadataOutcome:
+    """Removes hidden data (hidden.REMOVED) via exiftool, writing a new file beside the source (name_stripped.ext) —
+    never mutates the source. The colour profile is kept unless keep_icc=False; keep_credit=True keeps the author,
+    copyright and credit fields. A PDF goes through the PDF engine (mysuite.pdf.ops.strip_metadata): exiftool only
+    appends an update to a PDF, so the old title and author would still be inside the file.
+    Because the output is a brand-new file, macOS extended attributes on the source (quarantine flag, download-URL
+    "where from") don't carry over. This does not necessarily remove a C2PA provenance manifest (a JUMBF segment
+    exiftool's model doesn't fully own), so a credited-then-stripped file may still carry a C2PA claim."""
     output_path = output_path_for(input_path, "stripped")
 
     if not overwrite and output_path.exists():
         return MetadataOutcome(input_path, output_path, "skipped_existing")
 
-    atomic_write_via(output_path, lambda tmp: _strip_into(input_path, tmp, tools))
+    if input_path.suffix.lower() == ".pdf":
+        from mysuite.pdf import ops
+
+        ops.strip_metadata(input_path, output_path, overwrite=True)
+        return MetadataOutcome(input_path, output_path, "written")
+
+    atomic_write_via(output_path, lambda tmp: _strip_into(input_path, tmp, tools, keep_icc=keep_icc, keep_credit=keep_credit),
+                     preserve_extension=True)
     return MetadataOutcome(input_path, output_path, "written")
 
 
