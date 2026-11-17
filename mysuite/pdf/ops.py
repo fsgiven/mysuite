@@ -795,8 +795,54 @@ def _svg_page(p: Path, paper_pt: tuple[float, float] | None, margin_mm: float, t
     return sheet
 
 
+COMPRESS_LEVELS = ("screen", "ebook", "printer", "prepress")        # smallest first
+
+
+def parse_byte_size(text: str) -> int:
+    """'10MB', '500 KB', '1.5mb', '2000' (bytes) -> bytes. KB/MB are decimal (1 MB = 1,000,000 bytes), the stricter
+    reading of an upload or e-mail limit."""
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(b|kb|k|mb|m)?\s*", (text or "").lower())
+    if not m:
+        raise PdfError(f"size must look like 10MB, 500KB or a number of bytes: got {text!r}")
+    value = float(m.group(1)) * {None: 1, "b": 1, "k": 1e3, "kb": 1e3, "m": 1e6, "mb": 1e6}[m.group(2)]
+    if value < 1:
+        raise PdfError("size must be above 0")
+    return int(value)
+
+
+def _human(n: int) -> str:
+    return f"{n / 1e6:.1f} MB" if n >= 1e6 else f"{max(1, round(n / 1e3))} KB"
+
+
+def compress_to(path: Path, max_bytes: int, out: Path | None, overwrite: bool, tools: ToolPaths, *, dry_run: bool = False) -> OutFile:
+    """The best-quality level whose result fits in max_bytes (prepress, printer, ebook, then screen). Nothing is
+    written when even 'screen' is too big, or when the original already fits."""
+    open_pdf(path)
+    target = _suffix_path(Path(os.path.abspath(path)), "_compressed", out)
+    before = Path(path).stat().st_size
+    if before <= max_bytes:
+        return OutFile(target, "not_smaller", note=f"not written: the original is already {_human(before)}, under {_human(max_bytes)}",
+                       extra={"bytes_before": before, "max_bytes": max_bytes})
+    gs = "" if dry_run else _need(tools.gs, "compressing a PDF")
+    if (skip := _plan_or_skip(target, overwrite, dry_run)):
+        skip.extra["max_bytes"] = max_bytes
+        return skip
+    tried: dict[str, int] = {}
+    with tempfile.TemporaryDirectory(prefix="mysuite-pdf-") as d:
+        for level in reversed(COMPRESS_LEVELS):
+            trial = Path(d) / f"{level}.pdf"
+            _gs_run(gs, ["-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.6", f"-dPDFSETTINGS=/{level}"], path, trial)
+            tried[level] = trial.stat().st_size
+            if tried[level] <= max_bytes:
+                atomic_write_via(target, lambda tmp, src=trial: shutil.copyfile(src, tmp), preserve_extension=True)
+                return OutFile(target, pages=len(PdfReader(str(target)).pages),
+                               extra={"bytes_before": before, "bytes_after": tried[level], "level": level, "max_bytes": max_bytes})
+    raise PdfError(f"can't get {Path(path).name} under {_human(max_bytes)}: the smallest result is {_human(tried['screen'])} "
+                   f"(level screen, from {_human(before)}); nothing was written. Try fewer pages, or render pages as JPEG.")
+
+
 def compress(path: Path, level: str, out: Path | None, overwrite: bool, tools: ToolPaths, *, dry_run: bool = False) -> OutFile:
-    levels = {"screen": "/screen", "ebook": "/ebook", "printer": "/printer", "prepress": "/prepress"}
+    levels = {name: f"/{name}" for name in COMPRESS_LEVELS}
     if level not in levels:
         raise PdfError(f"level must be one of {', '.join(levels)}")
     open_pdf(path)
