@@ -239,6 +239,64 @@ A rename across many files, so nobody else may be editing them while it runs. Ol
 3. `export --profiles rgb,cmyk` → `--colour rgb,cmyk`; `profiles save --colour-profiles` follows.
 4. Docs, MCP tool names/params, the dashboard cards and AGENTS.md updated in the same PR; COMMANDS.md regenerated; every old spelling has a test that it still works.
 
+### WS-H Full check of all tools (M): **right after Phase 1 merges, then rerun after every phase**
+A repeatable acceptance run instead of one-off reviews. Several Phase 0/1 regressions only showed on CI because this Mac lacked
+`pdftocairo`, the Vision helpers or `c2patool`; those are installed now (2026-11-17), so the full suite and this run cover them locally.
+**Owns:** `mysuite/testcases/*` and a new `tests/test_every_command.py`.
+1. `mysuite testcases run [--out DIR]`:
+   - Generates the test folder, then runs **every command** (from `mysuite schema`, using WS-E's examples) on suitable files.
+   - Records exit code, outputs and timing per command.
+   - Checks each output's facts with `inspect`: size, colour mode, transparency, page count, not blank.
+2. A **visual report**: one HTML/PDF page with a contact sheet per tool (what went in, what came out), pass/fail and notes, so a
+   designer can scan every tool's result in a minute.
+3. `tests/test_every_command.py`: every command in the schema has at least one example that runs (or a declared reason why not, such as
+   a download), so a new command can't ship untested.
+4. Run it after each phase; regressions go back to the owning workstream.
+
+### WS-I Vectorize PNG/JPG → SVG (M), new tool
+Clients often send a logo only as PNG/JPG.
+**Owns:** new `mysuite/trace/*` (CLI `mysuite svg trace` or `mysuite trace`, decided with WS-N naming), its tests, one appended card in
+`registry.py`.
+- Trace flat-colour artwork into a clean SVG: palette reduction (k colours, or snap to brand tokens / `cmyk_map` colours), few nodes,
+  holes and counters kept, optional despeckle.
+- The result goes straight into `export`/`variants`.
+- Engine: `vtracer` (MIT, pip, as an optional component via `mysuite install trace`), or potrace if it's already installed.
+- A render-compare (like `svg optimise`) reports how close the trace is: % of pixels differing at the source size.
+- Not for photos: refuse or warn when the colour count/noise says "photo".
+
+### WS-J Video-ready logo assets (M), new tool
+For corner bugs and lower thirds handed to video editors.
+**Owns:** new `mysuite/video/*` (CLI `mysuite video`), tests, one appended card.
+1. Presets: YouTube corner bug, TV 16:9 safe areas (title/action safe), 1920×1080 and 3840×2160 canvases.
+   - The logo is placed with a margin and size rule (`--size-by height`).
+   - Output: transparent PNG.
+2. With ffmpeg (an optional component): **ProRes 4444 with alpha (.mov)** and **WebM VP9 with alpha**.
+   - A still, or a short fade-in/out of N seconds.
+   - Correct colour tags (BT.709).
+3. A variants pass-through, e.g. `--variants default,mono-white` for light and dark footage.
+
+### WS-K Colour tools (M), new tool, **after WS-N** (lives under `mysuite colour …`)
+**Owns:** new `mysuite/color/palette.py`, `mysuite/color/vision_sim.py` and the `colour palette` / `colour blind` subcommands (WS-N creates
+`colour`), tests, help texts.
+1. `colour palette FILE`:
+   - The top colours of any image or logo, as hex, RGB, CMYK (through the brand `cmyk_map` / ICC) and the nearest brand token with ΔE.
+   - Output as JSON, a swatch PNG, or ASE/GPL for design apps.
+2. `colour blind FILE`: protanopia, deuteranopia and tritanopia previews (Machado matrices) side by side, plus a warning when two
+   brand colours become indistinguishable.
+3. `contrast` for a whole palette: every foreground/background pair with WCAG AA/AAA. It reuses `helpers` contrast (WS-E), via an
+   import, not a copy.
+
+### WS-L Font & text check (S–M), new tool
+Print shops want outlined text and to know which fonts are used.
+**Owns:** new `mysuite/fonts/*` (CLI `mysuite fonts`), tests, one appended card.
+1. `fonts FILE` (SVG/PDF/AI-as-PDF): font families used, embedded or not (PDF), whether text is live or outlined, and missing fonts on
+   this Mac.
+2. `fonts outline FILE`: turn live text into paths.
+   - SVG via rsvg/cairo, with the geometry checked by a render-compare.
+   - PDF via Ghostscript `-dNoOutputFonts`.
+   - Writes `<name>_outlined.<ext>`; the original is never changed.
+3. WS-D's PDF preflight `info` reads the font part from here instead of duplicating it.
+
 ### WS-G `mysuite ask` (exists, parked)
 Built and committed in its own session (`feat/ask`, 51 tests). Needs the LM Studio address, then a rebase onto `main`. It gets much better once **WS-E item 1** (choices/examples) and **Phase 0 P0-1** (trustworthy dry-run) are in, so land it after those.
 
@@ -250,9 +308,16 @@ Built and committed in its own session (`feat/ask`, 51 tests). Needs the LM Stud
 Phase 0  (1 agent)          P0-1 … P0-6
 Phase 1  (4 agents)         WS-A   WS-C1   WS-D   WS-E
 Phase 1.5 (1 agent)         WS-N naming (nothing else running)
+  └ WS-H full check (1 agent) right after Phase 1, then rerun after every phase
 Phase 2  (3 agents)         WS-B (after A)   WS-C2 (after C1)   WS-F (after E)
-Phase 3                     WS-G ask, README/screenshots refresh, release notes
+  + new tools in parallel:  WS-I trace   WS-J video   WS-L fonts   (each a new module + one appended card)
+  + after WS-N:             WS-K colour tools
+Phase 3                     WS-G ask, README/screenshots refresh, release notes, final WS-H run
 ```
+
+**New tools** (WS-I/J/K/L) add their dashboard card by **appending** one `ToolSpec` to `registry.py` (append-only, so merges stay
+trivial); WS-F tidies the layout afterwards. Optional engines (vtracer, ffmpeg) are on-demand components (`mysuite install …`),
+never required.
 
 **Shared hotspots** (only the owner edits; others ask): `config.py` (A then B), `profiles.py` (D's policy names, then B),
 `export/cli.py` (A, then B for `--compare`), `watermark/cli.py` (C1, then B for presets), `export_screen.py` (A then B),
@@ -268,3 +333,6 @@ Each WS adds `--dry-run` and declares option `choices` **for its own commands**.
 4. **"Profile" means ICC only:** `colour convert` / `colour profiles`; company setups become `brand`; `export --colour rgb,cmyk` (WS-N).
 5. **CMYK ICC per brand:** a brand setup names your FOGRA39/PSO `.icc`; export, print and colour warn when they fall back to SWOP. Brand CMYK values (`cmyk_map`) still win for logo colours (WS-B, plus the warning in WS-A/WS-C2).
 6. **Retina kit cut;** the docs show the `export --size-by` command that replaces it (WS-B).
+7. **New tools (2026-11-17):** add all four: vectorize (WS-I), video-ready logo assets (WS-J), colour tools (WS-K), font & text check (WS-L).
+8. **Local helpers (2026-11-17):** poppler, c2patool and mysuite's Vision and cutout helpers are installed on the development Mac, so
+   tests that were CI-only now run locally too.
