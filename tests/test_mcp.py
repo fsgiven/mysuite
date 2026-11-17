@@ -303,12 +303,17 @@ async def test_pipeline_dry_run_never_writes_through_mcp(work):
     from PIL import Image
     Image.new("RGB", (100, 140), "white").save(work / "doc.pdf", format="PDF")
     before = sorted(p.name for p in work.iterdir())
-    pipeline = {"inputs": ["doc.pdf"], "step": [{"tool": "pdf", "action": "rotate", "degrees": 90}]}
+    # step 1: a PDF writer, which has a real --dry-run since WS-D, is planned;
+    # step 2: a writer with no --dry-run (profile) is not started at all
+    pipeline = {"inputs": ["doc.pdf"], "step": [
+        {"tool": "pdf", "action": "rotate", "degrees": 90},
+        {"tool": "profile", "to": "srgb", "from": "inputs"}]}
     async with server(work) as c:
         plan = await call(c, "mysuite_pipeline_run", pipeline=pipeline, dry_run=True)
     assert sorted(p.name for p in work.iterdir()) == before, "a dry run wrote files"
-    assert plan["ok"] is True and plan["items"][0]["status"] == "skipped"
-    assert any("not run" in w for w in plan["warnings"])
+    assert plan["ok"] is True and [i["status"] for i in plan["items"]] == ["planned", "skipped"]
+    assert any("step 2" in w and "not run" in w for w in plan["warnings"])
+    assert plan["items"][0]["result"]["items"][0]["output"].endswith("doc_rotated.pdf")
 
 
 # ---------------------------------------------------------------------------- WS-E: pdf dry_run, slim mode
@@ -328,9 +333,8 @@ async def test_pdf_dry_run_never_writes(work):
         plan = await call(c, "mysuite_pdf", action="rotate", inputs=[str(work / "doc.pdf")], options={"degrees": 90}, dry_run=True)
         assert sorted(p.name for p in work.iterdir()) == before, "a dry run wrote files"
         assert plan["ok"] and plan["exit_code"] == 0 and plan["dry_run"] is True
-        assert plan["items"][0]["status"] in ("planned", "skipped")
-        if plan["items"][0]["status"] == "skipped":            # pdf rotate has no --dry-run of its own (yet)
-            assert "--dry-run" in plan["warnings"][0]
+        assert plan["items"][0]["status"] == "planned"         # pdf rotate's own --dry-run (WS-D), not a skip
+        assert plan["items"][0]["output"].endswith("doc_rotated.pdf")
         info = await call(c, "mysuite_pdf", action="info", inputs=[str(work / "doc.pdf")], dry_run=True)
         assert info["ok"] and info["items"][0].get("pages") == 1   # read-only: it really runs
 
