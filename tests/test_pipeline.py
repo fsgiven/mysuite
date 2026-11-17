@@ -118,7 +118,7 @@ out = "dist"
 
 [[step]]
 tool = "metadata"
-action = "randomize"
+action = "strip"
 only = ["png"]
 
 [[step]]
@@ -135,7 +135,7 @@ def test_export_then_metadata_then_compress_chain(work):
     assert res.exit_code == 0 and doc["ok"], doc
     assert [i["status"] for i in doc["items"]] == ["ok", "ok", "ok"]
     final = sorted(Path(o).name for o in doc["items"][2]["outputs"])
-    assert final == ["logo_128_randomized_compressed.png", "logo_64_randomized_compressed.png"]
+    assert final == ["logo_128_stripped_compressed.png", "logo_64_stripped_compressed.png"]
     assert all(Path(o).is_file() for o in doc["items"][2]["outputs"])
     assert md5(work / "logo.svg") == before                       # the input is untouched
     # every step fed the next one

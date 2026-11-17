@@ -128,7 +128,7 @@ def test_metadata_strip_and_randomize_json(png):
     res, doc = run_json("metadata", "strip", png, "--json")
     check_envelope(doc, "metadata-strip")
     assert doc["items"][0]["status"] == "written"
-    res, doc = run_json("metadata", "randomize", png, "--json")
+    res, doc = run_json("metadata", "randomize", png, "--advanced", "--json")
     check_envelope(doc, "metadata-randomize")
 
 

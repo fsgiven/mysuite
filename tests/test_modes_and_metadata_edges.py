@@ -109,6 +109,6 @@ def test_randomize_twice_gives_different_decoys_often(tmp_path):
     src = mk(tmp_path / "p.jpg", "gradient:red-blue")
     seen = set()
     for i in range(12):
-        cli("metadata", "randomize", src, "--overwrite", "-q")
+        cli("metadata", "randomize", src, "--advanced", "--overwrite", "-q")
         seen.add(subprocess.run(["exiftool", "-s3", "-Model", str(tmp_path / "p_randomized.jpg")], capture_output=True, text=True).stdout.strip())
     assert len(seen) >= 3
