@@ -267,7 +267,8 @@ def test_compress_reports_before_and_after(tmp_path):
     item = doc["items"][0]
     assert res.exit_code == 0 and item["bytes_before"] == big.stat().st_size and item["bytes_after"] > 0
     assert len(PdfReader(item["output"]).pages) == 1
-    assert run_pdf("compress", big, "--level", "tiny", "--overwrite")[0].exit_code == 1
+    bad = runner.invoke(app, ["pdf", "compress", str(big), "--level", "tiny", "--overwrite", "--json"])
+    assert bad.exit_code == 2 and "tiny" in bad.output                     # a fixed choice: Click rejects it as bad usage
 
 
 # ---------------------------------------------------------------------------- safety

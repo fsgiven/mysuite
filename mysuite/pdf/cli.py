@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import typer
 from rich.markup import escape
@@ -223,9 +223,23 @@ def from_images(files: List[Path] = typer.Argument(..., exists=True, readable=Tr
         raise typer.Exit(1)
 
 
-@app.command("compress", help="Make a PDF smaller (Ghostscript): screen < ebook < printer < prepress. A result that is not smaller is not written (status not_smaller).")
+@app.command("compress", help="Make a PDF smaller (Ghostscript): --level screen < ebook < printer < prepress, or --max-size 10MB to "
+             "get the best quality that fits. A result that is not smaller is not written (status not_smaller).")
 @jsonout.with_json("pdf-compress")
-def compress(files: List[Path] = PDFS, level: str = typer.Option("ebook", "--level", help="screen (smallest), ebook, printer, prepress (best quality)."),
+def compress(files: List[Path] = PDFS,
+             level: Optional[Literal["screen", "ebook", "printer", "prepress"]] = typer.Option(None, "--level", help="screen (smallest), ebook (default), printer, prepress (best quality)."),
+             max_size: Optional[str] = typer.Option(None, "--max-size", help="Largest allowed file, e.g. 10MB or 500KB: picks the best level that fits."),
              out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+    if level and max_size:
+        log_error("give --level or --max-size, not both")
+        raise typer.Exit(2)
     tools = _tools()
-    _run_each(_check_inputs(files), lambda p: ops.compress(p, level, out, overwrite, tools, dry_run=dry_run), quiet)
+    if max_size:
+        try:
+            limit = ops.parse_byte_size(max_size)
+        except ops.PdfError as exc:
+            log_error(escape(str(exc)))
+            raise typer.Exit(2) from exc
+        _run_each(_check_inputs(files), lambda p: ops.compress_to(p, limit, out, overwrite, tools, dry_run=dry_run), quiet)
+        return
+    _run_each(_check_inputs(files), lambda p: ops.compress(p, level or "ebook", out, overwrite, tools, dry_run=dry_run), quiet)

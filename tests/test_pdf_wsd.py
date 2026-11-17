@@ -302,3 +302,54 @@ def test_every_pdf_writer_has_a_dry_run_that_writes_nothing(tmp_path, args):
     assert sorted(p.name for p in tmp_path.iterdir()) == before
     assert doc["items"] and all(i["status"] == "planned" for i in doc["items"]), doc["items"]
     assert all(i.get("output") for i in doc["items"])
+
+
+# ------------------------------------------------------------------ 9. compress --max-size picks the level
+@pytest.fixture
+def heavy(tmp_path):
+    pages = [Image.effect_noise((1400, 1000), 60).convert("RGB") for _ in range(2)]
+    src = tmp_path / "heavy.pdf"
+    pages[0].save(src, format="PDF", save_all=True, append_images=pages[1:], resolution=150.0)
+    return src
+
+
+@pytest.mark.parametrize("text,expected", [("10MB", 10_000_000), ("500 kb", 500_000), ("1.5mb", 1_500_000), ("2000", 2000)])
+def test_parse_byte_size(text, expected):
+    assert ops.parse_byte_size(text) == expected
+
+
+@pytest.mark.parametrize("text", ["", "ten MB", "5 GB", "-1MB", "0"])
+def test_bad_byte_sizes(text):
+    with pytest.raises(ops.PdfError):
+        ops.parse_byte_size(text)
+
+
+@need_gs
+def test_compress_max_size_picks_the_best_level_that_fits(heavy, tmp_path):
+    screen = ops.compress(heavy, "screen", tmp_path / "screen.pdf", True, ToolPaths())
+    limit = screen.extra["bytes_after"] + 1
+    res, doc = run_pdf("compress", heavy, "--max-size", str(limit))
+    assert res.exit_code == 0, res.output
+    item = doc["items"][0]
+    assert item["status"] == "written" and item["bytes_after"] <= limit and item["level"] in ops.COMPRESS_LEVELS
+    assert (tmp_path / "heavy_compressed.pdf").stat().st_size <= limit
+
+
+@need_gs
+def test_compress_max_size_that_cannot_be_reached_writes_nothing(heavy, tmp_path):
+    res, doc = run_pdf("compress", heavy, "--max-size", "1KB")
+    assert res.exit_code == 1
+    assert "1 KB" in doc["items"][0]["error"] and "screen" in doc["items"][0]["error"]
+    assert not (tmp_path / "heavy_compressed.pdf").exists()
+
+
+@need_gs
+def test_compress_max_size_on_a_small_file_says_so(heavy, tmp_path):
+    res, doc = run_pdf("compress", heavy, "--max-size", "500MB")
+    assert res.exit_code == 0
+    assert doc["items"][0]["status"] == "not_smaller" and "already" in doc["items"][0]["note"]
+
+
+def test_compress_level_and_max_size_together_is_an_error(heavy):
+    res, doc = run_pdf("compress", heavy, "--max-size", "1MB", "--level", "screen")
+    assert res.exit_code != 0
