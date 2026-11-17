@@ -162,10 +162,15 @@ def test_qr_make_png_and_svg(tmp_path):
     assert doc["items"][0]["status"] == "skipped_existing"
 
 
-@pytest.mark.parametrize("args", [["x" * 3000], ["a", "--error", "z"], ["a", "--scale", "0"], ["a", "--dark", "nope"], [""]])
+@pytest.mark.parametrize("args", [["x" * 3000], ["a", "--scale", "0"], ["a", "--dark", "nope"], [""]])
 def test_qr_make_validation(tmp_path, args):
     res, doc = run_cmd("qr", "make", *args, "--out", tmp_path / "q.png")
     assert res.exit_code == 1 and not (tmp_path / "q.png").exists()
+
+
+def test_qr_make_error_level_is_a_declared_choice(tmp_path):
+    res = runner.invoke(app, ["qr", "make", "a", "--error", "z", "--out", str(tmp_path / "q.png"), "--json"])
+    assert res.exit_code == 2 and not (tmp_path / "q.png").exists()
 
 
 @need_vision

@@ -60,3 +60,29 @@ def test_flag_is_boolean_on_both():
     old = schema._param(_p(type=NS(name="boolean"), is_flag=True, default=False))
     new = schema._param(_p(type_descriptor=_desc(bool), is_flag=True, default=False))
     assert old == new and new["type"] == "boolean"
+
+
+def test_choices_from_an_enum_and_a_click_type_on_both():
+    """Other workstreams declare choices as Enums or click.Choice; both must come out as `choices`."""
+    import enum
+
+    class Level(str, enum.Enum):
+        low = "low"
+        high = "high"
+
+    old = schema._param(_p(type=NS(name="choice", choices=["low", "high"])))
+    from_enum = schema._param(_p(type_descriptor=_desc(Level)))
+    via_click_type = schema._param(_p(type_descriptor=_desc(str, info=_info(click_type=NS(name="choice", choices=("low", "high"))))))
+    list_of_enum = schema._param(_p(type_descriptor=_desc(List[Level])))
+    assert old["choices"] == from_enum["choices"] == via_click_type["choices"] == list_of_enum["choices"] == ["low", "high"]
+    assert old["type"] == from_enum["type"] == "choice"
+
+
+def test_enum_members_and_defaults_become_plain_values():
+    import enum
+
+    class Level(str, enum.Enum):
+        low = "low"
+
+    entry = schema._param(_p(type=NS(name="choice", choices=[Level.low]), default=Level.low))
+    assert entry["choices"] == ["low"] and entry["default"] == "low"

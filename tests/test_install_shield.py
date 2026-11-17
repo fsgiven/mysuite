@@ -84,7 +84,7 @@ def test_dry_run_shows_the_plan_and_changes_nothing(home, monkeypatch):
 
 
 def test_unknown_and_unsupported_components(home, monkeypatch):
-    assert run("install", "nope")[0].exit_code == 1
+    assert runner.invoke(app, ["install", "nope", "--json"]).exit_code == 2   # not a declared choice: usage error
     monkeypatch.setattr(C.platform, "system", lambda: "Linux")
     res, doc = run("install", "vision", "--yes")
     assert res.exit_code == 1 and "not available" in doc["errors"][0]

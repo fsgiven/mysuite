@@ -12,9 +12,32 @@
 
 - `0` - ok
 - `1` - at least one item failed (or an unexpected error)
-- `2` - bad usage (unknown option, missing argument) - not JSON, comes from the argument parser
+- `2` - bad usage (unknown option, missing argument, a value not in `choices`) - from the CLI this is not JSON (it comes from the argument parser); MCP tools return it as JSON
 - `3` - refused by the sandbox/policy - nothing was written
 - `4` - a required external tool is missing - see missing_tools for install hints
+
+## Item statuses (`items[].status`)
+
+- `planned` - dry run: this would be written (nothing was)
+- `written` - the output file was written
+- `skipped_existing` - the output already exists and --overwrite was not given; nothing was written
+- `skipped` - not done: a pipeline step after a failure, a dry-run step that can't preview, or a kit file that doesn't apply
+- `failed` - this item failed; see `error`
+- `ok` - a read-only result (inspect, contrast, diff, ocr, a pipeline step that ran)
+- `done` - enhance: the picture was processed and written
+- `group` - dupes: one group of identical or look-alike files
+- `not_smaller` - pdf compress: the result would not be smaller, so nothing was written (no `output`)
+- `marked` - mark detect: the mark was found
+- `not_found` - mark detect: the mark was not found
+- `installing` - install: the component is being installed
+- `installed` - install: the component was installed
+- `already_installed` - install: nothing to do
+- `removed` - install --remove: the component was deleted
+- `not_installed` - install --remove: there was nothing to delete
+- `invalid` - profiles list: this profile has an error
+- `problem` - profiles check: this check failed
+- `deleted` - profiles delete: the profile was removed
+- `not_generated` - testcases: this sample needs a tool that is missing, so it was not made
 
 ## Result document (`--json`)
 
@@ -45,6 +68,7 @@
       "enum": [
         0,
         1,
+        2,
         3,
         4
       ]
@@ -59,7 +83,23 @@
               "planned",
               "written",
               "skipped_existing",
-              "failed"
+              "skipped",
+              "failed",
+              "ok",
+              "done",
+              "group",
+              "not_smaller",
+              "marked",
+              "not_found",
+              "installing",
+              "installed",
+              "already_installed",
+              "removed",
+              "not_installed",
+              "invalid",
+              "problem",
+              "deleted",
+              "not_generated"
             ]
           },
           "input": {
@@ -103,6 +143,8 @@
 
 Re-encode image(s) via a best-in-class codec (mozjpeg/webp/avif/oxipng/pngquant/gifsicle), with optional sharpening.
 
+*writes files · has `--dry-run` · `--json`*
+
 - argument `inputs` (path, repeatable) One or more files, and/or directories, to compress (non-recursive unless --recursive). Not needed with --list-presets.
 - `--preset` (str) Named settings bundle (codec + its parameters) to start from — run --list-presets to see them. Any other flag you also pass overrides that field of the preset; --codec becomes optional when --preset is given.
 - `--list-presets` (boolean) List available compress presets and exit.
@@ -132,9 +174,18 @@ Re-encode image(s) via a best-in-class codec (mozjpeg/webp/avif/oxipng/pngquant/
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite compress photo.jpg --codec mozjpeg --quality 80 --json
+mysuite compress pics/ --codec webp --dry-run --json
+```
+
 ## `mysuite contrast`
 
 WCAG contrast ratio of two colours, or of a logo's colours on a background.
+
+*read only · no `--dry-run` · `--json`*
 
 - argument `foreground` (str) Foreground colour, e.g. '#dd0000' (or use --logo).
 - argument `background` (str) Background colour, e.g. white.
@@ -142,9 +193,18 @@ WCAG contrast ratio of two colours, or of a logo's colours on a background.
 - `--on` (str, default `#ffffff`) Background for --logo.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite contrast "#dd0000" white --json
+mysuite contrast --logo logo.svg --on "#ffffff" --json
+```
+
 ## `mysuite convert`
 
 Convert file(s) to another format, in place beside the source.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more files, and/or directories, to convert (non-recursive unless --recursive).
 - `--to / -t` (str) Comma-separated target format(s), e.g. webp or png,pdf.
@@ -158,9 +218,17 @@ Convert file(s) to another format, in place beside the source.
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite convert pic.png --to webp,jpeg --json
+```
+
 ## `mysuite cutout`
 
 Isolate a photo's subject into a transparent-background PNG (macOS Vision).
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories, to cut out (non-recursive unless --recursive).
 - `--recursive / -r` (boolean) Recurse into subdirectories for folder inputs.
@@ -170,48 +238,97 @@ Isolate a photo's subject into a transparent-background PNG (macOS Vision).
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite cutout photo.jpg --json
+```
+
 ## `mysuite diff`
 
 Compare two images: how much changed, optionally as a picture.
+
+*read only unless `--out` (then writes files) · no `--dry-run` · `--json`*
 
 - argument `first` (file, required) Reference image.
 - argument `second` (file, required) Image to compare.
 - `--threshold` (int, default `16`) A pixel counts as changed when any channel differs by more than this (0-255).
 - `--out / -o` (path) Write a PNG with the changed pixels in red over a faded first image.
-- `--overwrite / --no-overwrite` (boolean) 
+- `--overwrite / --no-overwrite` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite diff a.png b.png --json
+mysuite diff old.svg new.svg --out changes.png --json
+```
 
 ## `mysuite doctor`
 
 Check that required tools (rsvg-convert, gs, magick, mysuite-cutout, exiftool, c2patool, codec encoders) are installed.
 
+*read only · no `--dry-run` · `--json`*
+
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite doctor --json
+```
 
 ## `mysuite dupes`
 
 Find identical and look-alike images. Read only.
+
+*read only · no `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Folders and/or images to compare.
 - `--threshold` (int, default `5`) How different (bits of 64, 0-20) two pictures may be and still count as similar. 0 = look-alikes must hash identically.
 - `--recursive / -r` (boolean) Recurse into subdirectories.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite dupes photos/ --recursive --json
+```
+
 ## `mysuite enhance history`
 
 Show jobs recorded with --record-history.
 
-- `--limit` (int range, default `50`) 
+*read only unless `--clear` (then writes files) · no `--dry-run`*
+
+- `--limit` (int range, default `50`)
 - `--clear` (boolean) Delete the history database.
+
+Examples:
+
+```bash
+mysuite enhance history --limit 5
+```
 
 ## `mysuite enhance presets`
 
 List enhance presets (built-in and from mysuite.toml).
 
+*read only · no `--dry-run`*
+
 - `--config / -c` (path) Explicit path to mysuite.toml.
+
+Examples:
+
+```bash
+mysuite enhance presets
+```
 
 ## `mysuite enhance run`
 
 Enhance photo(s), writing <name>_enhanced.<ext> beside each source.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more photos, and/or directories (non-recursive unless --recursive).
 - `--preset` (str) Settings bundle to start from (see `mysuite enhance presets`). Any other flag you pass overrides that field. Default: gentle.
@@ -235,9 +352,17 @@ Enhance photo(s), writing <name>_enhanced.<ext> beside each source.
 - `--quiet / -q` (boolean) Print only the summary.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite enhance run photo.jpg --preset gentle --json
+```
+
 ## `mysuite export`
 
 Batch-export an SVG into multiple sizes, formats, and color profiles.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more SVG files (also .svgz, PDF, Illustrator .ai and EPS: converted to SVG first), and/or directories of SVGs (non-recursive unless --recursive).
 - `--sizes / -s` (str) Comma-separated sizes: plain numbers are pixels, or suffix with mm/cm/in (e.g. 16,32,5cm,2in).
@@ -280,9 +405,19 @@ Batch-export an SVG into multiple sizes, formats, and color profiles.
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite export logo.svg --formats png,pdf --sizes 64,512 --out dist --json
+mysuite export logo.svg --formats pdf --profiles cmyk --cmyk-mode clean --sizes 100 --dry-run --json
+mysuite export logo.svg --sizes 512,1080 --size-by height --json
+```
+
 ## `mysuite inspect`
 
 Report facts about image/vector files (size, colour mode, transparency, palette, sharpness, GPS...) - for agents and humans.
+
+*read only unless `--thumb` / `--sheet` (then writes files) · no `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Files and/or folders to examine.
 - `--recursive / -r` (boolean) Recurse into subdirectories.
@@ -291,25 +426,51 @@ Report facts about image/vector files (size, colour mode, transparency, palette,
 - `--config / -c` (path) Explicit path to mysuite.toml.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite inspect logo.svg photo.jpg --json
+mysuite inspect photo.jpg --thumb thumb.png --json
+```
+
 ## `mysuite install`
 
 Fetch the heavier parts once, when needed (helpers, the shield environment). mysuite itself stays small.
 
-- argument `name` (str) Component to install (see the list). Leave out to list them.
+*read only unless `--yes` (then writes files) · has `--dry-run` · `--json`*
+
+- argument `name` (choice, one of `tools`, `cutout`, `vision`, `shield`) Component to install (see the list). Leave out to list them.
 - `--yes / -y` (boolean) Go ahead without asking (required when there is no terminal, and with --json).
 - `--remove` (boolean) Delete the component again.
 - `--dry-run` (boolean) Show what would be fetched/built and where, change nothing.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite install --json
+mysuite install vision --dry-run --json
+```
+
 ## `mysuite kit list`
 
 List the available kits and what each one makes.
 
+*read only · no `--dry-run` · `--json`*
+
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite kit list --json
+```
 
 ## `mysuite kit make`
 
 Make a kit from a logo: `mysuite kit make logo.svg --kit favicon`.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Logo file(s): SVG, PNG, JPEG, WebP, PDF, EPS…
 - `--kit / -k` (str) Which kit: favicon, ios-app-icon, android-icons, social, retina. See `mysuite kit list`.
@@ -325,21 +486,37 @@ Make a kit from a logo: `mysuite kit make logo.svg --kit favicon`.
 - `--quiet / -q` (boolean) Print only the summary.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite kit make logo.svg --kit favicon --out kits --json
+```
+
 ## `mysuite mark detect`
 
 Check whether pictures carry YOUR mark. Exit code 1 if none of them does with --strict.
 
+*read only · no `--dry-run` · `--json`*
+
 - argument `inputs` (path, required, repeatable) Pictures to check.
 - `--key` (str) Your secret key (or MYSUITE_MARK_KEY).
 - `--id` (str) The id used when embedding (if any).
-- `--recursive / -r` (boolean) 
+- `--recursive / -r` (boolean)
 - `--strict` (boolean) Exit 1 when a picture does NOT carry the mark.
 - `--deep` (boolean) Also look for slightly rotated copies (±3°): much slower.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite mark detect suspect.jpg --key SECRET --json
+```
+
 ## `mysuite mark embed`
 
 Add your invisible mark. Output: <name>_marked.png beside the original.
+
+*writes files · no `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Images / folders.
 - `--key` (str) Your secret key (or MYSUITE_MARK_KEY). Same key = same mark.
@@ -347,34 +524,58 @@ Add your invisible mark. Output: <name>_marked.png beside the original.
 - `--strength` (str, default `standard`) subtle (~44 dB), standard (~40 dB), strong (~37 dB): stronger survives more, shows more.
 - `--format` (str, default `png`) png (best), tiff or jpeg.
 - `--quality` (int, default `95`) JPEG quality.
-- `--recursive / -r` (boolean) 
-- `--overwrite / --no-overwrite` (boolean) 
+- `--recursive / -r` (boolean)
+- `--overwrite / --no-overwrite` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite mark embed photo.png --key SECRET --json
+```
 
 ## `mysuite mcp`
 
 Run the MCP server (stdio) so MCP clients can use mysuite. Needs `pip install 'mysuite[mcp]'`. Sandboxed to --allow folders (default: the current folder).
 
+*read only · no `--dry-run`*
+
 - `--allow` (path, repeatable) Folder the server may read/write (repeatable). Default: the current folder.
+
+Examples:
+
+```bash
+mysuite mcp --allow ~/Pictures/work
+```
 
 ## `mysuite metadata apply`
 
 Apply a metadata policy in one go - the active profile's, or --policy: any of strip, randomize, credit, in order (e.g. strip,credit removes everything, then embeds your credit). Each step works on the previous step's output.
 
+*writes files · has `--dry-run` · `--json`*
+
 - argument `inputs` (path, required, repeatable) Image files and/or folders.
 - `--policy` (str) Comma-separated steps: strip, randomize, credit (default: the profile's metadata.policy).
 - `--author / -a` (str) For the credit step (default: the profile's metadata.author).
 - `--copyright` (str) For the credit step (default: the profile's metadata.copyright).
-- `--recursive / -r` (boolean) 
-- `--overwrite / --no-overwrite` (boolean) 
+- `--recursive / -r` (boolean)
+- `--overwrite / --no-overwrite` (boolean)
 - `--dry-run` (boolean) Preview the final file names, write nothing.
 - `--config / -c` (path) Explicit path to mysuite.toml.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite metadata apply photo.jpg --policy strip,credit --author Acme --json
+```
 
 ## `mysuite metadata credit`
 
 Embed a signed C2PA provenance manifest (author/copyright) for correct crediting.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories (non-recursive unless --recursive).
 - `--author / -a` (str) Author/creator name to embed (or the active profile's metadata.author).
@@ -388,24 +589,40 @@ Embed a signed C2PA provenance manifest (author/copyright) for correct crediting
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite metadata credit photo.jpg --author "Name" --copyright "© 2026 Name" --json
+```
+
 ## `mysuite metadata declare`
 
 Write a machine-readable 'no AI use' declaration (PLUS DataMining + XMP Rights) into a copy (name_declared.ext). It is a legal/consent signal that cooperating crawlers and tools read - it does not technically block anything.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Image files and/or folders.
 - `--policy` (str, default `prohibited`) prohibited, prohibited-ai-training, prohibited-genai-training: what is not allowed.
 - `--owner` (str) Copyright owner name to record.
 - `--terms-url` (str) Link to your AI-use terms.
-- `--recursive / -r` (boolean) 
-- `--overwrite / --no-overwrite` (boolean) 
-- `--dry-run` (boolean) 
+- `--recursive / -r` (boolean)
+- `--overwrite / --no-overwrite` (boolean)
+- `--dry-run` (boolean)
 - `--config / -c` (path) Explicit path to mysuite.toml.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite metadata declare photo.jpg --owner Acme --json
+```
 
 ## `mysuite metadata randomize`
 
 Strip all metadata, then write one internally consistent decoy camera identity (make/model/lens/firmware + plausible exposure and a recent capture time; never GPS).
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories (non-recursive unless --recursive).
 - `--recursive / -r` (boolean) Recurse into subdirectories.
@@ -415,9 +632,17 @@ Strip all metadata, then write one internally consistent decoy camera identity (
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite metadata randomize photo.jpg --dry-run --json
+```
+
 ## `mysuite metadata strip`
 
 Strip all EXIF/IPTC/XMP/ICC metadata, writing a new file beside the source.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories (non-recursive unless --recursive).
 - `--recursive / -r` (boolean) Recurse into subdirectories.
@@ -427,43 +652,75 @@ Strip all EXIF/IPTC/XMP/ICC metadata, writing a new file beside the source.
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite metadata strip photo.jpg --json
+```
+
 ## `mysuite ocr`
 
 Read the text in images (macOS Vision, on device).
+
+*read only unless `--save` (then writes files) · no `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Images / screenshots / scans.
 - `--languages` (str) Recognition languages, e.g. en-US,de-DE (default: automatic).
 - `--fast` (boolean) Faster, less accurate.
 - `--save` (boolean) Also write <name>.txt beside each image (never overwrites without --overwrite).
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing .txt files.
-- `--recursive / -r` (boolean) 
+- `--recursive / -r` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite ocr shot.png --json
+```
 
 ## `mysuite pdf compress`
 
 Make a PDF smaller (Ghostscript): screen < ebook < printer < prepress. A result that is not smaller is not written (status not_smaller).
 
+*writes files · no `--dry-run` · `--json`*
+
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--level` (str, default `ebook`) screen (smallest), ebook, printer, prepress (best quality).
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf compress doc.pdf --level ebook --json
+```
 
 ## `mysuite pdf extract`
 
 Keep only some pages: --pages '1,3-5,8-' (also last, odd, even).
 
+*writes files · no `--dry-run` · `--json`*
+
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--pages` (str) Pages to keep, e.g. '1,3-5,8-', last, odd, even.
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf extract doc.pdf --pages 1,3-5 --json
+```
 
 ## `mysuite pdf from-images`
 
 Make a PDF from images (one page each), optionally fitted on a paper size.
+
+*writes files · no `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) Image files, in page order.
 - `--size` (str) Paper size (a4, letter, 210x297mm …); default: each page is its image's size.
@@ -471,39 +728,71 @@ Make a PDF from images (one page each), optionally fitted on a paper size.
 - `--margin` (float) Margin in mm when --size is used.
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf from-images a.jpg b.jpg --size a4 --json
+```
 
 ## `mysuite pdf images`
 
 Extract the embedded pictures of a PDF as files.
 
+*writes files · no `--dry-run` · `--json`*
+
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--out / -o` (path) Output folder.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf images doc.pdf --json
+```
 
 ## `mysuite pdf info`
 
 Pages, page sizes, rotation, metadata, forms - read only.
 
+*read only · no `--dry-run` · `--json`*
+
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf info doc.pdf --json
+```
 
 ## `mysuite pdf merge`
 
 Join PDFs into one, in the order given.
 
+*writes files · no `--dry-run` · `--json`*
+
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf merge a.pdf b.pdf --json
+```
 
 ## `mysuite pdf number`
 
 Add page numbers. Format may use {n} and {total}, e.g. 'Page {n} of {total}'.
+
+*writes files · no `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--position` (str, default `bottom-center`) bottom-center, bottom-left, bottom-right, top-center, top-left, top-right, center
@@ -514,12 +803,20 @@ Add page numbers. Format may use {n} and {total}, e.g. 'Page {n} of {total}'.
 - `--pages` (str, default `all`) Which pages get a number.
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf number doc.pdf --format "Page {n} of {total}" --json
+```
 
 ## `mysuite pdf render`
 
 Turn pages into PNG/JPEG images at a chosen resolution (Ghostscript).
+
+*writes files · no `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--dpi` (int, default `150`) Resolution, 10-1200.
@@ -527,47 +824,79 @@ Turn pages into PNG/JPEG images at a chosen resolution (Ghostscript).
 - `--pages` (str, default `all`) Which pages.
 - `--out / -o` (path) Output folder.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf render doc.pdf --dpi 150 --json
+```
 
 ## `mysuite pdf resize`
 
 Fit every page onto a standard size (a4, letter, 210x297mm …), centred, content scaled to fit.
 
+*writes files · no `--dry-run` · `--json`*
+
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--size` (str) a0-a6, b5, letter, legal, tabloid, or 210x297mm / 8.5x11in / 595x842 (points).
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf resize doc.pdf --size a4 --json
+```
 
 ## `mysuite pdf rotate`
 
 Rotate pages clockwise by 90/180/270 degrees.
+
+*writes files · no `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--degrees` (int, default `90`) Clockwise: 90, 180 or 270 (or -90).
 - `--pages` (str, default `all`) Which pages (default all).
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf rotate doc.pdf --degrees 90 --pages 1 --json
+```
 
 ## `mysuite pdf split`
 
 Cut a PDF into pieces: --every N pages, or --ranges '1-3,4-6'.
+
+*writes files · no `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--every` (int) Pages per piece.
 - `--ranges` (str) Comma-separated page ranges, one file each.
 - `--out / -o` (path) Output folder (default: beside the source).
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf split doc.pdf --every 2 --json
+```
 
 ## `mysuite pdf stamp`
 
 Stamp text and/or a logo on pages (e.g. DRAFT, CONFIDENTIAL), with opacity and angle.
+
+*writes files · no `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--text` (str) Text to stamp, e.g. DRAFT.
@@ -581,37 +910,70 @@ Stamp text and/or a logo on pages (e.g. DRAFT, CONFIDENTIAL), with opacity and a
 - `--pages` (str, default `all`) Which pages.
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf stamp doc.pdf --text DRAFT --json
+```
 
 ## `mysuite pdf strip`
 
 Remove title, author, producer, dates and the XMP packet.
 
+*writes files · no `--dry-run` · `--json`*
+
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
-- `--quiet / -q` (boolean) 
+- `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite pdf strip doc.pdf --json
+```
 
 ## `mysuite pipeline run`
 
 Run a pipeline file (TOML or JSON). Steps run in order; each takes the previous step's outputs.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `file` (file, required) Pipeline file (.toml or .json).
 - `--dry-run` (boolean) Validate everything and show the plan. Step 1 is planned exactly; later steps that consume earlier outputs are listed symbolically (their file names exist only after the run). A step whose command has no --dry-run of its own is not run at all (status skipped, with a warning), so a dry run never writes files.
 - `--config / -c` (path) Explicit path to mysuite.toml, passed to every step.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite pipeline run release.toml --dry-run --json
+mysuite pipeline run release.toml --json
+```
+
 ## `mysuite preset list`
 
 List available presets (built-in and from mysuite.toml).
 
+*read only · no `--dry-run`*
+
 - `--config / -c` (path) Explicit path to mysuite.toml.
+
+Examples:
+
+```bash
+mysuite preset list
+```
 
 ## `mysuite preset save`
 
 Save export settings as a new (or replacement) preset in mysuite.toml.
+
+*writes files · no `--dry-run`*
 
 - argument `name` (str, required) Preset name.
 - `--sizes / -s` (str) Comma-separated sizes, e.g. 16,32,5cm,2in.
@@ -631,14 +993,22 @@ Save export settings as a new (or replacement) preset in mysuite.toml.
 - `--date-stamp / --no-date-stamp` (boolean) Insert today's date into filenames.
 - `--variant` (str) Variant label, e.g. negative, mono.
 - `--recolor` (str, repeatable) Exact hex color substitution FROM=TO. Repeatable.
-- `--strict / --no-strict` (boolean) 
-- `--overwrite / --no-overwrite` (boolean) 
-- `--normalize-png / --no-normalize-png` (boolean) 
+- `--strict / --no-strict` (boolean)
+- `--overwrite / --no-overwrite` (boolean)
+- `--normalize-png / --no-normalize-png` (boolean)
 - `--config / -c` (path) TOML file to save into (default: ./mysuite.toml).
+
+Examples:
+
+```bash
+mysuite preset save web --formats png,webp --sizes 64,512
+```
 
 ## `mysuite print`
 
 Output at an exact size (10x15cm @300dpi = 1181x1772 px), dpi stored in the file.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Images (or SVG/PDF/EPS) to output at an exact size.
 - `--size` (str) Exact output size: 10x15cm, 4x6in, 210x297mm or 1200x630px (plain numbers are pixels).
@@ -650,59 +1020,101 @@ Output at an exact size (10x15cm @300dpi = 1181x1772 px), dpi stored in the file
 - `--auto-rotate` (boolean) Turn the picture 90° when its orientation doesn't match the paper.
 - `--format` (str) png, jpeg, tiff or webp (default: same as the source).
 - `--quality` (int, default `95`) JPEG quality 1-100.
-- `--recursive / -r` (boolean) 
-- `--overwrite / --no-overwrite` (boolean) 
+- `--recursive / -r` (boolean)
+- `--overwrite / --no-overwrite` (boolean)
 - `--dry-run` (boolean) Show the pixel size that would be written.
-- `--config / -c` (path) 
+- `--config / -c` (path)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite print photo.jpg --size 10x15cm --dpi 300 --fit cover --json
+mysuite print pic.png --size 1200x630 --fit cover --json
+```
 
 ## `mysuite profile`
 
 Convert colour profiles: to sRGB for screens, to CMYK for print.
+
+*writes files · no `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Raster images.
 - `--to` (str) srgb (for screens/web) or cmyk (for print; same engine as export).
 - `--cmyk-mode` (str, default `exact`) exact, clean or clean:N (see export).
 - `--cmyk-profile` (file) CMYK ICC profile (default: Ghostscript's SWOP).
 - `--format` (str) png/jpeg/tiff/webp (cmyk: tiff or jpeg).
-- `--quality` (int, default `95`) 
-- `--recursive / -r` (boolean) 
-- `--overwrite / --no-overwrite` (boolean) 
-- `--config / -c` (path) 
+- `--quality` (int, default `95`)
+- `--recursive / -r` (boolean)
+- `--overwrite / --no-overwrite` (boolean)
+- `--config / -c` (path)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite profile photo.tif --to srgb --json
+mysuite profile photo.tif --to cmyk --cmyk-mode clean --json
+```
 
 ## `mysuite profiles check`
 
 Check a profile works: valid keys, the token source loads, the brand exists, folders exist. Git and Figma sources are only fetched with --online.
 
-- argument `name` (str, required) 
+*read only · no `--dry-run` · `--json`*
+
+- argument `name` (str, required)
 - `--online` (boolean) Also fetch git/figma token sources (network).
 - `--config / -c` (path) Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite profiles check acme --json
+```
 
 ## `mysuite profiles delete`
 
 Remove a profile from mysuite.toml.
 
-- argument `name` (str, required) 
+*writes files · no `--dry-run` · `--json`*
+
+- argument `name` (str, required)
 - `--config / -c` (path) Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite profiles delete acme --json
+```
 
 ## `mysuite profiles list`
 
 List the profiles in mysuite.toml.
 
+*read only · no `--dry-run` · `--json`*
+
 - `--config / -c` (path) Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite profiles list --json
+```
 
 ## `mysuite profiles save`
 
 Create or replace a profile in mysuite.toml. Only the options you give are stored.
 
+*writes files · no `--dry-run` · `--json`*
+
 - argument `name` (str, required) Profile name, e.g. acme.
-- `--description` (str) 
+- `--description` (str)
 - `--tokens` (str) Token source (file/folder, git+https://…@REF#path=…, figma:KEY).
-- `--brand` (str) 
+- `--brand` (str)
 - `--theme` (str) light or dark.
 - `--variants` (str) Default logo variants, e.g. default,negative.
 - `--negative-map` (str, repeatable) LOGOCOLOUR=token:NAME (repeatable).
@@ -713,51 +1125,84 @@ Create or replace a profile in mysuite.toml. Only the options you give are store
 - `--cmyk-mode` (str) exact, clean or clean:N.
 - `--cmyk-profile` (str) CMYK ICC profile path.
 - `--out-dir` (str) Export output folder.
-- `--background` (str) 
+- `--background` (str)
 - `--policy` (str) Metadata policy steps, e.g. strip,credit.
 - `--author` (str) Metadata credit: author.
 - `--copyright` (str) Metadata credit: copyright line.
 - `--no-ai / --allow-ai` (boolean) Metadata: record a 'no AI training/mining' declaration.
 - `--terms-url` (str) Metadata declare: link to your AI-use terms.
-- `--compress-preset` (str) 
-- `--enhance-preset` (str) 
+- `--compress-preset` (str)
+- `--enhance-preset` (str)
 - `--overwrite / --no-overwrite` (boolean) Replace a profile of the same name.
 - `--config / -c` (path) Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite profiles save acme --tokens tokens.css --brand x --formats png --sizes 64 --policy strip --json
+```
 
 ## `mysuite profiles show`
 
 One profile, in full.
 
+*read only · no `--dry-run` · `--json`*
+
 - argument `name` (str, required) Profile name.
 - `--config / -c` (path) Explicit path to mysuite.toml (default: ./mysuite.toml or ~/.config/mysuite/mysuite.toml).
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite profiles show acme --json
+```
 
 ## `mysuite qr make`
 
 Make a QR code: `mysuite qr make "https://example.com" --out qr.png`.
 
+*writes files · no `--dry-run` · `--json`*
+
 - argument `text` (str, required) What the code should say (a URL, text, Wi-Fi string…).
 - `--out / -o` (path) Output file (.png or .svg).
 - `--scale` (int, default `10`) Pixels per module (PNG) / units (SVG), 1-100.
 - `--border` (int, default `4`) Quiet-zone modules around the code (the spec wants 4).
-- `--error` (str, default `m`) Error correction: l (7%), m (15%), q (25%), h (30%).
+- `--error` (choice, default `m`, one of `l`, `m`, `q`, `h`) Error correction: l (7%), m (15%), q (25%), h (30%).
 - `--dark` (str, default `#000000`) Colour of the modules.
 - `--light` (str, default `#ffffff`) Background colour.
-- `--overwrite / --no-overwrite` (boolean) 
+- `--overwrite / --no-overwrite` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite qr make "https://example.com" --out qr.png --json
+mysuite qr make "https://example.com" --out qr.svg --error h --json
+```
 
 ## `mysuite qr read`
 
 Read QR codes and barcodes in images (macOS Vision).
 
-- argument `inputs` (path, required, repeatable) 
-- `--recursive / -r` (boolean) 
+*read only · no `--dry-run` · `--json`*
+
+- argument `inputs` (path, required, repeatable)
+- `--recursive / -r` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite qr read photo.jpg --json
+```
 
 ## `mysuite relight`
 
 Experimental: re-shade a picture as if lit from another direction (classical, no AI model).
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Photos/images to relight (raster formats).
 - `--preset` (str) Lighting preset: key-left, key-right, top, side, dramatic, golden-hour, cool-fill. Other flags override it.
@@ -776,9 +1221,17 @@ Experimental: re-shade a picture as if lit from another direction (classical, no
 - `--quiet / -q` (boolean) Print only the summary.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite relight product.png --preset golden-hour --json
+```
+
 ## `mysuite rename`
 
 Rename many files by a pattern ({n}, {date}, {name}...). Copies by default.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Files and/or folders to rename.
 - `--pattern` (str) New name with tokens: {name} {ext} {n} {n:3} {date} {datetime} {w} {h}, e.g. 'trip_{n:3}{ext}'.
@@ -786,21 +1239,38 @@ Rename many files by a pattern ({n}, {date}, {name}...). Copies by default.
 - `--sort` (str, default `name`) Order for {n}: name, date (EXIF capture time, else file time) or size.
 - `--out / -o` (path) Folder for the renamed COPIES (default: beside the originals).
 - `--move` (boolean) Rename the originals in place instead of making renamed copies.
-- `--recursive / -r` (boolean) 
-- `--overwrite / --no-overwrite` (boolean) 
+- `--recursive / -r` (boolean)
+- `--overwrite / --no-overwrite` (boolean)
 - `--dry-run` (boolean) Show the old -> new names, change nothing.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite rename photos/ --pattern "trip_{n:3}{ext}" --dry-run --json
+```
 
 ## `mysuite schema`
 
 Describe every command's options, the --json result and exit codes (for agents).
 
+*read only · no `--dry-run`*
+
 - argument `command` (str, repeatable) Limit to one command, e.g. `export` or `metadata strip`.
 - `--markdown` (boolean) Print the command reference as Markdown instead of JSON.
+
+Examples:
+
+```bash
+mysuite schema export
+mysuite schema --markdown
+```
 
 ## `mysuite sheet`
 
 Contact sheet: many pictures on one labelled page.
+
+*writes files · no `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Images / folders to put on one sheet.
 - `--out / -o` (path) Output file: .png, .jpg or .pdf.
@@ -809,14 +1279,22 @@ Contact sheet: many pictures on one labelled page.
 - `--no-labels` (boolean) Leave out the file names.
 - `--background` (str, default `#1b1d22`) Sheet colour.
 - `--title` (str) A heading.
-- `--recursive / -r` (boolean) 
-- `--overwrite / --no-overwrite` (boolean) 
-- `--config / -c` (path) 
+- `--recursive / -r` (boolean)
+- `--overwrite / --no-overwrite` (boolean)
+- `--config / -c` (path)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite sheet photos/ --out sheet.png --columns 5 --json
+```
 
 ## `mysuite shield`
 
 EXPERIMENTAL: make images resist AI image editing (PhotoGuard-style). Needs `mysuite install shield`.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Images to protect (PNG/JPEG/WebP/TIFF).
 - `--strength` (str, default `standard`) light, standard, strong: stronger = more disruption, more visible pattern, slower.
@@ -824,14 +1302,22 @@ EXPERIMENTAL: make images resist AI image editing (PhotoGuard-style). Needs `mys
 - `--epsilon` (int) Largest allowed change per pixel, out of 255 (1-32); overrides the strength's default.
 - `--device` (str) cpu, mps or cuda (default: the best available).
 - `--seed` (int) Random start (same seed = same result).
-- `--recursive / -r` (boolean) 
-- `--overwrite / --no-overwrite` (boolean) 
+- `--recursive / -r` (boolean)
+- `--overwrite / --no-overwrite` (boolean)
 - `--dry-run` (boolean) Show the files and a time estimate, change nothing.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite shield photo.png --dry-run --json
+```
 
 ## `mysuite svg import`
 
 Bring PDF, Illustrator (.ai), EPS or SVGZ files in as plain SVG (text becomes outlines). Then recolor, tokens and variants work on them.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) PDF / .ai / .eps / .svgz files and/or folders.
 - `--page` (int range, default `1`) Which page to import.
@@ -846,9 +1332,17 @@ Bring PDF, Illustrator (.ai), EPS or SVGZ files in as plain SVG (text becomes ou
 - `--quiet / -q` (boolean) Print only the summary.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite svg import logo.ai --json
+```
+
 ## `mysuite svg optimise`
 
 Make SVGs smaller without changing how they look: no editor leftovers, tidy colours, rounded numbers. Checked by rendering both versions.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) SVG / .svgz files and/or folders.
 - `--precision` (int range, default `3`) Decimals kept in coordinates (3 is invisible at normal sizes; small viewBoxes automatically keep 2 more).
@@ -864,23 +1358,47 @@ Make SVGs smaller without changing how they look: no editor leftovers, tidy colo
 - `--quiet / -q` (boolean) Print only the summary.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite svg optimise logo.svg --json
+```
+
 ## `mysuite testcases list`
 
 List what the generator makes, and what each file exercises, without writing anything.
 
+*read only · no `--dry-run` · `--json`*
+
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite testcases list --json
+```
 
 ## `mysuite testcases make`
 
 Generate the test folder (about 60 files, 10 MB, a few seconds). Nothing is downloaded.
 
+*writes files · no `--dry-run` · `--json`*
+
 - `--out / -o` (path) Folder to create.
 - `--overwrite / --no-overwrite` (boolean) Write into a folder that already exists.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite testcases make --out samples --json
+```
+
 ## `mysuite tokens check`
 
 Check a logo's colours against the tokens: which are on-palette, which are off. Exit 1 with --strict if any is off.
+
+*read only · no `--dry-run` · `--json`*
 
 - argument `logo` (file, required) SVG (or raster image) to check.
 - `--tokens` (str) Token source (file, folder, git+… or figma:KEY).
@@ -891,9 +1409,17 @@ Check a logo's colours against the tokens: which are on-palette, which are off. 
 - `--tokens-refresh` (boolean) Fetch a git source again instead of using the cached copy.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite tokens check logo.svg --tokens tokens/ --brand bild --json
+```
+
 ## `mysuite tokens list`
 
 List the colour tokens of a source.
+
+*read only · no `--dry-run` · `--json`*
 
 - argument `source` (str, required) Token source: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir, or figma:FILEKEY.
 - `--brand` (str) Which brand (when the source has several, e.g. an Axis folder).
@@ -902,9 +1428,17 @@ List the colour tokens of a source.
 - `--tokens-refresh` (boolean) Fetch a git source again instead of using the cached copy.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite tokens list tokens/ --brand bild --filter brand --json
+```
+
 ## `mysuite tokens show`
 
 One token: its values per theme and where it came from.
+
+*read only · no `--dry-run` · `--json`*
 
 - argument `source` (str, required) Token source: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir, or figma:FILEKEY.
 - argument `name` (str, required) Token name, e.g. --bg-color-brand-solid or brand.red.
@@ -912,9 +1446,17 @@ One token: its values per theme and where it came from.
 - `--tokens-refresh` (boolean) Fetch a git source again instead of using the cached copy.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite tokens show tokens/ text-color-brand --brand bild --json
+```
+
 ## `mysuite transform`
 
 Quick edits: trim, crop, rotate, flip, resize, pad, round corners, background (fixed, predictable order).
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Files and/or folders to edit.
 - `--trim` (boolean) Cut away a uniform border (transparent, else the top-left colour).
@@ -943,21 +1485,45 @@ Quick edits: trim, crop, rotate, flip, resize, pad, round corners, background (f
 - `--quiet / -q` (boolean) Print only the summary.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite transform pic.png --crop-aspect 1:1 --resize 512 --round 50% --json
+```
+
 ## `mysuite tui`
 
 Launch the interactive terminal dashboard.
 
+*read only · no `--dry-run`*
+
 - `--welcome` (boolean) Show the animated intro page before the tools.
+
+Examples:
+
+```bash
+mysuite tui
+```
 
 ## `mysuite variants list`
 
 The available variants and what each does.
 
+*read only · no `--dry-run` · `--json`*
+
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite variants list --json
+```
 
 ## `mysuite variants make`
 
 Write SVG variants of a logo: `mysuite variants make logo.svg --variants negative,mono-white --tokens tokens/ --brand acme`.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (file, required, repeatable) SVG logo(s).
 - `--variants` (str, default `negative,mono-white,mono-black`) Comma-separated: invert, mono-black, mono-white, grayscale, negative, on-dark, knockout, cutout, mono:COLOUR; combine with + and name with =, e.g. negativ=knockout+mono:#fff.
@@ -967,13 +1533,21 @@ Write SVG variants of a logo: `mysuite variants make logo.svg --variants negativ
 - `--negative-tolerance` (float range, default `5.0`) How close (CIEDE2000) a logo colour must be to a token to use it.
 - `--out / -o` (path) Output folder (default: beside the logo).
 - `--tokens-refresh` (boolean) Fetch a git token source again.
-- `--overwrite / --no-overwrite` (boolean) 
+- `--overwrite / --no-overwrite` (boolean)
 - `--dry-run` (boolean) List the files that would be written.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite variants make logo.svg --variants negative,mono-white --tokens tokens/ --json
+```
 
 ## `mysuite watermark`
 
 Stamp a logo onto image(s) as a visible, scalable watermark.
+
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories, to watermark (non-recursive unless --recursive).
 - `--logo / -l` (path) Image (or SVG) to stamp onto each input as the watermark.
@@ -987,3 +1561,9 @@ Stamp a logo onto image(s) as a visible, scalable watermark.
 - `--config / -c` (path) Explicit path to mysuite.toml.
 - `--quiet / -q` (boolean) Suppress per-file progress, print summary only.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
+Examples:
+
+```bash
+mysuite watermark photo.jpg --logo logo.svg --position bottom-right --json
+```

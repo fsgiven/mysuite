@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
@@ -74,6 +75,14 @@ def ocr(
 
 
 # ------------------------------------------------------------------------------------------- qr
+class QrErrorLevel(str, Enum):
+    """QR error correction levels (declared as choices, so `mysuite schema` lists them)."""
+    l = "l"  # noqa: E741
+    m = "m"
+    q = "q"
+    h = "h"
+
+
 qr_app = typer.Typer(help="Make a QR code, or read QR codes/barcodes from images.", no_args_is_help=True)
 
 
@@ -84,13 +93,13 @@ def qr_make(
     out: Path = typer.Option(Path("qr.png"), "--out", "-o", help="Output file (.png or .svg)."),
     scale: int = typer.Option(10, "--scale", help="Pixels per module (PNG) / units (SVG), 1-100."),
     border: int = typer.Option(4, "--border", help="Quiet-zone modules around the code (the spec wants 4)."),
-    error: str = typer.Option("m", "--error", help="Error correction: l (7%), m (15%), q (25%), h (30%)."),
+    error: QrErrorLevel = typer.Option(QrErrorLevel.m, "--error", case_sensitive=False, help="Error correction: l (7%), m (15%), q (25%), h (30%)."),
     dark: str = typer.Option("#000000", "--dark", help="Colour of the modules."),
     light: str = typer.Option("#ffffff", "--light", help="Background colour."),
     overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite"),
 ) -> None:
     try:
-        result = core.make_qr(text, out, scale=scale, border=border, error=error, dark=dark, light=light, overwrite=overwrite)
+        result = core.make_qr(text, out, scale=scale, border=border, error=QrErrorLevel(error).value, dark=dark, light=light, overwrite=overwrite)
     except core.HelperError as exc:
         jsonout.add_item(status="failed", error=str(exc))
         log_error(escape(str(exc)))
