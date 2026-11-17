@@ -355,7 +355,7 @@ Enhance photo(s), writing <name>_enhanced.<ext> beside each source.
 - `--format` (str) png, jpg or webp.
 - `--quality` (int range) jpg/webp quality.
 - `--backend` (str, default `auto`) auto, classical or realesrgan.
-- `--record-history` (boolean) Log each job (paths, sizes, timing) to a local database for `enhance history`. Off by default: a log of what you processed is a trace.
+- `--record-history` (boolean) Log each job (paths, sizes, timing) to a local database (read it with `mysuite enhance history`). Off by default: a log of what you processed is a trace.
 - `--recursive / -r` (boolean) Recurse into subdirectories.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
 - `--dry-run` (boolean) List input -> output pairs, write nothing.

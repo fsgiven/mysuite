@@ -16,6 +16,7 @@ from textual.widgets import Checkbox, Collapsible, Input, Label, Select
 
 from mysuite.config import load_config
 from mysuite.enhance._parsing import ENHANCE_EXTENSIONS
+from mysuite.enhance.presets import ENHANCE_DEFAULTS
 from mysuite.enhance.upscalers import backend_status
 from mysuite.tui.shell import FormError, ToolScreen, field
 from mysuite.tui.widgets.file_target import FileTarget
@@ -80,14 +81,14 @@ class EnhanceScreen(ToolScreen):
                 [("auto (AI if installed)", "auto"), ("classical", "classical"), ("realesrgan (AI)", "realesrgan")],
                 id="backend", allow_blank=False, value="auto"), classes="grow")
         with Horizontal(classes="pair"):
-            yield field("Scale 1-8", Input(placeholder="1", id="scale"))
-            yield field("Denoise 0-1", Input(placeholder="0", id="denoise"))
-            yield field("Sharpen 0-1", Input(placeholder="0", id="sharpen"))
+            yield field("Scale 1-8", Input(placeholder="2", id="scale"))
+            yield field("Denoise 0-1", Input(placeholder="0.15", id="denoise"))
+            yield field("Sharpen 0-1", Input(placeholder="0.25", id="sharpen"))
         with Horizontal(classes="pair"):
             yield field("Saturation 0-3", Input(placeholder="1.0", id="saturation"))
             yield field("Contrast 0-3", Input(placeholder="1.0", id="contrast"))
             yield field("Gamma 0.2-3", Input(placeholder="1.0", id="gamma"))
-        yield Checkbox("Auto white balance", id="auto-white-balance", value=True)
+        yield Checkbox("Auto white balance", id="auto-white-balance", value=False)
         yield Checkbox("Restore scratches (thin straight lines)", id="restore-scratches")
         yield Checkbox("Face enhance (needs the AI backend)", id="face-enhance")
 
@@ -103,6 +104,12 @@ class EnhanceScreen(ToolScreen):
         self.query_one("#preset", Select).set_options(
             [("(none — gentle defaults)", "")] + [(n, n) for n in sorted(self._presets)]
         )
+        self._apply_preset("")
+
+    def _effective(self, name: str) -> dict[str, object]:
+        """What `mysuite enhance run` really uses: the preset (gentle when none is chosen, as the CLI does) over
+        the built-in defaults."""
+        return {**ENHANCE_DEFAULTS, **(self._presets.get(name or "gentle") or {})}
 
     def on_mount(self) -> None:
         if not backend_status()["realesrgan_available"]:
@@ -124,20 +131,24 @@ class EnhanceScreen(ToolScreen):
             widget.value = "" if value == "" else str(value)
 
     def _apply_preset(self, name: str) -> None:
-        self._preset_name = name
-        settings = self._presets.get(name) if name else {}
-        if settings is None:
+        """Fill the form with what the command will really do. With no preset the numbers stay empty (their
+        placeholders show gentle's values) and the switches show gentle's settings."""
+        if name and name not in self._presets:
             return
-        self._baseline = {k: d for k, (_, d) in _FIELDS.items()}
-        for key, value in settings.items():
-            if key in _FIELDS:
-                self._baseline[key] = value
-        for key in _FIELDS:
-            self._set_field(key, self._baseline[key])
+        self._preset_name = name
+        self._baseline = {k: v for k, v in self._effective(name).items() if k in _FIELDS}
+        for key, (kind, _) in _FIELDS.items():
+            value = self._baseline.get(key, _FIELDS[key][1])
+            if not name and kind == "input":
+                value = ""
+                self.query_one(f"#{_wid(key)}", Input).placeholder = f"{self._baseline.get(key, '')}"
+            self._set_field(key, value)
 
     # ------------------------------------------------------------------------ command
     def _same_as_baseline(self, key: str, current: object) -> bool:
         base = self._baseline.get(key, _FIELDS[key][1])
+        if current == "" and not isinstance(current, bool):
+            return True
         if isinstance(current, bool):
             return current == bool(base)
         try:

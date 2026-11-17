@@ -109,10 +109,27 @@ def _bit_depth(image: Image.Image, path: Path) -> int:
     return 8
 
 
+def _kept_exif(image: Image.Image) -> bytes | None:
+    """The source's EXIF for a JPEG result, with Orientation reset (the pixels are already upright) and the
+    embedded thumbnail dropped (it would show the old, un-enhanced picture)."""
+    try:
+        exif = image.getexif()
+    except Exception:  # noqa: BLE001 - unreadable EXIF: write none
+        return None
+    if not exif:
+        return None
+    exif[0x0112] = 1
+    for ifd in (0x8769, 0x8825):                     # load the sub-IFDs so tobytes() writes them back
+        exif.get_ifd(ifd)
+    try:
+        return exif.tobytes()
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _load(input_path: Path, notes: list[str]) -> tuple[Image.Image, Image.Image | None]:
-    """Returns (rgb, alpha-or-None). Orientation is baked into the pixels —
-    the output has no EXIF, so a rotation flag would be lost and phone photos
-    would come out sideways."""
+    """Returns (rgb, alpha-or-None). Orientation is baked into the pixels (the output's EXIF, kept for JPEG,
+    says Orientation 1), so phone photos never come out sideways."""
     try:
         image = Image.open(input_path)
         image.load()
@@ -133,7 +150,8 @@ def _load(input_path: Path, notes: list[str]) -> tuple[Image.Image, Image.Image 
     return _to_srgb(image, notes), alpha
 
 
-def _save(image: Image.Image, alpha: Image.Image | None, output_path: Path, settings: EnhanceSettings) -> None:
+def _save(image: Image.Image, alpha: Image.Image | None, output_path: Path, settings: EnhanceSettings,
+          exif: bytes | None = None) -> None:
     fmt = settings.output_format
     if alpha is not None and fmt == "jpg":
         flat = Image.new("RGB", image.size, "white")
@@ -145,7 +163,8 @@ def _save(image: Image.Image, alpha: Image.Image | None, output_path: Path, sett
 
     def write(tmp: Path) -> None:
         if fmt == "jpg":
-            image.save(tmp, format="JPEG", quality=settings.output_quality, optimize=True)
+            image.save(tmp, format="JPEG", quality=settings.output_quality, optimize=True,
+                       **({"exif": exif} if exif else {}))
         elif fmt == "webp":
             image.save(tmp, format="WEBP", quality=settings.output_quality)
         else:
@@ -164,7 +183,8 @@ def enhance_file(
     """Restores/upscales one photo, writing <name>_enhanced.<ext> beside it.
     Never modifies the source. Stages, in order: scratch reduction (native
     resolution, where thin lines are crispest), upscale + denoise + sharpen,
-    color, gamma. The result has no EXIF/XMP/ICC — see _load/_to_srgb."""
+    color, gamma. The result is sRGB without an ICC profile (see _to_srgb); a JPEG result keeps the source's
+    EXIF (Orientation reset to 1, no thumbnail), other formats carry none."""
     output_path = output_path_for(input_path, settings.output_format)
     if not overwrite and output_path.exists():
         return EnhanceOutcome(input_path, output_path, "skipped_existing")
@@ -172,6 +192,10 @@ def enhance_file(
     started = time.time()
     notes: list[str] = []
     rgb, alpha = _load(input_path, notes)
+    exif = None
+    if settings.output_format == "jpg":
+        with Image.open(input_path) as source:
+            exif = _kept_exif(source)
     input_size = rgb.size
 
     out_mp = rgb.width * rgb.height * settings.scale**2 / 1e6
@@ -208,7 +232,7 @@ def enhance_file(
     if alpha is not None:
         alpha = alpha.resize(rgb.size, Image.LANCZOS)
 
-    _save(rgb, alpha, output_path, settings)
+    _save(rgb, alpha, output_path, settings, exif)
     return EnhanceOutcome(
         input_path, output_path, "written", backend_used=upscaler.name,
         input_size=input_size, output_size=rgb.size,

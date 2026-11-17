@@ -35,3 +35,39 @@ async def test_watermark_form_passes_size_by_and_quality(tmp_path):
         argv = screen.argv()
         assert argv[argv.index("--size-by") + 1] == "height"
         assert argv[argv.index("--quality") + 1] == "85"
+
+
+# --------------------------------------------------------------------------- enhance
+async def test_enhance_form_starts_from_what_the_cli_really_runs():
+    """No preset = the CLI's default, gentle: auto white balance is OFF there, so the box must not be ticked."""
+    async with MysuiteApp().run_test() as pilot:
+        screen = await _open(pilot, "enhance")
+        assert screen.query_one("#auto-white-balance", Checkbox).value is False
+        assert screen.query_one("#scale", Input).placeholder == "2"
+        assert screen.query_one("#denoise", Input).placeholder == "0.15"
+
+
+async def test_enhance_ticking_white_balance_without_a_preset_adds_the_flag(tmp_path):
+    photo = tmp_path / "p.jpg"
+    Image.new("RGB", (20, 20), "white").save(photo)
+    async with MysuiteApp().run_test() as pilot:
+        screen = await _open(pilot, "enhance")
+        screen.query_one("#input-files", Input).value = str(photo)
+        assert "--auto-white-balance" not in screen.argv()
+        screen.query_one("#auto-white-balance", Checkbox).value = True
+        await pilot.pause()
+        assert "--auto-white-balance" in screen.argv()
+
+
+async def test_enhance_preset_with_white_balance_ticks_it_and_unticking_turns_it_off(tmp_path):
+    photo = tmp_path / "p.jpg"
+    Image.new("RGB", (20, 20), "white").save(photo)
+    async with MysuiteApp().run_test() as pilot:
+        screen = await _open(pilot, "enhance")
+        screen.query_one("#input-files", Input).value = str(photo)
+        screen.query_one("#preset", Select).value = "old-photo"
+        await pilot.pause()
+        assert screen.query_one("#auto-white-balance", Checkbox).value is True
+        screen.query_one("#auto-white-balance", Checkbox).value = False
+        await pilot.pause()
+        assert "--no-auto-white-balance" in screen.argv()
