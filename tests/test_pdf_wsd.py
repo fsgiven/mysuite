@@ -217,3 +217,68 @@ def test_from_images_svg_page_is_the_artwork_size_without_size(tmp_path):
     assert res.exit_code == 0, res.output
     page = PdfReader(doc["items"][0]["output"]).pages[0]
     assert (round(float(page.mediabox.width)), round(float(page.mediabox.height))) == (150, 75)   # 200x100 px at 96 px/in
+
+
+# ------------------------------------------------------------------ 6. numbering is fast: no rsvg call per page
+def _long_pdf(path, n):
+    import io
+
+    buf = io.BytesIO()
+    Image.new("RGB", (300, 400), "white").save(buf, format="PDF", resolution=72.0)
+    page = PdfReader(io.BytesIO(buf.getvalue())).pages[0]
+    w = PdfWriter()
+    for _ in range(n):
+        w.add_page(page)
+    w.write(str(path))
+    return path
+
+
+def test_numbering_many_pages_is_fast_and_calls_no_tool(tmp_path, monkeypatch):
+    import time
+
+    src = _long_pdf(tmp_path / "long.pdf", 400)
+    calls = []
+    monkeypatch.setattr(ops, "run", lambda *a, **k: calls.append(a))
+    t = time.perf_counter()
+    r = ops.number_pages(src, None, False, ToolPaths(), fmt="Page {n} of {total}", position="bottom-right")
+    assert time.perf_counter() - t < 10 and not calls
+    reader = PdfReader(str(r.path))
+    assert len(reader.pages) == 400
+    assert "Page 7 of 400" in reader.pages[6].extract_text()
+
+
+@need_gs
+def test_fast_numbers_land_where_asked(tmp_path):
+    import subprocess
+
+    src = _long_pdf(tmp_path / "doc.pdf", 2)
+    for position in ("bottom-right", "top-left", "bottom-center"):
+        out = tmp_path / f"{position}.pdf"
+        ops.number_pages(src, out, True, ToolPaths(), fmt="{n}/{total}", position=position, size=20, color="#ff0000")
+        png = tmp_path / f"{position}.png"
+        subprocess.run(["gs", "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=png16m", "-r72", "-dFirstPage=1", "-dLastPage=1",
+                        f"-sOutputFile={png}", str(out)], check=True)
+        with Image.open(png) as im:
+            red = Image.eval(im.convert("RGB").getchannel("G"), lambda v: 255 if v < 100 else 0)
+            l, t, r, b = red.getbbox()
+        assert 20 <= l and r <= 280 and 20 <= t and b <= 380
+        if position == "bottom-right":
+            assert r >= 300 - 28 - 4 and b >= 400 - 28 - 4
+        if position == "top-left":
+            assert l <= 28 + 3 and t <= 28 + 6
+        if position == "bottom-center":
+            assert abs((l + r) / 2 - 150) <= 3
+
+
+def test_numbering_with_non_latin_text_still_works(tmp_path):
+    if shutil.which("rsvg-convert") is None:
+        pytest.skip("needs rsvg-convert")
+    src = _long_pdf(tmp_path / "doc.pdf", 2)
+    r = ops.number_pages(src, None, False, ToolPaths(), fmt="第{n}页")
+    assert len(PdfReader(str(r.path)).pages) == 2
+
+
+def test_numbering_rejects_a_bad_colour(tmp_path):
+    src = _long_pdf(tmp_path / "doc.pdf", 1)
+    with pytest.raises(ops.PdfError, match="colour"):
+        ops.number_pages(src, None, False, ToolPaths(), color="not-a-colour")
