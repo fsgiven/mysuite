@@ -128,17 +128,13 @@ app.add_typer(metadata_app, name="metadata")
 app.add_typer(enhance_app, name="enhance")
 
 
-@app.command("doctor", help="Check that required tools (rsvg-convert, gs, magick, mysuite-cutout, exiftool, c2patool, codec encoders) are installed.")
+@app.command("doctor", help="Check the external tools: the required ones (rsvg-convert, gs, magick, exiftool) and the optional "
+             "ones, with the commands each one unlocks. Exit 0 when every required tool is installed (optional ones may be missing).")
 @jsonout.with_json("doctor")
 def doctor() -> None:
-    config = load_config()
-    resolved = check_tools(config.tools)
-    hints = {spec.attr: spec.install_hint for spec in TOOL_SPECS}
-    for name, path in resolved.items():
-        jsonout.add_item(tool=name, found=path is not None, path=path,
-                         install_hint=None if path else hints[name])
-    all_ok = run_doctor(config.tools)
-    raise typer.Exit(0 if all_ok else 1)
+    from mysuite.doctor import doctor_report
+
+    raise typer.Exit(0 if doctor_report(load_config().tools) else 1)
 
 
 @app.command("tui", help="Launch the interactive terminal dashboard.")

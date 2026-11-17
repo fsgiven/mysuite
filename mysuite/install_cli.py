@@ -33,7 +33,8 @@ def install(
     remove: bool = typer.Option(False, "--remove", help="Delete the component again."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be fetched/built and where, change nothing."),
 ) -> None:
-    """Fetch the heavier parts once, when you need them - mysuite itself stays small."""
+    """List the optional components, or install/remove one. Nothing is downloaded or built without --yes (or a "yes"
+    at the prompt); --dry-run shows the steps. Everything lands under ~/.cache/mysuite (MYSUITE_HOME)."""
     if name is None:
         table = Table(title="components")
         for col in ("name", "what", "size", "installed"):
@@ -74,13 +75,14 @@ def install(
     steps = list(c.steps)
     if c.name == "tools":
         steps = [f"brew install {' '.join(components._missing_formulae())}"]
-    jsonout.add_item(name=c.name, status="planned" if dry_run else "installing", size=c.size, needs=c.needs, steps=steps)
+    item = dict(name=c.name, size=c.size, needs=c.needs, steps=steps)
     console.print(f"[bold]{escape(c.name)}[/bold] - {escape(c.description)}")
     console.print(f"  size: {escape(c.size)}\n  needs: {escape(c.needs)}")
     for s in steps:
         console.print(f"  - {escape(s)}")
     console.print("  [dim]this is the only time mysuite uses the network for it; remove it any time with `mysuite install NAME --remove`[/dim]")
     if dry_run:
+        jsonout.add_item(status="planned", **item)
         return
     if not yes:
         if jsonout.active() or not sys.stdin.isatty():
@@ -94,7 +96,8 @@ def install(
         # leave nothing half-installed behind
         if c.name == "shield" and not (components.env_dir("shield") / ".mysuite-ready").exists():
             shutil.rmtree(components.env_dir("shield"), ignore_errors=True)
+        jsonout.add_item(status="failed", error=str(exc), **item)
         log_error(escape(str(exc)))
         raise typer.Exit(1) from exc
-    jsonout.add_item(name=c.name, status="installed")
+    jsonout.add_item(status="installed", **item)
     log_step(f"{escape(c.name)} installed")

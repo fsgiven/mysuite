@@ -23,6 +23,7 @@
 - `skipped_existing` - the output already exists and --overwrite was not given; nothing was written
 - `skipped` - not done: a pipeline step after a failure, a dry-run step that can't preview, or a kit file that doesn't apply
 - `failed` - this item failed; see `error`
+- `missing` - doctor: this tool is not installed (see `required`, `unlocks` and `install_hint`)
 - `ok` - a read-only result (inspect, contrast, diff, ocr, a pipeline step that ran)
 - `warning` - inspect: the file was read, but something is wrong with it; see the item's `warnings`
 - `done` - enhance: the picture was processed and written
@@ -30,7 +31,6 @@
 - `not_smaller` - pdf compress: the result would not be smaller, so nothing was written (no `output`)
 - `marked` - mark detect: the mark was found
 - `not_found` - mark detect: the mark was not found
-- `installing` - install: the component is being installed
 - `installed` - install: the component was installed
 - `already_installed` - install: nothing to do
 - `removed` - install --remove: the component was deleted
@@ -86,6 +86,7 @@
               "skipped_existing",
               "skipped",
               "failed",
+              "missing",
               "ok",
               "warning",
               "done",
@@ -93,7 +94,6 @@
               "not_smaller",
               "marked",
               "not_found",
-              "installing",
               "installed",
               "already_installed",
               "removed",
@@ -273,7 +273,7 @@ mysuite diff old.svg new.svg --out changes.png --json
 
 ## `mysuite doctor`
 
-Check that required tools (rsvg-convert, gs, magick, mysuite-cutout, exiftool, c2patool, codec encoders) are installed.
+Check the external tools: the required ones (rsvg-convert, gs, magick, exiftool) and the optional ones, with the commands each one unlocks. Exit 0 when every required tool is installed (optional ones may be missing).
 
 *read only · no `--dry-run` · `--json`*
 
