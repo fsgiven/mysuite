@@ -117,7 +117,10 @@ app.add_typer(qr_app, name="qr")
 app.add_typer(kit_app, name="kit")
 app.add_typer(tokens_app, name="tokens")
 app.command("install", help="Fetch the heavier parts once, when needed (helpers, the shield environment). mysuite itself stays small.")(install_command)
-app.command("shield", help="EXPERIMENTAL: make images resist AI image editing (PhotoGuard-style). Needs `mysuite install shield`.")(shield_command)
+app.command("shield", help="EXPERIMENTAL: disturb Stable Diffusion 1.x/2.x-style image-to-image editing of your picture "
+            "(PhotoGuard-style). It does NOT stop ChatGPT, Gemini, Midjourney or other closed services (a shielded picture was "
+            "regenerated cleanly by ChatGPT), nor AI training, scraping or copying; resizing or upscaling largely removes it. "
+            "Needs `mysuite install shield` (~1.4 GB). See docs/SHIELD.md.")(shield_command)
 app.add_typer(mark_app, name="mark")
 app.add_typer(testcases_app, name="testcases")
 app.add_typer(variants_app, name="variants")

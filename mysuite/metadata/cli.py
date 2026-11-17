@@ -26,8 +26,8 @@ RANDOMIZE_REFUSED = ("randomize writes a made-up camera and date, which is false
                      "it runs only with --advanced (use `metadata strip` to remove the real ones)")
 
 app = typer.Typer(
-    help="Strip metadata for privacy, replace it with a plausible decoy camera identity, "
-    "or embed a signed C2PA provenance record for correct crediting."
+    help="Hidden data in pictures: strip it for privacy (GPS, camera, serials; the colour profile stays), credit the author "
+    "(IPTC Core, plus C2PA when c2patool is installed), declare 'no AI use', or protect: all of it in one go. Copies only."
 )
 
 
@@ -214,8 +214,10 @@ def credit(
 
 @app.command(
     "randomize",
-    help="Strip all metadata, then write one internally consistent decoy camera identity "
-    "(make/model/lens/firmware + plausible exposure and a recent capture time; never GPS).",
+    hidden=True,
+    help="ADVANCED, hidden: strip all metadata, then write one internally consistent decoy camera identity "
+    "(make/model/lens/firmware + plausible exposure and a recent capture time; never GPS). A made-up camera and date is "
+    "false provenance for published pictures, so it runs only with --advanced.",
 )
 @jsonout.with_json("metadata-randomize")
 def randomize(
@@ -223,6 +225,7 @@ def randomize(
         ..., exists=True, readable=True,
         help="One or more image files, and/or directories (non-recursive unless --recursive).",
     ),
+    advanced: bool = typer.Option(False, "--advanced", help="Required: you know the result carries a made-up camera and date."),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Recurse into subdirectories."),
     overwrite: bool = typer.Option(
         False, "--overwrite/--no-overwrite", help="Overwrite existing output files."
@@ -231,6 +234,9 @@ def randomize(
     config_path: Optional[Path] = typer.Option(None, "--config", "-c", help="Explicit path to mysuite.toml."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress per-file progress, print summary only."),
 ) -> None:
+    if not advanced:
+        log_error(RANDOMIZE_REFUSED)
+        raise typer.Exit(jsonout.EXIT_USAGE)
     try:
         input_files = _resolve(inputs, recursive)
     except InvalidInputError as exc:
