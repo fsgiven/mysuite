@@ -109,7 +109,7 @@ def test_split_every_and_ranges(three, tmp_path):
 
 def test_extract_pages(three, tmp_path):
     res, doc = run_pdf("extract", three, "--pages", "3,1")
-    out = tmp_path / "doc_pages.pdf"
+    out = tmp_path / "doc_p3_1.pdf"
     assert sizes_of(out) == [(300, 400), (300, 400)]
     res, doc = run_pdf("extract", three, "--pages", "9", "--overwrite")
     assert res.exit_code == 1 and "does not exist" in doc["items"][0]["error"]
@@ -313,7 +313,7 @@ def test_pdf_ops_in_a_pipeline(three, tmp_path):
         {"tool": "pdf", "action": "strip", "only": ["pdf"]},
     ]}, base=tmp_path)
     results = engine.run(pipe)
-    assert [r.status for r in results] == ["ok", "ok"] and results[1].outputs[0].endswith("doc_pages_stripped.pdf")
+    assert [r.status for r in results] == ["ok", "ok"] and results[1].outputs[0].endswith("doc_p1_3_stripped.pdf")
 
 
 # ------------------------------------------------------------- P0-6: never replace an input, never write a bigger "compressed" file

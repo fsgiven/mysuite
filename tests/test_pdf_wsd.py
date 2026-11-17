@@ -87,3 +87,30 @@ def test_a_pdf_that_needs_a_password_to_open_is_still_refused(three, tmp_path):
     locked = _encrypt(three, tmp_path / "locked.pdf", user="open-me")
     res, doc = run_pdf("info", locked)
     assert res.exit_code == 1 and "password" in doc["items"][0]["error"]
+
+
+# ------------------------------------------------------------------ 3. the page selection is in the name
+@pytest.mark.parametrize("spec,label", [
+    ("1", "p1"), ("2-3", "p2-3"), ("3,1", "p3_1"), ("1,2,3", "p1-3"), ("last", "p3"), ("2-", "p2-3"), ("odd", "p1_3"),
+])
+def test_pages_label(spec, label):
+    assert ops.pages_label(ops.parse_pages(spec, 3)) == label
+
+
+def test_a_long_selection_gets_a_short_label():
+    label = ops.pages_label(ops.parse_pages("odd", 400))
+    assert len(label) <= 40 and label.startswith("p1-399")
+
+
+def test_a_second_extract_with_other_pages_is_not_skipped(three, tmp_path):
+    _, first = run_pdf("extract", three, "--pages", "1")
+    res, second = run_pdf("extract", three, "--pages", "2-3")
+    assert res.exit_code == 0 and second["items"][0]["status"] == "written"
+    assert first["items"][0]["output"].endswith("doc_p1.pdf") and second["items"][0]["output"].endswith("doc_p2-3.pdf")
+    assert len(PdfReader(second["items"][0]["output"]).pages) == 2
+
+
+def test_split_ranges_are_named_by_the_pages_they_hold(three, tmp_path):
+    _, doc = run_pdf("split", three, "--ranges", "last, 1-2", "--out", tmp_path / "r")
+    names = [i["output"].rsplit("/", 1)[1] for i in doc["items"]]
+    assert names == ["doc_p3.pdf", "doc_p1-2.pdf"]

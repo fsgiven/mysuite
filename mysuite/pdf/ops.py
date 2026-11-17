@@ -103,6 +103,24 @@ def parse_pages(spec: str, count: int) -> list[int]:
     return out
 
 
+def pages_label(idx: list[int]) -> str:
+    """A file-name label for a page selection, by the pages it holds: [0] -> p1, [1, 2] -> p2-3, [2, 0] -> p3_1.
+    Two different selections never share a name, so a second run with other pages is not silently skipped."""
+    runs: list[list[int]] = []
+    for i in idx:
+        if runs and i == runs[-1][-1] + 1:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+    label = "p" + "_".join(f"{r[0] + 1}" if len(r) == 1 else f"{r[0] + 1}-{r[-1] + 1}" for r in runs)
+    if len(label) <= 40:
+        return label
+    import hashlib
+
+    digest = hashlib.sha1(",".join(map(str, idx)).encode()).hexdigest()[:6]
+    return f"p{min(idx) + 1}-{max(idx) + 1}_{len(idx)}pages_{digest}"
+
+
 def parse_page_size(text: str) -> tuple[float, float]:
     """'a4', 'letter', '210x297mm', '8.5x11in', '595x842' (points) -> (width, height) in PDF points."""
     t = text.strip().lower()
@@ -217,12 +235,12 @@ def merge(paths: list[Path], out: Path | None, overwrite: bool) -> OutFile:
     return OutFile(target, pages=len(writer.pages))
 
 
-def extract(path: Path, pages: str, out: Path | None, overwrite: bool, suffix: str = "_pages") -> OutFile:
+def extract(path: Path, pages: str, out: Path | None, overwrite: bool) -> OutFile:
     reader = open_pdf(path)
     idx = parse_pages(pages, len(reader.pages))
     if not idx:
         raise PdfError("no pages selected")
-    target = _suffix_path(Path(os.path.abspath(path)), suffix, out)
+    target = _suffix_path(Path(os.path.abspath(path)), f"_{pages_label(idx)}", out)
     if (skip := _plan_or_skip(target, overwrite)):
         return skip
     writer = PdfWriter()
@@ -249,7 +267,7 @@ def split(path: Path, every: int | None, ranges: str | None, out_dir: Path | Non
     else:
         for part in ranges.split(","):
             idx = parse_pages(part, count)
-            groups.append((f"p{part.strip().replace(' ', '')}", idx))
+            groups.append((pages_label(idx), idx))
     folder = Path(os.path.abspath(out_dir)) if out_dir else Path(os.path.abspath(path)).parent
     results = []
     for label, idx in groups:
