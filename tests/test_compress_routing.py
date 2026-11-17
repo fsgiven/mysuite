@@ -2,13 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from mysuite.compress._parsing import (
     CODECS,
-    InvalidCompressInputError,
-    check_no_output_collisions,
     output_path_for,
+    output_paths_for,
 )
 
 
@@ -34,14 +31,14 @@ def test_all_codecs_have_an_extension_mapping():
         assert ext.startswith(".")
 
 
-def test_check_no_output_collisions_passes_for_distinct_outputs(tmp_path):
+def test_output_paths_for_keeps_distinct_outputs(tmp_path):
     a = tmp_path / "a.png"
     b = tmp_path / "b.png"
-    check_no_output_collisions([a, b], "webp")  # no raise
+    assert output_paths_for([a, b], "webp") == {a: output_path_for(a, "webp"), b: output_path_for(b, "webp")}
 
 
-def test_check_no_output_collisions_raises_on_real_collision(tmp_path):
+def test_output_paths_for_renames_a_clash_instead_of_raising(tmp_path):
     png = tmp_path / "photo.png"
     jpg = tmp_path / "photo.jpg"
-    with pytest.raises(InvalidCompressInputError):
-        check_no_output_collisions([png, jpg], "webp")
+    paths = output_paths_for([png, jpg], "webp")
+    assert paths[png] != paths[jpg]

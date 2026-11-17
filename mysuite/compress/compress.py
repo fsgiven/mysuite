@@ -1,29 +1,25 @@
 from __future__ import annotations
 
 import tempfile
-from dataclasses import dataclass
+import zlib
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from mysuite.compress._parsing import CODECS, output_path_for
+from PIL import Image
+
+from mysuite.compress._parsing import CODECS, CompressError, output_path_for
+from mysuite.compress.prep import WebImage, load_for_web, srgb_icc
 from mysuite.config import ToolPaths
 from mysuite.convert._parsing import detect_source_format
 from mysuite.utils.subprocess_utils import atomic_write_via, run
 
+__all__ = ["CompressError", "CompressOutcome", "compress_file"]
+
 _DEFAULT_DPI = 300.0
+_VECTOR = ("svg", "pdf", "eps")
 
-# Which raw file extensions each codec's own encoder accepts natively —
-# anything else gets converted first. mozjpeg's cjpeg is a traditional IJG
-# encoder: it only accepts uncompressed PPM, never JPEG/PNG/etc. directly.
-_NATIVE_INPUT_EXTENSIONS: dict[str, set[str]] = {
-    "mozjpeg": set(),
-    "webp": {".png", ".jpg", ".jpeg"},  # TIFF goes via magick: cwebp chokes on CMYK (Q2)
-    "avif": {".png", ".jpg", ".jpeg"},
-    "oxipng": {".png"},
-    "pngquant": {".png"},
-    "gifsicle": {".gif"},
-}
-
-# The extension to convert a non-native source into, per codec.
+# The file each codec's encoder reads. Every source is prepared with Pillow first (mysuite.compress.prep:
+# upright, sRGB, flattened for JPEG) and written in this format; mozjpeg's cjpeg only reads PPM.
 _PREPARE_EXTENSION: dict[str, str] = {
     "mozjpeg": ".ppm",
     "webp": ".png",
@@ -32,17 +28,29 @@ _PREPARE_EXTENSION: dict[str, str] = {
     "pngquant": ".png",
     "gifsicle": ".gif",
 }
+# Codecs without an alpha channel: transparency is flattened (white unless --background says otherwise).
+_NO_ALPHA = {"mozjpeg"}
 
 
-class CompressError(RuntimeError):
-    pass
+class _NotSmaller(Exception):
+    def __init__(self, size: int) -> None:
+        self.size = size
 
 
 @dataclass
 class CompressOutcome:
     input_path: Path
     output_path: Path
-    status: str  # "written" | "skipped_existing"
+    status: str  # "written" | "skipped_existing" | "not_smaller" (nothing written: it would be bigger)
+    bytes_before: int = 0
+    bytes_after: int = 0
+    size: tuple[int, int] = (0, 0)
+    quality: int | None = None
+    notes: list[str] = field(default_factory=list)
+
+    @property
+    def ratio(self) -> float | None:
+        return round(self.bytes_after / self.bytes_before, 3) if self.bytes_before and self.bytes_after else None
 
 
 def _tmp_sibling(input_path: Path, suffix: str) -> Path:
@@ -66,162 +74,111 @@ def _rasterize_to_png(input_path: Path, source_format: str, tools: ToolPaths) ->
         ])
     else:  # pdf or eps
         run([
-            tools.gs, "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=png16m",
+            tools.gs, "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=png16m", "-dFirstPage=1", "-dLastPage=1",
             f"-r{_DEFAULT_DPI}", f"-sOutputFile={tmp_png}", str(input_path),
         ])
     return tmp_png
 
 
-def _sharpen_to_png(
-    input_path: Path,
-    source_format: str,
-    tools: ToolPaths,
-    *,
-    radius: float,
-    sigma: float,
-    amount: float,
-    threshold: float,
-) -> Path:
-    """Applies an unsharp mask, producing a new temp PNG. Vector sources are
-    rasterized first (via _rasterize_to_png); raster sources are sharpened
-    directly."""
-    source_png = input_path
-    is_temp_source = False
-    if source_format in ("svg", "pdf", "eps"):
-        source_png = _rasterize_to_png(input_path, source_format, tools)
-        is_temp_source = True
+def _png_chunk(kind: bytes, data: bytes) -> bytes:
+    return len(data).to_bytes(4, "big") + kind + data + zlib.crc32(kind + data).to_bytes(4, "big")
 
-    tmp_out = _tmp_sibling(input_path, ".sharpened.png")
+
+def _png_add_chunks(path: Path, chunks: list[bytes]) -> None:
+    """Insert ready-made chunks right after IHDR (pngquant drops iCCP/eXIf; iCCP must come before PLTE/IDAT)."""
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or not chunks:
+        return
+    ihdr_end = 8 + 8 + int.from_bytes(data[8:12], "big") + 4
+    present = set()
+    pos = ihdr_end
+    while pos + 8 <= len(data):
+        length = int.from_bytes(data[pos:pos + 4], "big")
+        present.add(data[pos + 4:pos + 8])
+        pos += 12 + length
+    new = [c for c in chunks if c[4:8] not in present]
+    path.write_bytes(data[:ihdr_end] + b"".join(new) + data[ihdr_end:])
+
+
+def _iccp_chunk(icc: bytes) -> bytes:
+    return _png_chunk(b"iCCP", b"sRGB\x00\x00" + zlib.compress(icc))
+
+
+def _is_animated_png(path: Path) -> bool:
     try:
-        run([
-            tools.magick, str(source_png),
-            "-unsharp", f"{radius}x{sigma}+{amount}+{threshold}",
-            str(tmp_out),
-        ])
+        with Image.open(path) as im:
+            return getattr(im, "n_frames", 1) > 1
+    except Exception:  # noqa: BLE001 - not readable here: the prep step reports it properly
+        return False
+
+
+def _native(input_path: Path, source_format: str, codec: str) -> bool:
+    """Animations a codec can keep go straight to its encoder (prep keeps only the first frame)."""
+    if codec == "gifsicle" and source_format == "gif":
+        return True
+    return codec == "oxipng" and source_format == "png" and _is_animated_png(input_path)
+
+
+def _write_prepared(web: WebImage, input_path: Path, codec: str, tools: ToolPaths, sharpen: dict | None) -> Path:
+    ext = _PREPARE_EXTENSION[codec]
+    tmp = _tmp_sibling(input_path, ext)
+    image = web.image
+    if ext == ".ppm":
+        image.convert("RGB").save(tmp, format="PPM")
+    elif ext == ".gif":
+        image.save(tmp, format="GIF")
+    else:
+        image.save(tmp, format="PNG", compress_level=1, icc_profile=srgb_icc())
+    if sharpen is None:
+        return tmp
+    sharp = _tmp_sibling(input_path, ".sharpened" + ext)
+    try:
+        run([tools.magick, str(tmp),
+             "-unsharp", f"{sharpen['radius']}x{sharpen['sigma']}+{sharpen['amount']}+{sharpen['threshold']}",
+             str(sharp)])
     finally:
-        if is_temp_source:
-            source_png.unlink(missing_ok=True)
-    return tmp_out
+        tmp.unlink(missing_ok=True)
+    return sharp
 
 
-def _prepare_for_codec(
-    input_path: Path, source_format: str, codec: str, tools: ToolPaths
-) -> tuple[Path, bool]:
-    """Ensures a file in a format codec's own encoder accepts natively is
-    available, converting only when the source isn't already one — vector
-    sources are rasterized first (rsvg-convert/gs), then (if needed)
-    reformatted via magick; raster sources go straight through magick.
-    Returns (path_to_use, is_temp) — callers must unlink the path when
-    is_temp is True."""
-    native_exts = _NATIVE_INPUT_EXTENSIONS[codec]
-    if input_path.suffix.lower() in native_exts:
-        return input_path, False
-
-    prepare_ext = _PREPARE_EXTENSION[codec]
-    if source_format in ("svg", "pdf", "eps"):
-        png_path = _rasterize_to_png(input_path, source_format, tools)
-        if prepare_ext == ".png":
-            return png_path, True
-        tmp_out = _tmp_sibling(input_path, prepare_ext)
-        try:
-            run([tools.magick, str(png_path), str(tmp_out)])
-        finally:
-            png_path.unlink(missing_ok=True)
-        return tmp_out, True
-
-    tmp_out = _tmp_sibling(input_path, prepare_ext)
-    run([tools.magick, f"{input_path}[0]", "-colorspace", "sRGB", str(tmp_out)])  # CMYK etc. -> RGB (Q2)
-    return tmp_out, True
-
-
-def _compress_mozjpeg(
-    source: Path, output_path: Path, tools: ToolPaths, *,
-    quality: int | None, progressive: bool, subsample: str,
-) -> None:
-    sample = "1x1" if subsample == "4:4:4" else "2x2"
-
-    def write(tmp: Path) -> None:
-        cmd = [tools.cjpeg, "-sample", sample, "-outfile", str(tmp)]
+def _encode(codec: str, source: Path, dest: Path, tools: ToolPaths, icc_file: Path | None, s: dict) -> None:
+    quality = s["quality"]
+    if codec == "mozjpeg":
+        cmd = [tools.cjpeg, "-sample", "1x1" if s["subsample"] == "4:4:4" else "2x2", "-outfile", str(dest)]
         if quality is not None:
             cmd += ["-quality", str(quality)]
-        cmd += ["-progressive"] if progressive else ["-baseline"]
-        cmd.append(str(source))
-        run(cmd)
-
-    atomic_write_via(output_path, write)
-
-
-def _compress_webp(
-    source: Path, output_path: Path, tools: ToolPaths, *,
-    quality: int | None, lossless: bool, method: int, alpha_quality: int,
-) -> None:
-    def write(tmp: Path) -> None:
-        cmd = [tools.cwebp, "-m", str(method), "-alpha_q", str(alpha_quality)]
-        if lossless:
+        cmd += ["-progressive"] if s["progressive"] else ["-baseline"]
+        if icc_file is not None:
+            cmd += ["-icc", str(icc_file)]
+        run([*cmd, str(source)])
+    elif codec == "webp":
+        cmd = [tools.cwebp, "-m", str(s["method"]), "-alpha_q", str(s["alpha_quality"]), "-metadata", "icc,exif"]
+        if s["lossless"]:
             cmd.append("-lossless")
         cmd += ["-q", str(quality if quality is not None else 75)]
-        cmd += [str(source), "-o", str(tmp)]
-        run(cmd)
-
-    atomic_write_via(output_path, write)
-
-
-def _compress_avif(
-    source: Path, output_path: Path, tools: ToolPaths, *,
-    quality: int | None, speed: int,
-) -> None:
-    def write(tmp: Path) -> None:
-        cmd = [tools.avifenc, "-s", str(speed)]
+        run([*cmd, str(source), "-o", str(dest)])
+    elif codec == "avif":
+        cmd = [tools.avifenc, "-s", str(s["speed"])]
         if quality is not None:
             cmd += ["-q", str(quality)]
-        cmd += [str(source), str(tmp)]
-        run(cmd)
-
-    atomic_write_via(output_path, write)
-
-
-def _compress_oxipng(
-    source: Path, output_path: Path, tools: ToolPaths, *,
-    effort: int, interlace: bool,
-) -> None:
-    def write(tmp: Path) -> None:
-        cmd = [tools.oxipng, "-o", str(effort), "--strip", "safe"]
-        cmd += ["-i", "on" if interlace else "off"]
-        cmd += [str(source), "--out", str(tmp)]
-        run(cmd)
-
-    atomic_write_via(output_path, write)
-
-
-def _compress_pngquant(
-    source: Path, output_path: Path, tools: ToolPaths, *,
-    quality_range: str, speed: int, dither: bool,
-) -> None:
-    def write(tmp: Path) -> None:
-        cmd = [
-            tools.pngquant, f"--quality={quality_range}", "--speed", str(speed),
-            "--force",
-        ]
-        if not dither:
+        if icc_file is not None:
+            cmd += ["--icc", str(icc_file)]
+        run([*cmd, str(source), str(dest)])
+    elif codec == "oxipng":
+        cmd = [tools.oxipng, "-o", str(s["effort"]), "--strip", "safe", "-i", "on" if s["interlace"] else "off"]
+        run([*cmd, str(source), "--out", str(dest)])
+    elif codec == "pngquant":
+        cmd = [tools.pngquant, f"--quality={s['quality_range']}", "--speed", str(s["pngquant_speed"]), "--force"]
+        if not s["dither"]:
             cmd.append("--nofs")
-        cmd += [str(source), "-o", str(tmp)]
-        run(cmd)
-
-    atomic_write_via(output_path, write)
-
-
-def _compress_gifsicle(
-    source: Path, output_path: Path, tools: ToolPaths, *,
-    optimize_level: int, lossy: int,
-) -> None:
-    def write(tmp: Path) -> None:
-        cmd = [tools.gifsicle, f"--optimize={optimize_level}"]
-        if lossy:
-            cmd.append(f"--lossy={lossy}")
-        cmd += [str(source), "-o", str(tmp)]
-        run(cmd)
-
-    atomic_write_via(output_path, write)
+        run([*cmd, str(source), "-o", str(dest)])
+        if icc_file is not None:
+            _png_add_chunks(dest, [_iccp_chunk(icc_file.read_bytes())])
+    else:  # gifsicle
+        cmd = [tools.gifsicle, f"--optimize={s['optimize_level']}"]
+        if s["lossy"]:
+            cmd.append(f"--lossy={s['lossy']}")
+        run([*cmd, str(source), "-o", str(dest)])
 
 
 def compress_file(
@@ -229,7 +186,10 @@ def compress_file(
     codec: str,
     *,
     tools: ToolPaths,
+    output_path: Path | None = None,
     quality: int | None = None,
+    background: str | None = None,
+    allow_larger: bool = False,
     sharpen_amount: float | None = None,
     sharpen_radius: float = 2.0,
     sharpen_sigma: float = 1.0,
@@ -255,12 +215,13 @@ def compress_file(
     optimize_level: int = 3,
     lossy: int = 0,
 ) -> CompressOutcome:
-    """Re-encodes input_path via codec's specialized encoder (mozjpeg/cwebp/
-    avifenc/oxipng/pngquant/gifsicle — the same best-in-class tools
-    Squoosh.app itself uses), writing the result beside the source. If
-    sharpen_amount is given, an unsharp mask is applied before encoding.
-    Raises CompressError for an unrecognized codec/source, and
-    MysuiteToolError if an external tool invocation fails."""
+    """Re-encodes input_path with codec's specialised encoder (mozjpeg/cwebp/avifenc/oxipng/pngquant/gifsicle,
+    the tools Squoosh.app uses), beside the source unless ``output_path`` is given.
+
+    The picture is prepared first (see mysuite.compress.prep): upright, converted to sRGB (and tagged sRGB),
+    transparency flattened on ``background`` (white by default) for JPEG. A raster result that would be larger
+    than the source is not written (status ``not_smaller``) unless ``allow_larger``. Raises CompressError for an
+    unknown codec or an unreadable source, MysuiteToolError if an encoder fails."""
     if codec not in CODECS:
         raise CompressError(f"unsupported codec: {codec!r}")
 
@@ -268,52 +229,61 @@ def compress_file(
     if source_format is None:
         raise CompressError(f"unrecognized source format: {input_path}")
 
-    output_path = output_path_for(input_path, codec)
-
+    output_path = output_path or output_path_for(input_path, codec)
     if not overwrite and output_path.exists():
         return CompressOutcome(input_path, output_path, "skipped_existing")
 
-    working_path = input_path
-    working_format = source_format
+    bytes_before = input_path.stat().st_size
+    settings = {
+        "quality": quality, "progressive": progressive, "subsample": subsample, "lossless": lossless,
+        "method": method, "alpha_quality": alpha_quality, "speed": speed, "effort": effort,
+        "interlace": interlace, "quality_range": quality_range, "pngquant_speed": pngquant_speed,
+        "dither": dither, "optimize_level": optimize_level, "lossy": lossy,
+    }
+    sharpen = None if sharpen_amount is None else {
+        "amount": sharpen_amount, "radius": sharpen_radius, "sigma": sharpen_sigma, "threshold": sharpen_threshold,
+    }
+
     temps: list[Path] = []
+    notes: list[str] = []
+    size: tuple[int, int] = (0, 0)
     try:
-        if sharpen_amount is not None:
-            sharpened = _sharpen_to_png(
-                working_path, working_format, tools,
-                radius=sharpen_radius, sigma=sharpen_sigma,
-                amount=sharpen_amount, threshold=sharpen_threshold,
-            )
-            temps.append(sharpened)
-            working_path, working_format = sharpened, "png"
-
-        source, is_temp = _prepare_for_codec(working_path, working_format, codec, tools)
-        if is_temp:
+        if _native(input_path, source_format, codec) and sharpen is None:
+            source, icc_file = input_path, None
+            with Image.open(input_path) as im:
+                size = im.size
+        else:
+            raster = input_path
+            if source_format in _VECTOR:
+                raster = _rasterize_to_png(input_path, source_format, tools)
+                temps.append(raster)
+            flatten = background or ("white" if codec in _NO_ALPHA else None)
+            web = load_for_web(raster, flatten=flatten)
+            hint = " (--codec gifsicle keeps a GIF animation)" if source_format == "gif" else ""
+            notes += [n + hint if n.startswith(f"{web.frames} frames") else n for n in web.notes]
+            size = web.image.size
+            source = _write_prepared(web, input_path, codec, tools, sharpen)
             temps.append(source)
+            icc_file = _tmp_sibling(input_path, ".icc")
+            icc_file.write_bytes(srgb_icc())
+            temps.append(icc_file)
 
-        if codec == "mozjpeg":
-            _compress_mozjpeg(
-                source, output_path, tools,
-                quality=quality, progressive=progressive, subsample=subsample,
-            )
-        elif codec == "webp":
-            _compress_webp(
-                source, output_path, tools,
-                quality=quality, lossless=lossless, method=method,
-                alpha_quality=alpha_quality,
-            )
-        elif codec == "avif":
-            _compress_avif(source, output_path, tools, quality=quality, speed=speed)
-        elif codec == "oxipng":
-            _compress_oxipng(source, output_path, tools, effort=effort, interlace=interlace)
-        elif codec == "pngquant":
-            _compress_pngquant(
-                source, output_path, tools,
-                quality_range=quality_range, speed=pngquant_speed, dither=dither,
-            )
-        else:  # gifsicle
-            _compress_gifsicle(source, output_path, tools, optimize_level=optimize_level, lossy=lossy)
+        check_size = not allow_larger and source_format not in _VECTOR
+
+        def write(tmp: Path) -> None:
+            _encode(codec, source, tmp, tools, icc_file, settings)
+            produced = tmp.stat().st_size
+            if check_size and produced >= bytes_before:
+                raise _NotSmaller(produced)
+
+        try:
+            atomic_write_via(output_path, write, preserve_extension=True)
+        except _NotSmaller as exc:
+            return CompressOutcome(input_path, output_path, "not_smaller", bytes_before, exc.size, size,
+                                   quality, notes)
     finally:
         for temp in temps:
             temp.unlink(missing_ok=True)
 
-    return CompressOutcome(input_path, output_path, "written")
+    return CompressOutcome(input_path, output_path, "written", bytes_before, output_path.stat().st_size, size,
+                           quality, notes)

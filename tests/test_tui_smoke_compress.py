@@ -26,7 +26,9 @@ _COMPRESS_INDEX = next(i for i, spec in enumerate(TOOL_REGISTRY, start=1) if spe
 @pytest.fixture
 def photo(tmp_path):
     path = tmp_path / "photo.png"
-    subprocess.run(["magick", "-size", "200x200", "xc:#3388ff", str(path)], check=True)
+    # photo-like noise: a flat colour PNG is so small that the JPEG would be larger, and compress never writes that
+    subprocess.run(["magick", "-size", "200x200", "xc:#3388ff", "-attenuate", "0.4", "+noise", "Gaussian", str(path)],
+                   check=True)
     return path
 
 

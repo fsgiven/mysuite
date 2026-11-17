@@ -21,28 +21,29 @@ class InvalidCompressInputError(ValueError):
     pass
 
 
+class CompressError(RuntimeError):
+    pass
+
+
 def output_path_for(input_path: Path, codec: str) -> Path:
     """The output path for compressing input_path via codec: same folder,
     stem + "_compressed", codec's extension."""
     return input_path.with_name(f"{input_path.stem}_compressed{CODECS[codec]}")
 
 
-def check_no_output_collisions(files: list[Path], codec: str) -> None:
-    """Raises if two different input files would produce the same output path
-    for codec — e.g. photo.png and photo.jpg both compressed --codec webp
-    would both want photo_compressed.webp. Checked once up front, before any
-    compression starts, so a batch never partially clobbers itself."""
+def output_paths_for(files: list[Path], codec: str) -> dict[Path, Path]:
+    """Output path per input. When two inputs would share one output (photo.png and photo.jpg both to
+    --codec webp), each of them gets its source extension in the name instead (photo_png_compressed.webp,
+    photo_jpg_compressed.webp), so a batch never aborts over a name and never clobbers itself."""
     by_output: dict[Path, list[Path]] = {}
     for f in files:
-        key = output_path_for(f, codec).resolve()
-        by_output.setdefault(key, []).append(f)
-
-    collisions = {out: srcs for out, srcs in by_output.items() if len(srcs) > 1}
-    if collisions:
-        details = "; ".join(
-            f"{out} <- {', '.join(str(s) for s in srcs)}" for out, srcs in collisions.items()
-        )
-        raise InvalidCompressInputError(
-            f"multiple input files would produce the same output file: {details} — "
-            "compress them in separate runs or rename one first"
-        )
+        by_output.setdefault(output_path_for(f, codec).resolve(), []).append(f)
+    out: dict[Path, Path] = {}
+    for group in by_output.values():
+        for f in group:
+            if len(group) == 1:
+                out[f] = output_path_for(f, codec)
+            else:
+                tag = f.suffix.lower().lstrip(".") or "file"
+                out[f] = f.with_name(f"{f.stem}_{tag}_compressed{CODECS[codec]}")
+    return out
