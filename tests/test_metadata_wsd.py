@@ -108,3 +108,82 @@ def test_strip_on_a_pdf_uses_the_pdf_engine(tmp_path):
     raw = open(out, "rb").read()
     assert b"Secret Title" not in raw and b"Frank" not in raw              # not an incremental update that hides it
     assert PdfReader(out, strict=True).metadata is None
+
+
+# ------------------------------------------------------------------ 3. credit: IPTC Core always (exiftool); C2PA only with c2patool
+def plain(path, fmt="JPEG"):
+    profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    Image.new("RGB", (120, 90), (40, 120, 200)).save(path, format=fmt, icc_profile=profile)
+    return path
+
+
+CREDIT_ARGS = ["--author", "Jane Doe", "--copyright", "© 2026 Jane Doe", "--credit-line", "Jane Doe / Acme News",
+               "--source", "Acme Archive", "--usage-terms", "Editorial use only"]
+
+
+@pytest.mark.parametrize("name,fmt", [("p.jpg", "JPEG"), ("p.tif", "TIFF")])
+def test_credit_writes_iptc_core_with_exiftool(tmp_path, monkeypatch, name, fmt):
+    monkeypatch.setenv("PATH", "/usr/bin:/bin:/opt/homebrew/bin")          # whatever is installed, the IPTC part is always there
+    src = plain(tmp_path / name, fmt)
+    res, doc = run("metadata", "credit", src, *CREDIT_ARGS)
+    assert res.exit_code == 0, res.output
+    t = tags(doc["items"][0]["output"])
+    assert t["IPTC:By-line"] == "Jane Doe" and t["XMP-dc:Creator"] == "Jane Doe" and t["IFD0:Artist"] == "Jane Doe"
+    assert t["IPTC:CopyrightNotice"] == "© 2026 Jane Doe" and t["XMP-dc:Rights"] == "© 2026 Jane Doe"
+    assert t["IPTC:Credit"] == "Jane Doe / Acme News" and t["XMP-photoshop:Credit"] == "Jane Doe / Acme News"
+    assert t["IPTC:Source"] == "Acme Archive" and t["XMP-photoshop:Source"] == "Acme Archive"
+    assert t["XMP-xmpRights:UsageTerms"] == "Editorial use only"
+    assert any(k.startswith("ICC") for k in t)
+
+
+def test_credit_png_gets_the_xmp_and_exif_fields(tmp_path):
+    src = plain(tmp_path / "p.png", "PNG")
+    res, doc = run("metadata", "credit", src, *CREDIT_ARGS)
+    assert res.exit_code == 0, res.output
+    t = tags(doc["items"][0]["output"])
+    assert t["XMP-dc:Creator"] == "Jane Doe" and t["XMP-photoshop:Credit"] == "Jane Doe / Acme News"
+
+
+def test_credit_without_c2patool_says_c2pa_was_not_added(tmp_path, monkeypatch):
+    from mysuite.metadata import metadata
+
+    monkeypatch.setattr(metadata, "c2pa_tool", lambda tools: None)
+    src = plain(tmp_path / "p.jpg")
+    res, doc = run("metadata", "credit", src, "--author", "Jane Doe")
+    assert res.exit_code == 0, res.output
+    item = doc["items"][0]
+    assert item["status"] == "written" and item["c2pa"] == "not added: c2patool is not installed"
+    assert any("c2patool" in w for w in doc["warnings"])
+
+
+def test_credit_with_c2patool_signs_last_and_labels_the_test_certificate(tmp_path, monkeypatch):
+    """c2patool isn't installed here: a stand-in records the call and copies the file. UNVERIFIED against real c2patool."""
+    from mysuite.metadata import metadata
+
+    calls = []
+
+    def fake_run(cmd, **kw):
+        if cmd[0] == "fake-c2patool":
+            calls.append(tags(cmd[1]))                                   # the file as it is when it gets signed
+            manifest = json.loads(open(cmd[cmd.index("-m") + 1]).read())
+            assert manifest["assertions"][0]["data"]["author"][0]["name"] == "Jane Doe"
+            shutil.copyfile(cmd[1], cmd[cmd.index("-o") + 1])
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return real_run(cmd, **kw)
+
+    real_run = metadata.run
+    monkeypatch.setattr(metadata, "run", fake_run)
+    monkeypatch.setattr(metadata, "c2pa_tool", lambda tools: "fake-c2patool")
+    src = plain(tmp_path / "p.jpg")
+    res, doc = run("metadata", "credit", src, "--author", "Jane Doe", "--no-ai")
+    assert res.exit_code == 0, res.output
+    assert len(calls) == 1
+    assert calls[0]["IPTC:By-line"] == "Jane Doe"            # IPTC written BEFORE signing, so the manifest covers it
+    assert "test certificate" in doc["items"][0]["c2pa"]
+    assert tags(doc["items"][0]["output"])["XMP-plus:DataMining"].startswith("Prohibited")   # --no-ai also as XMP
+
+
+def test_credit_leaves_no_temporary_files(tmp_path):
+    src = plain(tmp_path / "p.jpg")
+    run("metadata", "credit", src, "--author", "Jane Doe")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["p.jpg", "p_credited.jpg"]
