@@ -314,6 +314,34 @@ codec = "oxipng"
     step1 = doc["items"][0]
     assert step1["status"] == "planned" and step1["result"]["items"][0]["output"].endswith("doc_rotated.pdf")
     assert doc["items"][1]["status"] == "planned"            # later steps stay symbolic
+
+
+def test_dry_run_does_not_run_a_step_whose_command_has_no_dry_run(work):
+    """The Phase 0 rule still holds for a writer without --dry-run (here `profile`): not started, said so. The PDF
+    writer before it has a real --dry-run (WS-D) and is planned."""
+    _two_page_pdf(work / "doc.pdf")
+    p = write_pipeline(work, '''
+inputs = ["doc.pdf"]
+
+[[step]]
+tool = "pdf"
+action = "rotate"
+degrees = 90
+
+[[step]]
+tool = "profile"
+to = "srgb"
+from = "inputs"
+''')
+    before = sorted(f.name for f in work.iterdir())
+    res, doc = run_pipeline(p, "--dry-run")
+    assert sorted(f.name for f in work.iterdir()) == before, "a dry run wrote files"
+    assert res.exit_code == 0, doc
+    rotate, profile = doc["items"]
+    assert rotate["status"] == "planned" and rotate["result"]["items"][0]["output"].endswith("doc_rotated.pdf")
+    assert profile["status"] == "skipped" and profile["exit_code"] is None
+    assert "--dry-run" in profile["note"] and "not run" in profile["note"]
+    assert any("step 2" in w and "not run" in w for w in doc["warnings"])
     # the real run still works
     res, real = run_pipeline(p, "--keep-intermediate")
     assert real["items"][0]["status"] == "ok" and (work / "doc_rotated.pdf").is_file()
