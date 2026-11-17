@@ -233,18 +233,23 @@ def _long_pdf(path, n):
     return path
 
 
-def test_numbering_many_pages_is_fast_and_calls_no_tool(tmp_path, monkeypatch):
+@need_rsvg
+def test_numbering_many_pages_is_fast_one_tool_call_and_the_font_is_embedded(tmp_path, monkeypatch):
     import time
 
     src = _long_pdf(tmp_path / "long.pdf", 400)
     calls = []
-    monkeypatch.setattr(ops, "run", lambda *a, **k: calls.append(a))
+    real = ops.run
+    monkeypatch.setattr(ops, "run", lambda cmd, **k: (calls.append(cmd), real(cmd, **k))[1])
     t = time.perf_counter()
     r = ops.number_pages(src, None, False, ToolPaths(), fmt="Page {n} of {total}", position="bottom-right")
-    assert time.perf_counter() - t < 10 and not calls
-    reader = PdfReader(str(r.path))
+    assert time.perf_counter() - t < 10 and len(calls) == 1               # one rsvg-convert call, not one per page
+    reader = PdfReader(str(r.path), strict=True)
     assert len(reader.pages) == 400
     assert "Page 7 of 400" in reader.pages[6].extract_text()
+    for font in reader.pages[6]["/Resources"]["/Font"].values():          # a print preflight wants embedded fonts
+        descriptor = font.get_object()["/FontDescriptor"].get_object()
+        assert any(k in descriptor for k in ("/FontFile", "/FontFile2", "/FontFile3"))
 
 
 @need_gs
