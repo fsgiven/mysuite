@@ -147,9 +147,12 @@ def _write(path: Path, writer: PdfWriter, *, strip_metadata: bool = False) -> No
     atomic_write_via(path, write, preserve_extension=True)
 
 
-def _plan_or_skip(path: Path, overwrite: bool) -> OutFile | None:
+def _plan_or_skip(path: Path, overwrite: bool, dry_run: bool = False) -> OutFile | None:
+    """skipped_existing for a file that is there (and no --overwrite); planned in a dry run; None means: write it."""
     if path.exists() and not overwrite:
         return OutFile(path, "skipped_existing")
+    if dry_run:
+        return OutFile(path, "planned")
     return None
 
 
@@ -219,12 +222,12 @@ def info(path: Path) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------- page jobs
-def merge(paths: list[Path], out: Path | None, overwrite: bool) -> OutFile:
+def merge(paths: list[Path], out: Path | None, overwrite: bool, *, dry_run: bool = False) -> OutFile:
     if len(paths) < 2:
         raise PdfError("merge needs at least two PDFs")
     target = _suffix_path(Path(os.path.abspath(paths[0])), "_merged", out)
     _refuse_inputs(target, paths)
-    if (skip := _plan_or_skip(target, overwrite)):
+    if (skip := _plan_or_skip(target, overwrite, dry_run)):
         return skip
     writer = PdfWriter()
     for p in paths:
@@ -235,13 +238,13 @@ def merge(paths: list[Path], out: Path | None, overwrite: bool) -> OutFile:
     return OutFile(target, pages=len(writer.pages))
 
 
-def extract(path: Path, pages: str, out: Path | None, overwrite: bool) -> OutFile:
+def extract(path: Path, pages: str, out: Path | None, overwrite: bool, *, dry_run: bool = False) -> OutFile:
     reader = open_pdf(path)
     idx = parse_pages(pages, len(reader.pages))
     if not idx:
         raise PdfError("no pages selected")
     target = _suffix_path(Path(os.path.abspath(path)), f"_{pages_label(idx)}", out)
-    if (skip := _plan_or_skip(target, overwrite)):
+    if (skip := _plan_or_skip(target, overwrite, dry_run)):
         return skip
     writer = PdfWriter()
     for i in idx:
@@ -250,7 +253,7 @@ def extract(path: Path, pages: str, out: Path | None, overwrite: bool) -> OutFil
     return OutFile(target, pages=len(idx))
 
 
-def split(path: Path, every: int | None, ranges: str | None, out_dir: Path | None, overwrite: bool) -> list[OutFile]:
+def split(path: Path, every: int | None, ranges: str | None, out_dir: Path | None, overwrite: bool, *, dry_run: bool = False) -> list[OutFile]:
     reader = open_pdf(path)
     count = len(reader.pages)
     if (every is None) == (ranges is None):
@@ -272,7 +275,7 @@ def split(path: Path, every: int | None, ranges: str | None, out_dir: Path | Non
     results = []
     for label, idx in groups:
         target = folder / f"{Path(path).stem}_{label}.pdf"
-        if (skip := _plan_or_skip(target, overwrite)):
+        if (skip := _plan_or_skip(target, overwrite, dry_run)):
             results.append(skip)
             continue
         writer = PdfWriter()
@@ -283,13 +286,13 @@ def split(path: Path, every: int | None, ranges: str | None, out_dir: Path | Non
     return results
 
 
-def rotate(path: Path, degrees: int, pages: str, out: Path | None, overwrite: bool) -> OutFile:
+def rotate(path: Path, degrees: int, pages: str, out: Path | None, overwrite: bool, *, dry_run: bool = False) -> OutFile:
     if degrees % 90 != 0 or degrees == 0:
         raise PdfError("degrees must be a non-zero multiple of 90 (clockwise)")
     reader = open_pdf(path)
     chosen = set(parse_pages(pages, len(reader.pages)))
     target = _suffix_path(Path(os.path.abspath(path)), "_rotated", out)
-    if (skip := _plan_or_skip(target, overwrite)):
+    if (skip := _plan_or_skip(target, overwrite, dry_run)):
         return skip
     writer = PdfWriter()
     for i, page in enumerate(reader.pages):
@@ -300,11 +303,11 @@ def rotate(path: Path, degrees: int, pages: str, out: Path | None, overwrite: bo
     return OutFile(target, pages=len(reader.pages), extra={"rotated_pages": len(chosen)})
 
 
-def resize(path: Path, size: str, out: Path | None, overwrite: bool) -> OutFile:
+def resize(path: Path, size: str, out: Path | None, overwrite: bool, *, dry_run: bool = False) -> OutFile:
     tw, th = parse_page_size(size)
     reader = open_pdf(path)
     target = _suffix_path(Path(os.path.abspath(path)), "_resized", out)
-    if (skip := _plan_or_skip(target, overwrite)):
+    if (skip := _plan_or_skip(target, overwrite, dry_run)):
         return skip
     writer = PdfWriter()
     for page in reader.pages:
@@ -323,11 +326,11 @@ def resize(path: Path, size: str, out: Path | None, overwrite: bool) -> OutFile:
     return OutFile(target, pages=len(reader.pages))
 
 
-def strip_metadata(path: Path, out: Path | None, overwrite: bool) -> OutFile:
+def strip_metadata(path: Path, out: Path | None, overwrite: bool, *, dry_run: bool = False) -> OutFile:
     """Page content only: no /Info (title, author, producer, dates), no XMP packet, no annotation authors."""
     reader = open_pdf(path)
     target = _suffix_path(Path(os.path.abspath(path)), "_stripped", out)
-    if (skip := _plan_or_skip(target, overwrite)):
+    if (skip := _plan_or_skip(target, overwrite, dry_run)):
         return skip
     writer = PdfWriter()
     for page in reader.pages:
@@ -466,10 +469,10 @@ def _esc(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _apply_overlay(path: Path, suffix: str, out: Path | None, overwrite: bool, tools: ToolPaths, make_body) -> OutFile:
+def _apply_overlay(path: Path, suffix: str, out: Path | None, overwrite: bool, tools: ToolPaths, make_body, *, dry_run: bool = False) -> OutFile:
     reader = open_pdf(path)
     target = _suffix_path(Path(os.path.abspath(path)), suffix, out)
-    if (skip := _plan_or_skip(target, overwrite)):
+    if (skip := _plan_or_skip(target, overwrite, dry_run)):
         return skip
     writer = PdfWriter()
     cache: dict[tuple, bytes] = {}
@@ -494,7 +497,7 @@ def _apply_overlay(path: Path, suffix: str, out: Path | None, overwrite: bool, t
 
 def number_pages(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths, *, position: str = "bottom-center",
                  fmt: str = "{n}", start: int = 1, size: float = 10.0, color: str = "#333333", margin: float = 28.0,
-                 pages: str = "all") -> OutFile:
+                 pages: str = "all", dry_run: bool = False) -> OutFile:
     if position not in POSITIONS:
         raise PdfError(f"unknown position {position!r} - expected one of {', '.join(POSITIONS)}")
     if not 4 <= size <= 72:
@@ -522,7 +525,7 @@ def number_pages(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths
     except UnicodeEncodeError:
         pass                                   # not in the PDF core font's character set: draw it with rsvg-convert
     else:
-        return _number_fast(path, out, overwrite, chosen, label_for, baseline, gx, size, rgb, margin)
+        return _number_fast(path, out, overwrite, chosen, label_for, baseline, gx, size, rgb, margin, dry_run)
 
     def body(i: int, total: int, w: float, h: int) -> str | None:
         if i not in chosen:
@@ -532,7 +535,7 @@ def number_pages(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths
         return (f'<text x="{x}" y="{baseline(h)}" font-family="Helvetica, Arial, sans-serif" font-size="{size}" '
                 f'fill="{_esc(color)}" text-anchor="{anchor}">{_esc(label_for(i, total))}</text>')
 
-    return _apply_overlay(path, "_numbered", out, overwrite, tools, body)
+    return _apply_overlay(path, "_numbered", out, overwrite, tools, body, dry_run=dry_run)
 
 
 # Helvetica (regular) advance widths, 1/1000 em, for printable ASCII; others count as 0.556 em.
@@ -550,14 +553,14 @@ def _pdf_string(text: str) -> bytes:
 
 
 def _number_fast(path: Path, out: Path | None, overwrite: bool, chosen: set[int], label_for, baseline, gx: float,
-                 size: float, rgb: tuple[int, int, int], margin: float) -> OutFile:
+                 size: float, rgb: tuple[int, int, int], margin: float, dry_run: bool = False) -> OutFile:
     """Page numbers written straight into each page's content with the PDF core font Helvetica (every reader has it,
     nothing is embedded): no rsvg-convert call and no overlay page per page, so 4,000 pages take seconds, not minutes."""
     from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject
 
     reader = open_pdf(path)
     target = _suffix_path(Path(os.path.abspath(path)), "_numbered", out)
-    if (skip := _plan_or_skip(target, overwrite)):
+    if (skip := _plan_or_skip(target, overwrite, dry_run)):
         return skip
     writer = PdfWriter()
     font = writer._add_object(DictionaryObject({
@@ -603,7 +606,7 @@ def _number_fast(path: Path, out: Path | None, overwrite: bool, chosen: set[int]
 
 def stamp(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths, *, text: str | None = None, logo: Path | None = None,
           position: str = "center", opacity: float = 0.25, angle: float = 0.0, size: float = 48.0, color: str = "#cc0000",
-          scale: float = 20.0, pages: str = "all") -> OutFile:
+          scale: float = 20.0, pages: str = "all", dry_run: bool = False) -> OutFile:
     if not text and not logo:
         raise PdfError("stamp needs --text and/or --logo")
     if position not in POSITIONS:
@@ -658,11 +661,11 @@ def stamp(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths, *, te
         cx, cy = _place(boxes, angle, gx, gy, w, h, margin=24.0)
         return f'<g opacity="{opacity}" transform="translate({cx} {cy}) rotate({-angle})">{"".join(parts)}</g>'
 
-    return _apply_overlay(path, "_stamped", out, overwrite, tools, body)
+    return _apply_overlay(path, "_stamped", out, overwrite, tools, body, dry_run=dry_run)
 
 
 # ---------------------------------------------------------------------------- images in/out
-def extract_images(path: Path, out_dir: Path | None, overwrite: bool) -> list[OutFile]:
+def extract_images(path: Path, out_dir: Path | None, overwrite: bool, *, dry_run: bool = False) -> list[OutFile]:
     reader = open_pdf(path)
     folder = Path(os.path.abspath(out_dir)) if out_dir else Path(os.path.abspath(path)).parent
     results = []
@@ -675,7 +678,7 @@ def extract_images(path: Path, out_dir: Path | None, overwrite: bool) -> list[Ou
         for n, image in enumerate(images, start=1):
             ext = Path(image.name).suffix or ".png"
             target = folder / f"{Path(path).stem}_p{pno}_img{n}{ext}"
-            if (skip := _plan_or_skip(target, overwrite)):
+            if (skip := _plan_or_skip(target, overwrite, dry_run)):
                 results.append(skip)
                 continue
             data = image.data
@@ -689,7 +692,7 @@ def extract_images(path: Path, out_dir: Path | None, overwrite: bool) -> list[Ou
 
 
 def render(path: Path, out_dir: Path | None, overwrite: bool, tools: ToolPaths, *, dpi: int = 150, fmt: str = "png",
-          pages: str = "all", password_free: bool = True) -> list[OutFile]:
+          pages: str = "all", password_free: bool = True, dry_run: bool = False) -> list[OutFile]:
     if not 10 <= dpi <= 1200:
         raise PdfError("dpi must be between 10 and 1200")
     if fmt not in ("png", "jpeg"):
@@ -699,13 +702,13 @@ def render(path: Path, out_dir: Path | None, overwrite: bool, tools: ToolPaths, 
     idx = parse_pages(pages, count)
     folder = Path(os.path.abspath(out_dir)) if out_dir else Path(os.path.abspath(path)).parent
     width = len(str(count))
-    gs = _need(tools.gs, "rendering pages")
+    gs = "" if dry_run else _need(tools.gs, "rendering pages")
     device = "png16m" if fmt == "png" else "jpeg"
     ext = ".png" if fmt == "png" else ".jpg"
     results = []
     for i in idx:
         target = folder / f"{Path(path).stem}_p{i + 1:0{width}d}{ext}"
-        if (skip := _plan_or_skip(target, overwrite)):
+        if (skip := _plan_or_skip(target, overwrite, dry_run)):
             results.append(skip)
             continue
 
@@ -720,7 +723,7 @@ def render(path: Path, out_dir: Path | None, overwrite: bool, tools: ToolPaths, 
 
 
 def from_images(images: list[Path], out: Path | None, overwrite: bool, *, size: str | None = None, dpi: int = 300,
-                margin_mm: float = 0.0, tools: ToolPaths | None = None) -> OutFile:
+                margin_mm: float = 0.0, tools: ToolPaths | None = None, dry_run: bool = False) -> OutFile:
     """One page per image. Raster images are placed at `dpi`; SVG files stay vectors (rsvg-convert), at their artwork
     size or fitted on the paper size."""
     if not images:
@@ -733,7 +736,7 @@ def from_images(images: list[Path], out: Path | None, overwrite: bool, *, size: 
     else:
         out = Path(os.path.abspath(out))
         target = out if out.suffix.lower() == ".pdf" else out / default_name
-    if (skip := _plan_or_skip(target, overwrite)):
+    if (skip := _plan_or_skip(target, overwrite, dry_run)):
         return skip
     paper_pt = parse_page_size(size) if size and size.lower() != "fit" else None
     pages: list[PageObject] = []
@@ -792,14 +795,14 @@ def _svg_page(p: Path, paper_pt: tuple[float, float] | None, margin_mm: float, t
     return sheet
 
 
-def compress(path: Path, level: str, out: Path | None, overwrite: bool, tools: ToolPaths) -> OutFile:
+def compress(path: Path, level: str, out: Path | None, overwrite: bool, tools: ToolPaths, *, dry_run: bool = False) -> OutFile:
     levels = {"screen": "/screen", "ebook": "/ebook", "printer": "/printer", "prepress": "/prepress"}
     if level not in levels:
         raise PdfError(f"level must be one of {', '.join(levels)}")
     open_pdf(path)
-    gs = _need(tools.gs, "compressing a PDF")
     target = _suffix_path(Path(os.path.abspath(path)), "_compressed", out)
-    if (skip := _plan_or_skip(target, overwrite)):
+    gs = "" if dry_run else _need(tools.gs, "compressing a PDF")
+    if (skip := _plan_or_skip(target, overwrite, dry_run)):
         return skip
 
     before = Path(path).stat().st_size
