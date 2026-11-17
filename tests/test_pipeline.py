@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from mysuite.cli import app
+from mysuite.config import ToolPaths
 from mysuite.pipeline import engine
 from tests.helpers import SIMPLE_SVG, runner
 
@@ -323,3 +324,69 @@ codec = "oxipng"
     # the real run still works
     res, real = run_pipeline(p, "--keep-intermediate")
     assert real["items"][0]["status"] == "ok" and (work / "doc_rotated.pdf").is_file()
+
+
+@pytest.mark.skipif(not (Path(ToolPaths().cjpeg).exists() and shutil.which("magick")),
+                    reason="requires mozjpeg and ImageMagick")
+def test_a_compress_step_that_did_not_shrink_hands_the_original_on(tmp_path):
+    """compress writes nothing when the result would be bigger (status not_smaller); the next step must still
+    get a file: the original, unchanged."""
+    import numpy as np
+    from PIL import Image
+
+    rng = np.random.default_rng(1)
+    Image.fromarray(rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)).save(tmp_path / "small.jpg", quality=20)
+    text = '''
+inputs = ["small.jpg"]
+
+[[step]]
+tool = "compress"
+codec = "mozjpeg"
+quality = 100
+
+[[step]]
+tool = "convert"
+to = "png"
+'''
+    res, doc = run_pipeline(write_pipeline(tmp_path, text))
+    assert res.exit_code == 0, doc
+    first, second = doc["items"]
+    assert first["status"] == "ok" and first["result"]["items"][0]["status"] == "not_smaller"
+    assert first["outputs"] == [str(tmp_path / "small.jpg")]
+    assert not (tmp_path / "small_compressed.jpg").exists()
+    assert second["status"] == "ok" and (tmp_path / "small.png").exists()
+
+
+@pytest.mark.skipif(not (Path(ToolPaths().cjpeg).exists() and shutil.which("magick") and shutil.which("cwebp")),
+                    reason="requires mozjpeg, cwebp and ImageMagick")
+def test_a_file_passed_through_a_not_smaller_step_is_not_cleaned_up(tmp_path):
+    """Step 1 writes small.jpg, compress declines (not_smaller) and hands it on, step 3 converts it. small.jpg
+    is an intermediate that a later step replaced, but compress used it as its own result: it must survive."""
+    import numpy as np
+    from PIL import Image
+
+    rng = np.random.default_rng(2)
+    Image.fromarray(rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)).save(tmp_path / "small.png")
+    text = '''
+inputs = ["small.png"]
+
+[[step]]
+tool = "convert"
+to = "jpeg"
+quality = 20
+
+[[step]]
+tool = "compress"
+codec = "mozjpeg"
+quality = 100
+
+[[step]]
+tool = "convert"
+to = "webp"
+'''
+    res, doc = run_pipeline(write_pipeline(tmp_path, text))
+    assert res.exit_code == 0, doc
+    assert doc["items"][1]["result"]["items"][0]["status"] == "not_smaller"
+    assert doc["items"][1]["outputs"] == [str(tmp_path / "small.jpg")]
+    assert (tmp_path / "small.jpg").exists() and (tmp_path / "small.webp").exists()
+    assert (tmp_path / "small.png").exists()
