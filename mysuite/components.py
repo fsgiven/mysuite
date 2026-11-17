@@ -1,9 +1,12 @@
 """On-demand components: the mysuite install stays small, heavier parts are fetched once, when you ask.
 
-    mysuite install list          what exists, what it costs, whether it is installed
-    mysuite install vision --yes  build the macOS text-recognition/QR helper (needs the Xcode command line tools)
-    mysuite install shield --yes  a private Python environment with PyTorch + the VAE weights for `mysuite shield` (~1.4 GB)
-    mysuite install remove NAME   delete it again
+    mysuite install                 what exists, what it costs, whether it is installed
+    mysuite install tools --yes     the missing command-line tools, via Homebrew
+    mysuite install vision --yes    build the macOS text-recognition/QR helper (needs the Xcode command line tools)
+    mysuite install cutout --yes    build the macOS subject cut-out helper (macOS 14+)
+    mysuite install shield --yes    a private Python environment with PyTorch + the VAE weights for `mysuite shield` (~1.4 GB)
+    mysuite install NAME --dry-run  show what would be fetched or built, change nothing
+    mysuite install NAME --remove   delete it again
 
 Everything lives under ~/.cache/mysuite (override: MYSUITE_HOME): `bin/` (helpers, put on PATH for mysuite itself),
 `envs/<name>/` (private virtual environments, never your own), `models/` (downloaded weights). Nothing is fetched
@@ -22,7 +25,8 @@ from typing import Callable
 
 PACKAGE = Path(__file__).resolve().parent
 
-# Pinned so a later change upstream cannot silently change what gets downloaded.
+# The VAE weights are pinned to one revision, so a later upload upstream cannot change what gets downloaded.
+# The Python packages are minimum versions (pip picks the newest that fits).
 SHIELD_PACKAGES = ["torch>=2.2", "diffusers>=0.30", "safetensors", "numpy", "pillow", "huggingface_hub"]
 SHIELD_VAE_REPO = "stabilityai/sd-vae-ft-mse"
 SHIELD_VAE_REVISION = "31f26fdeee1355a5c34592e401dd41e45d25a493"
@@ -86,7 +90,7 @@ def _run(cmd: list[str], log: Callable[[str], None], cwd: Path | None = None) ->
 
 
 # ------------------------------------------------------------------------------ native helpers
-def _native(name: str, binary: str) -> Component:
+def _native(name: str, binary: str, macos: str) -> Component:
     def installed() -> bool:
         return (bin_dir() / binary).exists() or shutil.which(binary) is not None
 
@@ -110,16 +114,16 @@ def _native(name: str, binary: str) -> Component:
 
     return Component(
         name=name, title=binary, size="about 1 MB, a few seconds to build",
-        needs="macOS 13+ and the Xcode command line tools (swiftc)", platforms=("Darwin",),
+        needs=f"macOS {macos}+ and the Xcode command line tools (swiftc)", platforms=("Darwin",),
         steps=[f"compile mysuite/native/{name}/main.swift with swiftc", f"install the binary to {bin_dir() / binary}"],
         is_installed=installed, install=install, remove=remove,
         description="",
     )
 
 
-_cutout = _native("cutout", "mysuite-cutout")
+_cutout = _native("cutout", "mysuite-cutout", "14")          # Vision's foreground masks are macOS 14+
 _cutout.description = "Subject isolation for `mysuite cutout` (macOS Vision)."
-_vision = _native("vision", "mysuite-vision")
+_vision = _native("vision", "mysuite-vision", "13")
 _vision.description = "Text recognition and QR/barcode reading for `mysuite ocr` and `mysuite qr read` (macOS Vision)."
 
 
