@@ -1,9 +1,21 @@
 # mysuite
 
-> Local, offline CLI toolbox for quick image/logo jobs (export, convert, cutout, watermark, metadata, compress, enhance). Every command supports --json.
+> Local, offline CLI toolbox for quick image, logo and PDF jobs. Every command supports --json; `mysuite schema` describes every option (with its allowed values and examples) for agents.
 
 - [Agent guide](AGENTS.md): rules, which command to use, examples, exit codes
-- [Command reference](docs/agents/COMMANDS.md): every option, generated from the CLI
+- [Command reference](docs/agents/COMMANDS.md): every option, its choices and examples, generated from the CLI
 - [README](README.md): install, tools, status and honest limits
 - [Roadmap](docs/ROADMAP.md)
-- Run `mysuite schema` for a machine-readable description of all commands and the result format
+- Run `mysuite schema` (or `mysuite schema COMMAND`) for a machine-readable description of all commands and the result format
+
+## Tools
+
+- Logos and brand files: `export` (sizes, formats, RGB/CMYK, variants), `kit` (favicon, app icons, social), `variants`, `tokens` (design tokens), `svg` (import PDF/AI/EPS, optimise), `profiles` (a company's defaults)
+- Images: `convert`, `compress`, `transform` (crop, resize, pad, round), `print` (exact sizes and dpi), `profile` (sRGB/CMYK), `watermark`, `cutout` (macOS), `enhance`
+- Documents: `pdf` (merge, split, extract, rotate, number, stamp, render, compress, strip …)
+- Privacy and ownership: `metadata` (strip, credit, declare, apply), `mark` (invisible ownership mark)
+- Check and compare (read only): `inspect`, `dupes`, `diff`, `contrast`, `ocr` (macOS), `qr` (make and read)
+- Files: `rename`, `sheet` (contact sheets)
+- Several tools in one go: `pipeline` (`run`, `validate`)
+- Setup: `doctor` (which tools are installed), `install` (optional components), `testcases` (sample files), `mcp` (MCP server, `--slim` for small models), `schema`
+- Experimental, kept in the background: `relight` (classical relighting), `shield` (experimental protection against AI editing; 1.4 GB download)
