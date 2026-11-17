@@ -113,7 +113,7 @@ def test_exif_rotated_photo_gets_logo_in_the_visually_correct_corner(tmp_path, l
 
 @need_magick
 def test_invalid_position_and_missing_logo_are_clean_errors(base, logo, tmp_path):
-    assert cli("watermark", base, "--logo", logo, "--position", "middle").exit_code != 0
+    assert cli("watermark", base, "--logo", logo, "--position", "nowhere").exit_code != 0
     assert cli("watermark", base, "--logo", tmp_path / "nope.png").exit_code != 0
 
 

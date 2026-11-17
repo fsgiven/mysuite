@@ -10,10 +10,10 @@ from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import InvalidInputError, detect_source_format, resolve_input_files
 from mysuite.doctor import require_tools
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 from mysuite.watermark._parsing import output_path_for
-from mysuite.watermark.watermark import GRAVITY_BY_POSITION, WatermarkError, watermark_file
+from mysuite.watermark.watermark import GRAVITY_BY_POSITION, WatermarkError, resolve_position, watermark_file
 
 
 @jsonout.with_json("watermark")
@@ -28,10 +28,19 @@ def watermark(
     ),
     position: str = typer.Option(
         "bottom-right", "--position", "-p",
-        help=f"One of: {', '.join(GRAVITY_BY_POSITION)}.",
+        help=f"One of: {', '.join(GRAVITY_BY_POSITION)}; or top, bottom, left, right, middle.",
     ),
     scale: float = typer.Option(
-        15.0, "--scale", help="Logo width as a percentage of the base image's width."
+        15.0, "--scale", help="Logo size as a percentage of the photo's width (or height, with --size-by height)."
+    ),
+    size_by: str = typer.Option(
+        "width", "--size-by",
+        help="What --scale is measured against: the photo's width (default) or its height (for a logo that "
+        "should be the same height on landscape and portrait photos).",
+    ),
+    quality: Optional[int] = typer.Option(
+        None, "--quality", min=1, max=100,
+        help="JPEG/WebP quality, 1-100. Default: a JPEG keeps the source's own quality (4:2:0 subsampling).",
     ),
     opacity: int = typer.Option(
         80, "--opacity", min=0, max=100, help="Watermark blend opacity, 0-100."
@@ -55,9 +64,11 @@ def watermark(
         False, "--quiet", "-q", help="Suppress per-file progress, print summary only."
     ),
 ) -> None:
-    if position not in GRAVITY_BY_POSITION:
-        log_error(f"unknown --position {position!r} — expected one of {', '.join(GRAVITY_BY_POSITION)}")
-        raise typer.Exit(1)
+    try:
+        position = resolve_position(position)
+    except WatermarkError as exc:
+        log_error(escape(str(exc)))
+        raise typer.Exit(1) from exc
 
     try:
         input_files = resolve_input_files(inputs, recursive=recursive)
@@ -99,7 +110,7 @@ def watermark(
             outcome = watermark_file(
                 input_path, logo_path=logo, tools=config.tools,
                 position=position, scale_pct=scale, opacity=opacity, margin_pct=margin,
-                overwrite=overwrite,
+                size_by=size_by, quality=quality, overwrite=overwrite,
             )
         except (WatermarkError, MysuiteToolError) as exc:
             failures.append((input_path, str(exc)))
@@ -118,6 +129,8 @@ def watermark(
             total_written += 1
             if not quiet:
                 log_step(escape(str(outcome.output_path)))
+            for note in outcome.notes:
+                log_note(f"{escape(input_path.name)}: {escape(note)}")
 
     if not quiet:
         console.print(

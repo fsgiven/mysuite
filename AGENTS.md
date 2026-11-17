@@ -40,7 +40,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | a colour removed from the logo (made transparent) | `… --recolor "#dd0000=transparent"` (`none` works too; only as the TO side) |
 | a favicon / macOS icon | `mysuite export logo.svg --preset favicon` / `--preset macos-icon` |
 | a different file format | `mysuite convert FILE --to png,webp --json` (`jpg`/`tif` work too; two sources with one name, `x.png` + `x.jpg`, become `x_png.webp` + `x_jpg.webp`) |
-| a watermark | `mysuite watermark FILE --logo logo.svg --position bottom-right --json` |
+| a watermark | `mysuite watermark FILE --logo logo.svg --position bottom-right --json` (`bottom`/`top`/`left`/`right`/`middle` work; `--size-by height` for the same logo height on portrait and landscape; a JPEG keeps its quality, `--quality` to change it) |
 | a transparent background (subject cut-out, macOS) | `mysuite cutout FILE --json` |
 | smaller files | `mysuite compress FILE --codec mozjpeg\|webp\|avif\|oxipng\|pngquant\|gifsicle --json` |
 | a web-ready image under a size limit ("max 500 KB, 2048 px") | `mysuite compress FILE --preset save-for-web --json` or `--codec mozjpeg --max-kb 500 --max-size 2048` (always upright, sRGB, no GPS/serials, copyright kept; never bigger than the original: `status: "not_smaller"`; items carry `bytes_before`/`bytes_after`/`ratio`) |

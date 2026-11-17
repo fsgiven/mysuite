@@ -1584,8 +1584,10 @@ Stamp a logo onto image(s) as a visible, scalable watermark.
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories, to watermark (non-recursive unless --recursive).
 - `--logo / -l` (path) Image (or SVG) to stamp onto each input as the watermark.
-- `--position / -p` (str, default `bottom-right`) One of: top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right.
-- `--scale` (float, default `15.0`) Logo width as a percentage of the base image's width.
+- `--position / -p` (str, default `bottom-right`) One of: top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right; or top, bottom, left, right, middle.
+- `--scale` (float, default `15.0`) Logo size as a percentage of the photo's width (or height, with --size-by height).
+- `--size-by` (str, default `width`) What --scale is measured against: the photo's width (default) or its height (for a logo that should be the same height on landscape and portrait photos).
+- `--quality` (int range) JPEG/WebP quality, 1-100. Default: a JPEG keeps the source's own quality (4:2:0 subsampling).
 - `--opacity` (int range, default `80`) Watermark blend opacity, 0-100.
 - `--margin` (float, default `3.0`) Breathing room from the edge, as a percentage of the base image's width.
 - `--recursive / -r` (boolean) Recurse into subdirectories for folder inputs.
