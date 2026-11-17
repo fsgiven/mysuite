@@ -19,6 +19,7 @@ PDFS = typer.Argument(..., exists=True, readable=True, dir_okay=False, help="PDF
 OUT = typer.Option(None, "--out", "-o", help="Output file (or folder). Default: beside the source with a suffix.")
 OVERWRITE = typer.Option(False, "--overwrite/--no-overwrite", help="Overwrite existing outputs.")
 CONFIG = typer.Option(None, "--config", "-c", help="Explicit path to mysuite.toml.")
+DRY_RUN = typer.Option(False, "--dry-run", help="Show what would be written, write nothing.")
 
 
 def _check_inputs(paths: list[Path]) -> list[Path]:
@@ -48,6 +49,9 @@ def _report(source, results: list[ops.OutFile], quiet: bool = False) -> int:
         if r.status == "failed":
             failed += 1
             log_error(escape(r.note or f"{r.path.name} failed"))
+        elif r.status == "planned":
+            if not quiet:
+                console.print(f"[dim]would write {escape(str(r.path))}[/dim]")
         elif r.status == "skipped_existing":
             if not quiet:
                 console.print(f"[dim]— exists, skipped: {escape(str(r.path))}[/dim]")
@@ -103,9 +107,9 @@ def info(files: List[Path] = PDFS) -> None:
 
 @app.command("merge", help="Join PDFs into one, in the order given.")
 @jsonout.with_json("pdf-merge")
-def merge(files: List[Path] = PDFS, out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+def merge(files: List[Path] = PDFS, out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
     try:
-        result = ops.merge(_check_inputs(files), out, overwrite)
+        result = ops.merge(_check_inputs(files), out, overwrite, dry_run=dry_run)
     except ops.PdfError as exc:
         jsonout.add_item(status="failed", error=str(exc))
         log_error(escape(str(exc)))
@@ -119,36 +123,36 @@ def merge(files: List[Path] = PDFS, out: Optional[Path] = OUT, overwrite: bool =
 def split(files: List[Path] = PDFS, every: Optional[int] = typer.Option(None, "--every", help="Pages per piece."),
           ranges: Optional[str] = typer.Option(None, "--ranges", help="Comma-separated page ranges, one file each."),
           out: Optional[Path] = typer.Option(None, "--out", "-o", help="Output folder (default: beside the source)."),
-          overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
-    _run_each(_check_inputs(files), lambda p: ops.split(p, every, ranges, out, overwrite), quiet)
+          overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+    _run_each(_check_inputs(files), lambda p: ops.split(p, every, ranges, out, overwrite, dry_run=dry_run), quiet)
 
 
 @app.command("extract", help="Keep only some pages: --pages '1,3-5,8-' (also last, odd, even).")
 @jsonout.with_json("pdf-extract")
 def extract(files: List[Path] = PDFS, pages: str = typer.Option(..., "--pages", help="Pages to keep, e.g. '1,3-5,8-', last, odd, even."),
-            out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
-    _run_each(_check_inputs(files), lambda p: ops.extract(p, pages, out, overwrite), quiet)
+            out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+    _run_each(_check_inputs(files), lambda p: ops.extract(p, pages, out, overwrite, dry_run=dry_run), quiet)
 
 
 @app.command("rotate", help="Rotate pages clockwise by 90/180/270 degrees.")
 @jsonout.with_json("pdf-rotate")
 def rotate(files: List[Path] = PDFS, degrees: int = typer.Option(90, "--degrees", help="Clockwise: 90, 180 or 270 (or -90)."),
            pages: str = typer.Option("all", "--pages", help="Which pages (default all)."),
-           out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
-    _run_each(_check_inputs(files), lambda p: ops.rotate(p, degrees, pages, out, overwrite), quiet)
+           out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+    _run_each(_check_inputs(files), lambda p: ops.rotate(p, degrees, pages, out, overwrite, dry_run=dry_run), quiet)
 
 
 @app.command("resize", help="Fit every page onto a standard size (a4, letter, 210x297mm …), centred, content scaled to fit.")
 @jsonout.with_json("pdf-resize")
 def resize(files: List[Path] = PDFS, size: str = typer.Option(..., "--size", help="a0-a6, b5, letter, legal, tabloid, or 210x297mm / 8.5x11in / 595x842 (points)."),
-           out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
-    _run_each(_check_inputs(files), lambda p: ops.resize(p, size, out, overwrite), quiet)
+           out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+    _run_each(_check_inputs(files), lambda p: ops.resize(p, size, out, overwrite, dry_run=dry_run), quiet)
 
 
 @app.command("strip", help="Remove title, author, producer, dates and the XMP packet.")
 @jsonout.with_json("pdf-strip")
-def strip(files: List[Path] = PDFS, out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
-    _run_each(_check_inputs(files), lambda p: ops.strip_metadata(p, out, overwrite), quiet)
+def strip(files: List[Path] = PDFS, out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+    _run_each(_check_inputs(files), lambda p: ops.strip_metadata(p, out, overwrite, dry_run=dry_run), quiet)
 
 
 @app.command("number", help="Add page numbers. Format may use {n} and {total}, e.g. 'Page {n} of {total}'.")
@@ -159,10 +163,10 @@ def number(files: List[Path] = PDFS, position: str = typer.Option("bottom-center
            size: float = typer.Option(10.0, "--size", help="Font size in points (4-72)."),
            color: str = typer.Option("#333333", "--color", help="Text colour."),
            pages: str = typer.Option("all", "--pages", help="Which pages get a number."),
-           out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+           out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
     tools = _tools()
     _run_each(_check_inputs(files), lambda p: ops.number_pages(p, out, overwrite, tools, position=position, fmt=format, start=start,
-                                                               size=size, color=color, pages=pages), quiet)
+                                                               size=size, color=color, pages=pages, dry_run=dry_run), quiet)
 
 
 @app.command("stamp", help="Stamp text and/or a logo on pages (e.g. DRAFT, CONFIDENTIAL), with opacity and angle.")
@@ -176,19 +180,19 @@ def stamp(files: List[Path] = PDFS, text: Optional[str] = typer.Option(None, "--
           color: str = typer.Option("#cc0000", "--color", help="Text colour."),
           scale: float = typer.Option(20.0, "--scale", help="Logo width in percent of the page width."),
           pages: str = typer.Option("all", "--pages", help="Which pages."),
-          out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+          out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
     tools = _tools()
     if logo:
         _check_inputs([logo])
     _run_each(_check_inputs(files), lambda p: ops.stamp(p, out, overwrite, tools, text=text, logo=logo, position=position, opacity=opacity,
-                                                         angle=angle, size=size, color=color, scale=scale, pages=pages), quiet)
+                                                         angle=angle, size=size, color=color, scale=scale, pages=pages, dry_run=dry_run), quiet)
 
 
 @app.command("images", help="Extract the embedded pictures of a PDF as files.")
 @jsonout.with_json("pdf-images")
 def images(files: List[Path] = PDFS, out: Optional[Path] = typer.Option(None, "--out", "-o", help="Output folder."),
-           overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
-    _run_each(_check_inputs(files), lambda p: ops.extract_images(p, out, overwrite), quiet)
+           overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+    _run_each(_check_inputs(files), lambda p: ops.extract_images(p, out, overwrite, dry_run=dry_run), quiet)
 
 
 @app.command("render", help="Turn pages into PNG/JPEG images at a chosen resolution (Ghostscript).")
@@ -197,9 +201,9 @@ def render(files: List[Path] = PDFS, dpi: int = typer.Option(150, "--dpi", help=
            format: str = typer.Option("png", "--format", help="png or jpeg."),
            pages: str = typer.Option("all", "--pages", help="Which pages."),
            out: Optional[Path] = typer.Option(None, "--out", "-o", help="Output folder."),
-           overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+           overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
     tools = _tools()
-    _run_each(_check_inputs(files), lambda p: ops.render(p, out, overwrite, tools, dpi=dpi, fmt=format, pages=pages), quiet)
+    _run_each(_check_inputs(files), lambda p: ops.render(p, out, overwrite, tools, dpi=dpi, fmt=format, pages=pages, dry_run=dry_run), quiet)
 
 
 @app.command("from-images", help="Make a PDF from images (one page each), optionally fitted on a paper size.")
@@ -208,9 +212,9 @@ def from_images(files: List[Path] = typer.Argument(..., exists=True, readable=Tr
                 size: Optional[str] = typer.Option(None, "--size", help="Paper size (a4, letter, 210x297mm …); default: each page is its image's size."),
                 dpi: int = typer.Option(300, "--dpi", help="Resolution used for the pages."),
                 margin: float = typer.Option(0.0, "--margin", help="Margin in mm when --size is used."),
-                out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+                out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
     try:
-        result = ops.from_images(_check_inputs(files), out, overwrite, size=size, dpi=dpi, margin_mm=margin, tools=_tools())
+        result = ops.from_images(_check_inputs(files), out, overwrite, size=size, dpi=dpi, margin_mm=margin, tools=_tools(), dry_run=dry_run)
     except ops.PdfError as exc:
         jsonout.add_item(status="failed", error=str(exc))
         log_error(escape(str(exc)))
@@ -222,6 +226,6 @@ def from_images(files: List[Path] = typer.Argument(..., exists=True, readable=Tr
 @app.command("compress", help="Make a PDF smaller (Ghostscript): screen < ebook < printer < prepress. A result that is not smaller is not written (status not_smaller).")
 @jsonout.with_json("pdf-compress")
 def compress(files: List[Path] = PDFS, level: str = typer.Option("ebook", "--level", help="screen (smallest), ebook, printer, prepress (best quality)."),
-             out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
+             out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
     tools = _tools()
-    _run_each(_check_inputs(files), lambda p: ops.compress(p, level, out, overwrite, tools), quiet)
+    _run_each(_check_inputs(files), lambda p: ops.compress(p, level, out, overwrite, tools, dry_run=dry_run), quiet)

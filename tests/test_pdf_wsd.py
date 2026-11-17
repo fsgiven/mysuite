@@ -282,3 +282,23 @@ def test_numbering_rejects_a_bad_colour(tmp_path):
     src = _long_pdf(tmp_path / "doc.pdf", 1)
     with pytest.raises(ops.PdfError, match="colour"):
         ops.number_pages(src, None, False, ToolPaths(), color="not-a-colour")
+
+
+# ------------------------------------------------------------------ 8. --dry-run on every PDF command that writes
+@pytest.mark.parametrize("args", [
+    ["merge", "{a}", "{b}"], ["split", "{a}", "--every", "1"], ["extract", "{a}", "--pages", "1"], ["rotate", "{a}"],
+    ["resize", "{a}", "--size", "a4"], ["strip", "{a}"], ["number", "{a}"], ["stamp", "{a}", "--text", "DRAFT"],
+    ["images", "{a}"], ["render", "{a}"], ["from-images", "{png}"], ["compress", "{a}"],
+])
+def test_every_pdf_writer_has_a_dry_run_that_writes_nothing(tmp_path, args):
+    a = make_pdf(tmp_path / "a.pdf", [(200, 200), (200, 300)])
+    b = make_pdf(tmp_path / "b.pdf", [(200, 200)])
+    png = tmp_path / "p.png"
+    Image.new("RGB", (50, 50), "blue").save(png)
+    before = sorted(p.name for p in tmp_path.iterdir())
+    argv = [x.format(a=a, b=b, png=png) for x in args]
+    res, doc = run_pdf(*argv, "--dry-run")
+    assert res.exit_code == 0, res.output
+    assert sorted(p.name for p in tmp_path.iterdir()) == before
+    assert doc["items"] and all(i["status"] == "planned" for i in doc["items"]), doc["items"]
+    assert all(i.get("output") for i in doc["items"])
