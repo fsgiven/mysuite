@@ -688,6 +688,10 @@ def extract_images(path: Path, out_dir: Path | None, overwrite: bool, *, dry_run
 
             atomic_write_via(target, write, preserve_extension=True)
             results.append(OutFile(target, extra={"page": pno}))
+    if not results:
+        results.append(OutFile(Path(os.path.abspath(path)), "no_images", pages=len(reader.pages),
+                               note="no embedded pictures in this PDF (text and vector drawings are not pictures; "
+                                    "use pdf render to turn pages into images)"))
     return results
 
 
@@ -695,8 +699,9 @@ def render(path: Path, out_dir: Path | None, overwrite: bool, tools: ToolPaths, 
           pages: str = "all", password_free: bool = True, dry_run: bool = False) -> list[OutFile]:
     if not 10 <= dpi <= 1200:
         raise PdfError("dpi must be between 10 and 1200")
+    fmt = "jpeg" if fmt == "jpg" else fmt
     if fmt not in ("png", "jpeg"):
-        raise PdfError("format must be png or jpeg")
+        raise PdfError("format must be png, jpeg or jpg")
     reader = open_pdf(path)
     count = len(reader.pages)
     idx = parse_pages(pages, count)

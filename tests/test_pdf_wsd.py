@@ -353,3 +353,22 @@ def test_compress_max_size_on_a_small_file_says_so(heavy, tmp_path):
 def test_compress_level_and_max_size_together_is_an_error(heavy):
     res, doc = run_pdf("compress", heavy, "--max-size", "1MB", "--level", "screen")
     assert res.exit_code != 0
+
+
+# ------------------------------------------------------------------ 10/11. render jpg alias; an empty `pdf images` says so
+@need_gs
+def test_render_accepts_jpg(three, tmp_path):
+    res, doc = run_pdf("render", three, "--format", "jpg", "--pages", "1", "--dpi", "30")
+    assert res.exit_code == 0, res.output
+    assert doc["items"][0]["output"].endswith("doc_p1.jpg")
+
+
+def test_pdf_images_with_no_pictures_says_so(tmp_path):
+    w = PdfWriter()
+    w.add_blank_page(200, 200)
+    src = tmp_path / "text_only.pdf"
+    w.write(str(src))
+    res, doc = run_pdf("images", src)
+    assert res.exit_code == 0
+    assert doc["items"][0]["status"] == "no_images" and "no embedded pictures" in doc["items"][0]["note"]
+    assert "no embedded pictures" in " ".join(doc["warnings"])

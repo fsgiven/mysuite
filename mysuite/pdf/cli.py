@@ -33,7 +33,7 @@ def _report(source, results: list[ops.OutFile], quiet: bool = False) -> int:
     failed = 0
     for r in results:
         item: dict = dict(input=source, status=r.status)
-        if r.status != "not_smaller":                      # nothing was written, so there is no output file
+        if r.status not in ("not_smaller", "no_images"):   # nothing was written, so there is no output file
             item["output"] = r.path
         if r.pages is not None:
             item["pages"] = r.pages
@@ -44,7 +44,7 @@ def _report(source, results: list[ops.OutFile], quiet: bool = False) -> int:
         if r.note and r.status != "failed":
             jsonout.add_warning(f"{r.path.name}: {r.note}")
             log_note(escape(f"{r.path.name}: {r.note}"))
-        if r.status == "not_smaller":
+        if r.status in ("not_smaller", "no_images"):
             continue
         if r.status == "failed":
             failed += 1
@@ -198,7 +198,7 @@ def images(files: List[Path] = PDFS, out: Optional[Path] = typer.Option(None, "-
 @app.command("render", help="Turn pages into PNG/JPEG images at a chosen resolution (Ghostscript).")
 @jsonout.with_json("pdf-render")
 def render(files: List[Path] = PDFS, dpi: int = typer.Option(150, "--dpi", help="Resolution, 10-1200."),
-           format: str = typer.Option("png", "--format", help="png or jpeg."),
+           format: Literal["png", "jpeg", "jpg"] = typer.Option("png", "--format", help="png, jpeg (or jpg)."),
            pages: str = typer.Option("all", "--pages", help="Which pages."),
            out: Optional[Path] = typer.Option(None, "--out", "-o", help="Output folder."),
            overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
