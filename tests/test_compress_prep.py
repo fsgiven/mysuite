@@ -181,3 +181,15 @@ def test_cli_batch_with_a_name_clash_writes_both(tmp_path):
     assert res.exit_code == 0, doc
     outs = sorted(Path(i["output"]).name for i in doc["items"] if i.get("output"))
     assert outs == ["photo_jpg_compressed.webp", "photo_png_compressed.webp"]
+
+
+@need_cwebp
+def test_a_folder_run_skips_earlier_compressed_outputs(tmp_path):
+    rng = np.random.default_rng(9)
+    Image.fromarray(rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)).save(tmp_path / "photo.png")
+    Image.fromarray(rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)).save(tmp_path / "old_compressed.png")
+    res = runner.invoke(app, ["compress", str(tmp_path), "--codec", "webp", "--json"])
+    doc = json.loads(res.stdout)
+    assert [Path(i["input"]).name for i in doc["items"]] == ["photo.png"]
+    named = runner.invoke(app, ["compress", str(tmp_path / "old_compressed.png"), "--codec", "webp", "--json"])
+    assert [Path(i["input"]).name for i in json.loads(named.stdout)["items"]] == ["old_compressed.png"]
