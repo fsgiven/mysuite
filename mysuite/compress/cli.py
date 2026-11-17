@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
@@ -30,6 +31,15 @@ _TOOL_ATTR_BY_CODEC: dict[str, str] = {
 }
 
 
+def _choice(name: str, values) -> type[Enum]:
+    """A str Enum: Typer turns it into a Choice, so the schema lists the values and a typo is a usage error."""
+    return Enum(name, [(v, v) for v in values], type=str)
+
+
+def _v(value):
+    return value.value if isinstance(value, Enum) else value
+
+
 def _kb(n: int) -> str:
     return f"{n / 1_000_000:.1f} MB" if n >= 1_000_000 else f"{max(n / 1000, 0.1):.1f} KB" if n < 10_000 \
         else f"{n / 1000:.0f} KB"
@@ -38,6 +48,10 @@ def _kb(n: int) -> str:
 def _saved(outcome) -> str:
     ratio = outcome.ratio or 1.0
     return f"{(1 - ratio) * 100:.0f}% smaller" if ratio < 1 else f"{(ratio - 1) * 100:.0f}% larger"
+
+
+_Codec = _choice("Codec", CODECS)
+_Subsample = _choice("Subsample", ("4:2:0", "4:4:4"))
 
 
 @jsonout.with_json("compress")
@@ -56,7 +70,7 @@ def compress(
     list_presets: bool = typer.Option(
         False, "--list-presets", help="List available compress presets and exit."
     ),
-    codec: Optional[str] = typer.Option(
+    codec: Optional[_Codec] = typer.Option(
         None, "--codec",
         help=f"Target codec: {', '.join(CODECS)}. Required unless --preset supplies one.",
     ),
@@ -91,7 +105,7 @@ def compress(
     progressive: Optional[bool] = typer.Option(
         None, "--progressive/--baseline", help="[mozjpeg] Progressive vs. baseline JPEG encoding (default progressive)."
     ),
-    subsample: Optional[str] = typer.Option(
+    subsample: Optional[_Subsample] = typer.Option(
         None, "--subsample", help="[mozjpeg] Chroma subsampling: 4:4:4 or 4:2:0 (default 4:2:0)."
     ),
     # webp
@@ -190,10 +204,10 @@ def compress(
         preset = active_profile.compress_preset
 
     explicit = {
-        "codec": codec, "quality": quality, "max_kb": max_kb, "max_size": max_size,
+        "codec": _v(codec), "quality": quality, "max_kb": max_kb, "max_size": max_size,
         "sharpen_amount": sharpen_amount, "sharpen_radius": sharpen_radius,
         "sharpen_sigma": sharpen_sigma, "sharpen_threshold": sharpen_threshold,
-        "progressive": progressive, "subsample": subsample,
+        "progressive": progressive, "subsample": _v(subsample),
         "lossless": lossless, "method": method, "alpha_quality": alpha_quality,
         "speed": speed,
         "effort": effort, "interlace": interlace,

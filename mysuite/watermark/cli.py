@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
@@ -12,8 +13,28 @@ from mysuite.doctor import require_tools
 from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
+
+
+def _choice(name: str, values) -> type[Enum]:
+    """A str Enum: Typer turns it into a Choice, so the schema lists the values and a typo is a usage error."""
+    return Enum(name, [(v, v) for v in values], type=str)
+
+
+def _v(value):
+    return value.value if isinstance(value, Enum) else value
 from mysuite.watermark._parsing import output_path_for
-from mysuite.watermark.watermark import GRAVITY_BY_POSITION, WatermarkError, resolve_position, watermark_file
+from mysuite.watermark.watermark import (
+    GRAVITY_BY_POSITION,
+    POSITIONS,
+    SIZE_BY,
+    WatermarkError,
+    resolve_position,
+    watermark_file,
+)
+
+
+_Position = _choice("Position", POSITIONS)
+_SizeBy = _choice("SizeBy", SIZE_BY)
 
 
 @jsonout.with_json("watermark")
@@ -26,14 +47,14 @@ def watermark(
         ..., "--logo", "-l", exists=True, readable=True,
         help="Image (or SVG) to stamp onto each input as the watermark.",
     ),
-    position: str = typer.Option(
+    position: _Position = typer.Option(
         "bottom-right", "--position", "-p",
         help=f"One of: {', '.join(GRAVITY_BY_POSITION)}; or top, bottom, left, right, middle.",
     ),
     scale: float = typer.Option(
         15.0, "--scale", help="Logo size as a percentage of the photo's width (or height, with --size-by height)."
     ),
-    size_by: str = typer.Option(
+    size_by: _SizeBy = typer.Option(
         "width", "--size-by",
         help="What --scale is measured against: the photo's width (default) or its height (for a logo that "
         "should be the same height on landscape and portrait photos).",
@@ -64,8 +85,9 @@ def watermark(
         False, "--quiet", "-q", help="Suppress per-file progress, print summary only."
     ),
 ) -> None:
+    size_by = _v(size_by)
     try:
-        position = resolve_position(position)
+        position = resolve_position(_v(position))
     except WatermarkError as exc:
         log_error(escape(str(exc)))
         raise typer.Exit(1) from exc

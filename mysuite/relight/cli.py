@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
@@ -14,11 +15,25 @@ from mysuite.utils.console import console, log_error, log_note, log_step
 _RASTER = {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp", ".gif"}
 
 
+def _choice(name: str, values) -> type[Enum]:
+    """A str Enum: Typer turns it into a Choice, so the schema lists the values and a typo is a usage error."""
+    return Enum(name, [(v, v) for v in values], type=str)
+
+
+def _v(value):
+    return value.value if isinstance(value, Enum) else value
+
+
+_Preset = _choice("Preset", PRESETS)
+_Direction = _choice("Direction", DIRECTIONS)
+_Format = _choice("Format", (*FORMATS, "jpeg"))
+
+
 @jsonout.with_json("relight")
 def relight(
     inputs: List[Path] = typer.Argument(..., exists=True, readable=True, help="Photos/images to relight (raster formats)."),
-    preset: Optional[str] = typer.Option(None, "--preset", help=f"Lighting preset: {', '.join(PRESETS)}. Other flags override it."),
-    direction: Optional[str] = typer.Option(None, "--direction", help=f"Where the light comes from: {', '.join(DIRECTIONS)}. Default top-left."),
+    preset: Optional[_Preset] = typer.Option(None, "--preset", help=f"Lighting preset: {', '.join(PRESETS)}. Other flags override it."),
+    direction: Optional[_Direction] = typer.Option(None, "--direction", help=f"Where the light comes from: {', '.join(DIRECTIONS)}. Default top-left."),
     angle: Optional[float] = typer.Option(None, "--angle", help="Compass degrees the light comes FROM (0 top, 90 right, 180 bottom, 270 left); beats --direction."),
     height: Optional[float] = typer.Option(None, "--height", help="Light elevation in degrees, 1-90 (90 = straight on, low = raking). Default 40."),
     intensity: Optional[float] = typer.Option(None, "--intensity", help="How strongly the light shapes the picture, 0-3. Default 0.9."),
@@ -27,7 +42,7 @@ def relight(
     depth: Optional[float] = typer.Option(None, "--depth", help="How pronounced the pseudo-3D is, 0-5. Default 1."),
     specular: Optional[float] = typer.Option(None, "--specular", help="Sheen, 0 = matte. Default 0."),
     color: Optional[str] = typer.Option(None, "--color", help="Tint of the light, e.g. '#ffb36b' (warm) or '#9ec5ff' (cool)."),
-    output_format: str = typer.Option("png", "--format", help=f"Output format: {', '.join(FORMATS)} (jpg flattens transparency on white)."),
+    output_format: _Format = typer.Option("png", "--format", help=f"Output format: {', '.join(FORMATS)} (jpg flattens transparency on white)."),
     quality: int = typer.Option(90, "--quality", min=1, max=100, help="JPEG/WebP quality, 1-100."),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Recurse into subdirectories."),
     overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite", help="Overwrite existing outputs."),
@@ -35,7 +50,8 @@ def relight(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Print only the summary."),
 ) -> None:
     """Experimental, classical relighting (no AI model): a lighting nudge for products, cut-outs and logos."""
-    output_format = {"jpeg": "jpg"}.get(output_format.lower(), output_format.lower())
+    preset, direction = _v(preset), _v(direction)
+    output_format = {"jpeg": "jpg"}.get(_v(output_format), _v(output_format))
     try:
         if output_format not in FORMATS:
             raise RelightError(f"--format must be one of {', '.join(FORMATS)}, not {output_format!r}")
