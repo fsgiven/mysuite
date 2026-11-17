@@ -4,8 +4,10 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from PIL import Image, ImageFile, UnidentifiedImageError
+
 from mysuite.config import ToolPaths
-from mysuite.convert._parsing import TARGET_EXTENSIONS, detect_source_format, output_path_for
+from mysuite.convert._parsing import TARGET_EXTENSIONS, detect_source_format, normalize_target, output_path_for
 from mysuite.utils.subprocess_utils import atomic_write_via, run
 
 # ImageMagick's format-token prefix for each target format's write path
@@ -46,6 +48,34 @@ class ConvertOutcome:
     note: str | None = None  # something the user should know, e.g. "page 1 of 3 only"
 
 
+def _check_readable(input_path: Path, source_format: str) -> str | None:
+    """A readable error instead of ImageMagick's stderr for a file that is not a picture. Returns a note for a
+    truncated (incomplete) raster file, which is still converted (the missing part comes out grey)."""
+    try:
+        size = input_path.stat().st_size
+    except OSError as exc:
+        raise ConversionError(f"can't read {input_path.name}: {exc.strerror or exc}") from exc
+    if size == 0:
+        raise ConversionError(f"{input_path.name} is empty (0 bytes): not an image")
+    if source_format in ("svg", "pdf", "eps"):
+        return None
+    try:
+        with Image.open(input_path) as im:
+            try:
+                im.load()
+            except OSError as exc:
+                if "truncated" in str(exc).lower() or "broken data stream" in str(exc).lower():
+                    return "the file is truncated (incomplete); the missing part is filled with grey"
+                raise
+    except (UnidentifiedImageError, SyntaxError) as exc:
+        raise ConversionError(f"{input_path.name} is not an image mysuite can read (or it is damaged)") from exc
+    except OSError as exc:
+        raise ConversionError(f"{input_path.name} is not an image mysuite can read (or it is damaged): {exc}") from exc
+    except Image.DecompressionBombError as exc:
+        raise ConversionError(f"{input_path.name} is too large to open safely: {exc}") from exc
+    return None
+
+
 def _frame_count(input_path: Path, tools: ToolPaths) -> int:
     try:
         result = run([tools.magick, "identify", "-format", "%p\\n", str(input_path)])
@@ -71,11 +101,13 @@ def convert_file(
     quality: int | None = None,
     background: str | None = None,
     overwrite: bool = False,
+    output_path: Path | None = None,
 ) -> ConvertOutcome:
     """Converts input_path to target_format, writing the result beside the
     source (same folder, same stem, new extension). Raises ConversionError for
     an unsupported/undetectable format or a no-op same-format request, and
     MysuiteToolError if an external tool invocation fails."""
+    target_format = normalize_target(target_format)
     if target_format not in TARGET_EXTENSIONS:
         raise ConversionError(f"unsupported target format: {target_format!r}")
 
@@ -83,7 +115,7 @@ def convert_file(
     if source_format is None:
         raise ConversionError(f"unrecognized source format: {input_path}")
 
-    output_path = output_path_for(input_path, target_format)
+    output_path = output_path or output_path_for(input_path, target_format)
 
     if (
         input_path.parent.resolve() == output_path.parent.resolve()
@@ -96,14 +128,18 @@ def convert_file(
     if not overwrite and output_path.exists():
         return ConvertOutcome(input_path, output_path, "skipped_existing")
 
+    notes: list[str] = []
+    truncated = _check_readable(input_path, source_format)
+    if truncated:
+        notes.append(truncated)
+
     # Single-image targets can hold one frame/page. Say so rather than silently
     # dropping the rest (FINDING V1/V2).
-    note = None
     if source_format in ("pdf", "gif", "tiff", "webp") and target_format not in _MULTI_FRAME_TARGETS:
         frames = _frame_count(input_path, tools)
         if frames > 1:
             what = "page" if source_format == "pdf" else "frame"
-            note = f"{frames} {what}s in the source; only the first was converted to {target_format}"
+            notes.append(f"{frames} {what}s in the source; only the first was converted to {target_format}")
 
     if source_format == "svg":
         _convert_from_svg(
@@ -117,7 +153,7 @@ def convert_file(
     else:
         _raster_to_raster(input_path, output_path, target_format, tools, quality=quality, background=background)
 
-    return ConvertOutcome(input_path, output_path, "written", note)
+    return ConvertOutcome(input_path, output_path, "written", "; ".join(notes) or None)
 
 
 def _svg_to_pdf(input_path: Path, output_path: Path, dpi: float, tools: ToolPaths) -> None:

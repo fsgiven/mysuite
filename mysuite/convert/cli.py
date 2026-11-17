@@ -8,10 +8,11 @@ import typer
 from rich.markup import escape
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.convert._parsing import (
+    TARGET_ALIASES,
     TARGET_EXTENSIONS,
     InvalidInputError,
-    check_no_output_collisions,
-    output_path_for,
+    normalize_target,
+    output_paths_for,
     resolve_input_files,
 )
 from mysuite.convert.converter import ConversionError, convert_file
@@ -30,7 +31,8 @@ def convert(
     ),
     to: str = typer.Option(
         ..., "--to", "-t",
-        help="Comma-separated target format(s), e.g. webp or png,pdf.",
+        help="Comma-separated target format(s), e.g. webp or png,pdf: "
+        f"{', '.join(sorted(TARGET_EXTENSIONS))} (jpg and tif work too).",
     ),
     quality: Optional[int] = typer.Option(
         None, "--quality", min=0, max=100, help="JPEG/WebP quality, 0-100."
@@ -65,12 +67,12 @@ def convert(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    target_formats = parse_csv(to) or []
+    target_formats = list(dict.fromkeys(normalize_target(t) for t in (parse_csv(to) or [])))
     unknown = set(target_formats) - set(TARGET_EXTENSIONS)
     if unknown:
         log_error(
             f"unknown target format(s): {', '.join(sorted(unknown))} — "
-            f"expected one of {', '.join(sorted(TARGET_EXTENSIONS))}"
+            f"expected one of {', '.join(sorted(TARGET_EXTENSIONS))} (or {', '.join(sorted(TARGET_ALIASES))})"
         )
         raise typer.Exit(1)
 
@@ -82,17 +84,12 @@ def convert(
 
     require_tools(config.tools, "convert")
 
-    for target_format in target_formats:
-        try:
-            check_no_output_collisions(input_files, target_format)
-        except InvalidInputError as exc:
-            log_error(str(exc))
-            raise typer.Exit(1) from exc
+    outputs = {t: output_paths_for(input_files, t) for t in target_formats}
 
     if dry_run:
         for input_path in input_files:
             for target_format in target_formats:
-                output_path = output_path_for(input_path, target_format)
+                output_path = outputs[target_format][input_path]
                 jsonout.add_item(input=input_path, output=output_path, format=target_format, status="planned")
                 if not quiet:
                     console.print(f"[dim]{escape(str(input_path))} -> {escape(str(output_path))}[/dim]")
@@ -112,6 +109,7 @@ def convert(
                     input_path, target_format,
                     tools=config.tools, dpi=dpi, quality=quality,
                     background=background, overwrite=overwrite,
+                    output_path=outputs[target_format][input_path],
                 )
             except (ConversionError, MysuiteToolError) as exc:
                 failures.append((input_path, target_format, str(exc)))
@@ -125,8 +123,6 @@ def convert(
                 status="skipped_existing" if outcome.status == "skipped_existing" else "written",
                 note=outcome.note,
             )
-            if outcome.note:
-                jsonout.add_warning(f"{input_path}: {outcome.note}")
             if outcome.status == "skipped_existing":
                 total_skipped += 1
                 if not quiet:
@@ -135,8 +131,8 @@ def convert(
                 total_written += 1
                 if not quiet:
                     log_step(escape(str(outcome.output_path)))
-                if outcome.note:  # shown even with --quiet: it means data was left out
-                    log_note(f"{escape(str(input_path))}: {escape(outcome.note)}")
+            if outcome.note:  # shown even with --quiet: it means data was left out (log_note also records it)
+                log_note(f"{escape(str(input_path))}: {escape(outcome.note)}")
 
     if not quiet:
         console.print(

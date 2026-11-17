@@ -145,7 +145,9 @@ def test_collisions_existing_outputs_and_folder_batches(tmp_path):
     (tmp_path / "a").mkdir()
     subprocess.run(["magick", "-size", "10x10", "xc:red", str(tmp_path / "a" / "x.png")], check=True)
     subprocess.run(["magick", "-size", "10x10", "xc:blue", str(tmp_path / "a" / "x.jpg")], check=True)
-    assert cli("convert", tmp_path / "a", "--to", "webp").exit_code != 0       # x.png + x.jpg -> x.webp twice
-    (tmp_path / "a" / "x.jpg").unlink()
+    assert cli("convert", tmp_path / "a", "--to", "webp").exit_code == 0       # x.png + x.jpg: x_png.webp, x_jpg.webp
+    assert (tmp_path / "a" / "x_png.webp").exists() and (tmp_path / "a" / "x_jpg.webp").exists()
+    for name in ("x.jpg", "x_png.webp", "x_jpg.webp"):         # outputs would be inputs of the next run
+        (tmp_path / "a" / name).unlink()
     assert cli("convert", tmp_path / "a", "--to", "webp", "-q").exit_code == 0
     assert "skipped" in cli("convert", tmp_path / "a", "--to", "webp").stdout.lower() or True

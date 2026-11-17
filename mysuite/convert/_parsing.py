@@ -36,11 +36,20 @@ TARGET_EXTENSIONS: dict[str, str] = {
     "ico": ".ico",
 }
 
+# Spellings people type for a target, mapped to the canonical name (`--to jpg` is `--to jpeg`).
+TARGET_ALIASES: dict[str, str] = {"jpg": "jpeg", "tif": "tiff"}
+
 RASTER_FORMATS = {"png", "jpeg", "webp", "tiff", "bmp", "gif"}
 
 
 class InvalidInputError(ValueError):
     pass
+
+
+def normalize_target(name: str) -> str:
+    """`JPG` -> `jpeg`, `tif` -> `tiff`; other names are only lower-cased."""
+    name = name.strip().lower()
+    return TARGET_ALIASES.get(name, name)
 
 
 def detect_source_format(path: Path) -> str | None:
@@ -101,22 +110,18 @@ def resolve_input_files(inputs: list[Path], *, recursive: bool = False) -> list[
     return resolved
 
 
-def check_no_output_collisions(files: list[Path], target_format: str) -> None:
-    """Raises if two different input files would produce the same output path
-    for target_format — e.g. logo.png and logo.jpg both converted --to webp
-    would both want logo.webp. Checked once up front, before any conversion
-    starts, so a batch never partially clobbers itself."""
+def output_paths_for(files: list[Path], target_format: str) -> dict[Path, Path]:
+    """Output path per input. Two inputs that would share an output (logo.png and logo.jpg both --to webp)
+    each get their source extension in the name instead (logo_png.webp, logo_jpg.webp): the batch goes on."""
     by_output: dict[Path, list[Path]] = {}
     for f in files:
-        key = output_path_for(f, target_format).resolve()
-        by_output.setdefault(key, []).append(f)
-
-    collisions = {out: srcs for out, srcs in by_output.items() if len(srcs) > 1}
-    if collisions:
-        details = "; ".join(
-            f"{out} <- {', '.join(str(s) for s in srcs)}" for out, srcs in collisions.items()
-        )
-        raise InvalidInputError(
-            f"multiple input files would produce the same output file: {details} — "
-            "convert them in separate runs or rename one first"
-        )
+        by_output.setdefault(output_path_for(f, target_format).resolve(), []).append(f)
+    out: dict[Path, Path] = {}
+    for group in by_output.values():
+        for f in group:
+            if len(group) == 1:
+                out[f] = output_path_for(f, target_format)
+            else:
+                tag = f.suffix.lower().lstrip(".") or "file"
+                out[f] = f.with_name(f"{f.stem}_{tag}{TARGET_EXTENSIONS[target_format]}")
+    return out
