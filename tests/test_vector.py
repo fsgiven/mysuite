@@ -276,6 +276,13 @@ from = "previous"
 """)
     result = cli("pipeline", "run", plan, "--json")
     assert result.exit_code == 0, result.output
+    # the plain import is an intermediate file: optimise replaced it, so a successful run removes it
+    assert (tmp_path / "brand.min.svg").exists() and not (tmp_path / "brand.svg").exists()
+    assert json.loads(result.stdout)["items"][0]["removed"] == [str(tmp_path / "brand.svg")]
+    plan.write_text("keep_intermediate = true\n" + plan.read_text())
+    (tmp_path / "brand.min.svg").unlink()
+    result = cli("pipeline", "run", plan, "--json")
+    assert result.exit_code == 0, result.output
     assert (tmp_path / "brand.svg").exists() and (tmp_path / "brand.min.svg").exists()
     bad = tmp_path / "bad.toml"
     bad.write_text('inputs = ["x"]\n[[step]]\ntool = "svg"\naction = "explode"\n')

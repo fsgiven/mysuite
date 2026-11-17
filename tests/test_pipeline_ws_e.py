@@ -229,3 +229,52 @@ def test_with_overwrite_nothing_is_removed(work):
     assert res.exit_code == 0, doc
     assert (work / "pic_transformed.png").is_file() and doc["items"][0]["removed"] == []
     assert "overwrite" in " ".join(doc["warnings"])
+
+
+# --------------------------------------- svg import -> optimise (CI-only test in test_vector.py needs poppler)
+def _fake_import(monkeypatch):
+    """Stand in for `svg import` (which needs pdftocairo): write brand.svg like the real child would."""
+    real = engine._run_child
+
+    def run_child(argv, cwd, profile=None):
+        if argv[:2] != ["svg", "import"]:
+            return real(argv, cwd, profile)
+        src = Path(argv[-1])
+        out = src.with_suffix(".svg")
+        out.write_text(SIMPLE_SVG)
+        return 0, {"schema_version": 1, "command": "svg-import", "ok": True, "exit_code": 0, "warnings": [], "errors": [],
+                   "items": [{"input": str(src), "output": str(out), "status": "written"}]}, ""
+    monkeypatch.setattr(engine, "_run_child", run_child)
+
+
+IMPORT_OPTIMISE = '''
+inputs = ["brand.ai"]
+{extra}
+[[step]]
+tool = "svg"
+action = "import"
+[[step]]
+tool = "svg"
+action = "optimise"
+verify = false
+'''
+
+
+@need
+def test_import_then_optimise_removes_the_plain_import_by_default(work, monkeypatch):
+    _fake_import(monkeypatch)
+    (work / "brand.ai").write_bytes(b"%PDF-1.4 stand-in")
+    res, doc = run_pipeline(write(work, IMPORT_OPTIMISE.format(extra="")))
+    assert res.exit_code == 0, doc
+    assert (work / "brand.min.svg").is_file() and not (work / "brand.svg").exists()
+    assert doc["items"][0]["removed"] == [str(work / "brand.svg")]
+    assert (work / "brand.ai").is_file()
+
+
+@need
+def test_import_then_optimise_keeps_both_with_keep_intermediate(work, monkeypatch):
+    _fake_import(monkeypatch)
+    (work / "brand.ai").write_bytes(b"%PDF-1.4 stand-in")
+    res, doc = run_pipeline(write(work, IMPORT_OPTIMISE.format(extra="keep_intermediate = true")))
+    assert res.exit_code == 0, doc
+    assert (work / "brand.svg").is_file() and (work / "brand.min.svg").is_file()
