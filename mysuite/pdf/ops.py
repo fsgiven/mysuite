@@ -228,8 +228,8 @@ def _cs_name(cs: Any) -> str:
     if isinstance(cs, list) and cs:
         kind = str(cs[0]).lstrip("/")
         if kind == "ICCBased":
-            n = cs[1].get_object().get("/N")
-            return f"ICCBased({ {1: 'Gray', 3: 'RGB', 4: 'CMYK'}.get(int(n), n) })"
+            n = cs[1].get_object().get("/N") if hasattr(cs[1], "get_object") else (cs[1] or {}).get("/N")
+            return f"ICCBased({ {1: 'Gray', 3: 'RGB', 4: 'CMYK'}.get(int(n), n) if n is not None else '?' })"
         if kind == "Separation":
             return f"Separation({str(cs[1]).lstrip('/')})"
         if kind == "Indexed":
@@ -476,7 +476,17 @@ def strip_metadata(path: Path, out: Path | None, overwrite: bool, *, dry_run: bo
             # name, which the form needs, so widgets keep it.
             if annot.get("/Subtype") != "/Widget" and "/T" in annot:
                 del annot["/T"]
-    writer.metadata = None          # no /Info in the trailer at all (pypdf would otherwise add its /Producer)
+            for key in ("/M", "/CreationDate"):                 # when it was written says when you worked on it
+                if key in annot:
+                    del annot[key]
+    # placed artwork (images and forms from Photoshop, Illustrator, InDesign) carries its own XMP packet
+    for obj in list(writer._objects):
+        if obj is not None and hasattr(obj, "get") and obj.get("/Subtype") in ("/Image", "/Form"):
+            for key in ("/Metadata", "/PieceInfo"):
+                if key in obj:
+                    del obj[key]
+    writer.metadata = None
+    writer.compress_identical_objects(remove_duplicates=False, remove_unreferenced=True)   # the detached XMP streams too          # no /Info in the trailer at all (pypdf would otherwise add its /Producer)
 
     def write(tmp: Path) -> None:
         with open(tmp, "wb") as fh:
@@ -618,7 +628,12 @@ def _apply_overlay(path: Path, suffix: str, out: Path | None, overwrite: bool, t
             cache[key] = _overlay_pdf(w, h, body, tools)
         overlay = PdfReader(io.BytesIO(cache[key])).pages[0]
         writer.add_page(page)
-        writer.pages[-1].merge_page(overlay)
+        # the overlay is drawn from (0, 0); a page whose MediaBox starts elsewhere needs it moved there
+        left, bottom = float(page.mediabox.left), float(page.mediabox.bottom)
+        if left or bottom:
+            writer.pages[-1].merge_transformed_page(overlay, Transformation().translate(left, bottom))
+        else:
+            writer.pages[-1].merge_page(overlay)
     _write(target, writer)
     return OutFile(target, pages=total)
 
@@ -953,7 +968,34 @@ def _raster_page(p: Path, paper_pt: tuple[float, float] | None, dpi: int, margin
         sheet.paste(fitted, ((pw - fitted.width) // 2, (ph - fitted.height) // 2))
         flat = sheet
     buf = io.BytesIO()
-    flat.save(buf, format="PDF", resolution=float(dpi))
+    if Path(p).suffix.lower() in (".jpg", ".jpeg"):
+        flat.save(buf, format="PDF", resolution=float(dpi), quality=95, subsampling=0)    # a photo: JPEG, high quality
+        return PdfReader(io.BytesIO(buf.getvalue())).pages[0]
+    return _lossless_page(flat, dpi)
+
+
+def _lossless_page(image: Image.Image, dpi: int) -> PageObject:
+    """A page with the picture embedded losslessly (Flate). Pillow's PDF writer stores RGB as a q75 JPEG, which smears
+    logos, screenshots and line art."""
+    from pypdf.generic import DecodedStreamObject, NameObject, NumberObject
+
+    w_pt, h_pt = image.width / dpi * 72, image.height / dpi * 72
+    xobj = DecodedStreamObject()
+    xobj.set_data(image.convert("RGB").tobytes())
+    xobj.update({NameObject("/Type"): NameObject("/XObject"), NameObject("/Subtype"): NameObject("/Image"),
+                 NameObject("/Width"): NumberObject(image.width), NameObject("/Height"): NumberObject(image.height),
+                 NameObject("/ColorSpace"): NameObject("/DeviceRGB"), NameObject("/BitsPerComponent"): NumberObject(8)})
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=w_pt, height=h_pt)
+    ref = writer._add_object(xobj.flate_encode())
+    from pypdf.generic import DictionaryObject
+
+    page[NameObject("/Resources")] = DictionaryObject({NameObject("/XObject"): DictionaryObject({NameObject("/Im0"): ref})})
+    content = DecodedStreamObject()
+    content.set_data(f"q {w_pt:.4f} 0 0 {h_pt:.4f} 0 0 cm /Im0 Do Q".encode())
+    page[NameObject("/Contents")] = writer._add_object(content)
+    buf = io.BytesIO()
+    writer.write(buf)
     return PdfReader(io.BytesIO(buf.getvalue())).pages[0]
 
 

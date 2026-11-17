@@ -411,3 +411,61 @@ def test_info_preflight_sees_embedded_and_missing_fonts_and_boxes(tmp_path):
     assert "Times-Roman" in pre["fonts_not_embedded"] and any("Helvetica" in f for f in pre["fonts"])
     assert not any("Helvetica" in f for f in pre["fonts_not_embedded"])
     assert pre["trim_box"] is True and pre["bleed_box"] is True
+
+
+# ------------------------------------------------------------------ review follow-ups
+@need_gs
+@need_rsvg
+def test_a_stamp_lands_right_on_a_page_whose_box_does_not_start_at_zero(tmp_path):
+    from pypdf.generic import ArrayObject, FloatObject, NameObject
+
+    src = tmp_path / "page.pdf"
+    Image.new("RGB", (600, 400), "white").save(src, format="PDF", resolution=72.0)
+    w = PdfWriter(clone_from=str(src))
+    w.pages[0][NameObject("/MediaBox")] = ArrayObject([FloatObject(100), FloatObject(100), FloatObject(600), FloatObject(400)])
+    shifted = tmp_path / "shifted.pdf"
+    w.write(str(shifted))
+    _, doc = run_pdf("stamp", shifted, "--text", "CONFIDENTIAL", "--opacity", "1", "--color", "#ff0000", "--position", "top-right", "--size", "30")
+    (l, t, r, b), (pw, ph) = _red_box(doc["items"][0]["output"], tmp_path, "s")
+    assert pw - 24 - 12 <= r <= pw - 10 and 10 <= t <= 24 + 12    # in the top-right corner of the visible 500x300 page
+
+
+def test_from_images_keeps_png_pages_sharp(tmp_path):
+    import io as _io
+
+    im = Image.new("RGB", (200, 200), "white")
+    for x in range(0, 200, 2):
+        im.paste((0, 0, 0), (x, 0, x + 1, 200))          # 1 px lines: JPEG q75 4:2:0 smears them
+    src = tmp_path / "lines.png"
+    im.save(src)
+    _, doc = run_pdf("from-images", src)
+    xobj = list(PdfReader(doc["items"][0]["output"]).pages[0]["/Resources"]["/XObject"].values())[0].get_object()
+    assert xobj["/Filter"] != "/DCTDecode"                # lossless, not a q75 JPEG
+    data = list(PdfReader(doc["items"][0]["output"]).pages[0].images)[0].image.convert("RGB")
+    diff = sum(abs(a - b) for a, b in zip(data.tobytes(), im.tobytes())) / (200 * 200 * 3)
+    assert diff < 1.0
+
+
+def test_pdf_strip_removes_xmp_on_images_and_annotation_dates(tmp_path):
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject, TextStringObject
+
+    src = tmp_path / "doc.pdf"
+    Image.new("RGB", (100, 100), "white").save(src, format="PDF")
+    w = PdfWriter(clone_from=str(src))
+    img = list(w.pages[0]["/Resources"]["/XObject"].values())[0].get_object()
+    xmp = DecodedStreamObject()
+    xmp.set_data(b"<x:xmpmeta>Frank Photoshop secret-camera</x:xmpmeta>")
+    img[NameObject("/Metadata")] = w._add_object(xmp)
+    note = DictionaryObject({NameObject("/Type"): NameObject("/Annot"), NameObject("/Subtype"): NameObject("/Text"),
+                             NameObject("/T"): TextStringObject("Frank"), NameObject("/M"): TextStringObject("D:20260101"),
+                             NameObject("/CreationDate"): TextStringObject("D:20260101")})
+    w.pages[0][NameObject("/Annots")] = w._add_object(__import__("pypdf").generic.ArrayObject([w._add_object(note)]))
+    dirty = tmp_path / "dirty.pdf"
+    w.write(str(dirty))
+    _, doc = run_pdf("strip", dirty)
+    raw = open(doc["items"][0]["output"], "rb").read()
+    assert b"secret-camera" not in raw and b"Frank" not in raw and b"D:20260101" not in raw
+
+
+def test_preflight_survives_an_iccbased_space_without_n(tmp_path):
+    assert ops._cs_name(["/ICCBased", {}]) .startswith("ICCBased")
