@@ -114,3 +114,34 @@ def test_split_ranges_are_named_by_the_pages_they_hold(three, tmp_path):
     _, doc = run_pdf("split", three, "--ranges", "last, 1-2", "--out", tmp_path / "r")
     names = [i["output"].rsplit("/", 1)[1] for i in doc["items"]]
     assert names == ["doc_p3.pdf", "doc_p1-2.pdf"]
+
+
+# ------------------------------------------------------------------ 4. corner stamps stay on the page
+def _red_box(pdf, tmp_path, name):
+    import subprocess
+
+    png = tmp_path / f"{name}.png"
+    subprocess.run(["gs", "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=png16m", "-r72", f"-sOutputFile={png}", str(pdf)], check=True)
+    with Image.open(png) as im:
+        rgb = im.convert("RGB")
+        mask = Image.eval(rgb.getchannel("R"), lambda v: 255 if v > 150 else 0)
+        g = Image.eval(rgb.getchannel("G"), lambda v: 255 if v < 90 else 0)
+        from PIL import ImageChops
+        return ImageChops.multiply(mask, g).getbbox(), rgb.size
+
+
+@need_gs
+@need_rsvg
+@pytest.mark.parametrize("position", ["bottom-right", "top-left", "bottom-left", "top-right"])
+@pytest.mark.parametrize("angle", ["0", "30"])
+def test_a_corner_stamp_is_not_clipped(tmp_path, position, angle):
+    white = Image.new("RGB", (600, 400), "white")
+    src = tmp_path / "page.pdf"
+    white.save(src, format="PDF", resolution=72.0)
+    common = ["--text", "CONFIDENTIAL", "--opacity", "1", "--color", "#ff0000", "--size", "40", "--angle", angle, "--overwrite"]
+    _, c = run_pdf("stamp", src, "--position", "center", *common, "-o", tmp_path / "center.pdf")
+    _, k = run_pdf("stamp", src, "--position", position, *common, "-o", tmp_path / "corner.pdf")
+    (cl, ct, cr, cb), _ = _red_box(c["items"][0]["output"], tmp_path, "c")
+    (kl, kt, kr, kb), (w, h) = _red_box(k["items"][0]["output"], tmp_path, "k")
+    assert abs((kr - kl) - (cr - cl)) <= 3 and abs((kb - kt) - (cb - ct)) <= 3      # the whole word, not "CONFIDE"
+    assert kl >= 10 and kt >= 10 and kr <= w - 10 and kb <= h - 10                     # inside a margin
