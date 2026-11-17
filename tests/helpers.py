@@ -96,5 +96,12 @@ async def settle(pilot) -> None:
     """
     await pilot.pause()                                         # deliver pending Changed messages (they start the timer)
     await wait_until(pilot, lambda: getattr(pilot.app.screen, "_preview_timer", None) is None, what="the live preview")
-    await pilot.app.workers.wait_for_complete()
+    from textual.worker import WorkerCancelled
+
+    for _ in range(5):                       # a plan worker superseded by a newer one is cancelled: wait for the newer one
+        try:
+            await pilot.app.workers.wait_for_complete()
+            break
+        except WorkerCancelled:
+            await pilot.pause()
     await pilot.pause()
