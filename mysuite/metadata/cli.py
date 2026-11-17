@@ -67,7 +67,12 @@ def _run_batch(input_files: list[Path], *, mode: str, run_one, dry_run: bool, qu
             continue
 
         jsonout.add_item(input=input_path, output=outcome.output_path,
-                         status="skipped_existing" if outcome.status == "skipped_existing" else "written")
+                         status="skipped_existing" if outcome.status == "skipped_existing" else "written",
+                         **getattr(outcome, "extra", {}))
+        for note in getattr(outcome, "notes", []):
+            jsonout.add_warning(f"{input_path.name}: {note}")
+            if not quiet:
+                log_note(escape(f"{input_path.name}: {note}"))
         if outcome.status == "skipped_existing":
             total_skipped += 1
             if not quiet:
@@ -132,7 +137,10 @@ def strip(
     )
 
 
-@app.command("credit", help="Embed a signed C2PA provenance manifest (author/copyright) for correct crediting.")
+@app.command("credit", help="Write your credit into a copy (name_credited.ext): author (IPTC By-line, dc:creator, Artist), copyright "
+             "notice, credit line, source and usage terms as IPTC Core via exiftool, which picture desks and DAMs read. When "
+             "c2patool is installed a C2PA record with the same author/copyright is added last, signed with c2patool's TEST "
+             "certificate (verifiers show it as untrusted); without c2patool the result says C2PA was not added.")
 @jsonout.with_json("metadata-credit")
 def credit(
     inputs: List[Path] = typer.Argument(
@@ -143,12 +151,15 @@ def credit(
     copyright_notice: Optional[str] = typer.Option(
         None, "--copyright", help="Copyright notice to embed, e.g. '© 2026 Jane Doe'."
     ),
-    no_ai: bool = typer.Option(False, "--no-ai", help="Also record in the manifest that AI training, generative training, inference and data mining are NOT allowed (C2PA training-mining assertion)."),
+    credit_line: Optional[str] = typer.Option(None, "--credit-line", help="Credit line as it should be printed, e.g. 'Jane Doe / Acme News'."),
+    source: Optional[str] = typer.Option(None, "--source", help="Source: the agency or archive that supplies the picture."),
+    usage_terms: Optional[str] = typer.Option(None, "--usage-terms", help="Rights usage terms, e.g. 'Editorial use only'."),
+    no_ai: bool = typer.Option(False, "--no-ai", help="Also declare that AI training, generative training and data mining are NOT allowed "
+                               "(XMP PLUS DataMining, and the C2PA training-mining assertion when c2patool is installed)."),
+    c2pa: bool = typer.Option(True, "--c2pa/--no-c2pa", help="Add a C2PA record when c2patool is installed (default) or never."),
     generator: str = typer.Option(
         "mysuite", "--generator",
-        help="Software/tool named as the claim generator (not independently visible in "
-        "c2patool's own read-back report on all versions — author/copyright are the fields "
-        "that reliably read back).",
+        help="Software named as the C2PA claim generator (c2patool's read-back report may show its own name instead).",
     ),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Recurse into subdirectories."),
     overwrite: bool = typer.Option(
@@ -181,13 +192,14 @@ def credit(
     if not author:
         log_error("an author is needed: pass --author or set metadata.author in the active profile")
         raise typer.Exit(1)
-    require_tools(config.tools, "metadata-credit")
+    require_tools(config.tools, "metadata-declare")          # exiftool; c2patool is optional
 
     _run_batch(
         input_files, mode="credited",
         run_one=lambda p: credit_file(
-            p, author=author, copyright_notice=copyright_notice, generator=generator,
-            tools=config.tools, overwrite=overwrite, no_ai=no_ai or bool(active_profile and active_profile.metadata.get("no_ai")),
+            p, author=author, copyright_notice=copyright_notice, credit_line=credit_line, source=source,
+            usage_terms=usage_terms, generator=generator, tools=config.tools, overwrite=overwrite, c2pa=c2pa,
+            no_ai=no_ai or bool(active_profile and active_profile.metadata.get("no_ai")),
         ),
         dry_run=dry_run, quiet=quiet,
     )
