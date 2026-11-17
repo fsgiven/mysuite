@@ -57,7 +57,8 @@ def test_compress_handles_cmyk_and_16bit_and_alpha_sources(tmp_path, codec, ext)
         if codec == "webp" and name == "c.tiff":
             continue  # FINDING Q2, own xfail below
         src = mk(tmp_path / name, *args)
-        res = cli("compress", src, "--codec", codec, "-q")
+        # --allow-larger: these flat test images are tiny, and compress never writes a bigger file on its own
+        res = cli("compress", src, "--codec", codec, "--allow-larger", "-q")
         assert res.exit_code == 0 and res.exception is None, (codec, name, res.stdout[-200:])
         assert subprocess.run(["magick", "identify", str(tmp_path / f"{src.stem}_compressed.{ext}")], capture_output=True).returncode == 0
 
@@ -71,7 +72,7 @@ def test_compress_webp_accepts_a_cmyk_tiff(tmp_path):
 @need
 def test_compress_webp_keeps_alpha(tmp_path):
     src = mk(tmp_path / "a.png", "xc:none", "-fill", "red", "-draw", "circle 40,30 40,5")
-    cli("compress", src, "--codec", "webp", "-q")
+    cli("compress", src, "--codec", "webp", "--allow-larger", "-q")
     a = subprocess.run(["magick", str(tmp_path / "a_compressed.webp"), "-format", "%[fx:p{1,1}.a]", "info:"], capture_output=True, text=True).stdout
     assert float(a) < 0.1
 
