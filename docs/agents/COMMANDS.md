@@ -770,7 +770,7 @@ mysuite pdf images doc.pdf --json
 
 ## `mysuite pdf info`
 
-Pages, page sizes, rotation, metadata, forms - read only.
+Pages, page sizes, rotation, metadata, forms, and a print preflight: fonts (embedded or not), colour spaces, lowest image resolution as placed, trim/bleed boxes, PDF/X or PDF/A - read only.
 
 *read only · no `--dry-run` · `--json`*
 
