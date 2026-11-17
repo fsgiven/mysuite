@@ -15,6 +15,9 @@ SIZE_BY = ("longest", "height", "width")
 _SIZE_RE = re.compile(r"^(\d+(?:\.\d+)?)(px|mm|cm|in)?$", re.IGNORECASE)
 
 
+ARTWORK_LABEL = "artwork"
+
+
 class InvalidSizeError(ValueError):
     pass
 
@@ -37,8 +40,15 @@ class Size:
     fit: str = "longest"
     """Which side the size sets: "longest" (fits a size x size box, the default), "height" or "width"."""
 
+    @property
+    def is_artwork(self) -> bool:
+        """The artwork's own size (vector formats): no {size} in the name, no --width/--height."""
+        return self.label == ARTWORK_LABEL
+
     def box(self) -> tuple[str | None, str | None]:
         """(--width, --height) for rsvg-convert; None = left out, so rsvg scales that side to keep the aspect ratio."""
+        if self.is_artwork:
+            return None, None
         if self.fit == "height":
             return None, self.label
         if self.fit == "width":
@@ -135,3 +145,6 @@ def resolve_margin(
         bottom=parse_padding(bottom, reference_px=reference_px) if bottom else 0,
         left=parse_padding(left, reference_px=reference_px) if left else 0,
     )
+
+
+ARTWORK = Size(label=ARTWORK_LABEL, pixels=0)

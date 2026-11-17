@@ -21,8 +21,9 @@ from mysuite.export._parsing import (
     parse_sizes,
     resolve_input_files,
 )
-from mysuite.export.naming import resolve_naming_templates, resolve_path_template_for_variant
-from mysuite.export.planner import MysuitePlannerError, build_plan
+from mysuite.export.artwork import artwork_size
+from mysuite.export.naming import NamingError, check_template, resolve_naming_templates, resolve_path_template_for_variant
+from mysuite.export.planner import MysuitePlannerError, build_plan, find_clashes
 from mysuite.color.cmyk import CmykError, CmykSettings, parse_cmyk_map
 from mysuite.color.svg import DEFAULT_TOLERANCE
 from mysuite import profiles as profiles_mod
@@ -41,6 +42,7 @@ from mysuite.export.units import (
     Size,
     parse_padding,
     parse_size,
+    resolve_margin,
 )
 from mysuite.utils.subprocess_utils import MysuiteToolError
 from mysuite.utils import jsonout
@@ -143,6 +145,23 @@ def export(
     out: Optional[Path] = typer.Option(None, "--out", "-o", help="Base output directory."),
     name: Optional[str] = typer.Option(
         None, "--name", help="Override base name (default: each input file's stem). Only valid with a single input."
+    ),
+    naming: Optional[str] = typer.Option(
+        None, "--naming",
+        help="File-name template, e.g. '{date}_BILD_Logo_{variant}_{size}_{COLORSPACE}{ext}'. Tokens: {name} {variant} "
+        "{size} {size_px} {width} {height} (real pixels) {format} {colorspace} {ext} {date}; a token in CAPITALS gives "
+        "a capitalised value. An empty token takes its separator with it (no variant: logo_512.png). "
+        "Default: {name}_{variant}_{size}{ext}.",
+    ),
+    path: Optional[str] = typer.Option(
+        None, "--path",
+        help="Folder template inside --out, ending in {naming} (the file name), e.g. '{COLORSPACE}/{FORMAT}/{naming}'. "
+        "Same tokens as --naming. Default: {format}/{colorspace}/{naming} ({variant}/... first for a variant).",
+    ),
+    name_folder: Optional[bool] = typer.Option(
+        None, "--name-folder/--no-name-folder",
+        help="Put each logo's files in a folder named after it (--out/<name>/..., the default); "
+        "--no-name-folder writes the path template straight into --out.",
     ),
     date_stamp: Optional[bool] = typer.Option(
         None, "--date-stamp/--no-date-stamp",
@@ -280,11 +299,20 @@ def export(
     resolved_png_compression = settings.png_compression if png_compression is None else png_compression
     resolved_date_stamp = settings.date_stamp if date_stamp is None else date_stamp
     effective_naming_template, effective_bundle_naming_template = resolve_naming_templates(
-        settings.naming_template,
+        naming or settings.naming_template,
         settings.bundle_naming_template,
         date_stamp=resolved_date_stamp,
         default_naming_template=DEFAULT_NAMING_TEMPLATE,
     )
+    resolved_path_template = path or settings.path_template
+    resolved_name_folder = settings.name_folder if name_folder is None else name_folder
+    try:
+        check_template(effective_naming_template)
+        check_template(effective_bundle_naming_template)
+        check_template(resolved_path_template, path=True)
+    except NamingError as exc:
+        log_error(escape(str(exc)))
+        raise typer.Exit(1) from exc
 
     try:
         resolved_cmyk = CmykSettings.parse(
@@ -297,9 +325,6 @@ def export(
     resolved_recolor_tolerance = settings.recolor_tolerance if recolor_tolerance == DEFAULT_TOLERANCE else recolor_tolerance
 
     resolved_variant = settings.variant if variant is None else variant
-    effective_path_template = resolve_path_template_for_variant(
-        settings.path_template, variant=resolved_variant, default_path_template=DEFAULT_PATH_TEMPLATE
-    )
 
     token_set = None
     token_ctx = None
@@ -398,7 +423,7 @@ def export(
         raise typer.Exit(1)
     label_for = {v: (resolved_variant or "") if v == "default" and variant_specs[v].is_default else v for v in variant_names}
     path_templates = {
-        v: resolve_path_template_for_variant(settings.path_template, variant=label_for[v] or None, default_path_template=DEFAULT_PATH_TEMPLATE)
+        v: resolve_path_template_for_variant(resolved_path_template, variant=label_for[v] or None, default_path_template=DEFAULT_PATH_TEMPLATE)
         for v in variant_names
     }
     token_view = token_ctx.view if token_ctx else None
@@ -412,12 +437,45 @@ def export(
     total_skipped_existing = 0
     total_planned = 0
 
+    def margin_for(pixels: int):
+        return resolve_margin(resolved_margin_top, resolved_margin_right, resolved_margin_bottom, resolved_margin_left,
+                              reference_px=pixels)
+
     converted: dict[Path, Path] = {}
     import_dir: Path | None = None
+
+    def source_of(input_svg: Path) -> Path:
+        """PDF / AI / EPS / SVGZ are converted to SVG once, then treated as one."""
+        nonlocal import_dir
+        if input_svg.suffix.lower() not in imp.IMPORT_EXTENSIONS:
+            return input_svg
+        if input_svg not in converted:
+            try:
+                if import_dir is None:
+                    import_dir = Path(tempfile.mkdtemp(prefix="mysuite-export-import-"))
+                    atexit.register(shutil.rmtree, import_dir, True)
+                require_tools(config.tools, "svg-import") if input_svg.suffix.lower() != ".svgz" else None
+                converted[input_svg] = imp.to_svg(input_svg, import_dir / str(len(converted)), tools=config.tools).svg
+            except (imp.ImportError_, MysuiteToolError) as exc:
+                log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+                raise typer.Exit(1) from exc
+        return converted[input_svg]
+
+    templates = (effective_naming_template, resolved_path_template)
+    needs_dims = any(tok in t.lower() for t in templates for tok in ("{width", "{height"))
+
+    # 1. plan every logo x variant first: two outputs that would land on the same file are refused before anything is written
+    runs = []
     for input_svg in input_files:
         resolved_name = name or input_svg.stem
+        art = None
+        if needs_dims:
+            art = artwork_size(source_of(input_svg))
+            if art is None:
+                log_error(f"{escape(str(input_svg))}: {{width}}/{{height}} need the artwork's size, and this SVG has "
+                          "no width/height or viewBox")
+                raise typer.Exit(1)
         for variant_name in variant_names:
-
             try:
                 plan = build_plan(
                     name=resolved_name,
@@ -430,120 +488,119 @@ def export(
                     bundle_naming_template=effective_bundle_naming_template,
                     variant=label_for[variant_name],
                     strict=resolved_strict,
+                    name_folder=resolved_name_folder,
+                    artwork=art,
+                    margin_for=margin_for,
                 )
             except MysuitePlannerError as exc:
                 log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
                 raise typer.Exit(1) from exc
+            runs.append((input_svg, resolved_name, variant_name, plan))
+    try:
+        find_clashes([run[3] for run in runs])
+    except MysuitePlannerError as exc:
+        log_error(escape(str(exc)))
+        raise typer.Exit(1) from exc
 
-            if not quiet:
-                if batch:
-                    console.print(f"\n[bold]=== {escape(str(input_svg))} ===[/bold]")
-                console.print(_build_tree(resolved_name, plan.jobs, plan.skips, plan.bundle_jobs))
-
-            file_total = len(plan.jobs) + len(plan.bundle_jobs)
-            total_planned += file_total
-
-            for job in [*plan.jobs, *plan.bundle_jobs]:
-                if dry_run:
-                    jsonout.add_item(
-                        input=input_svg, output=job.output_path, format=job.format, variant=label_for[variant_name],
-                        colorspace=job.colorspace, status="planned",
-                        **({"size": job.size.label} if hasattr(job, "size") else {"sizes": [s.label for s in job.sizes]}),
-                    )
-            for skip in plan.skips:
-                jsonout.add_warning(f"{skip.format}/{skip.colorspace} skipped: {skip.reason}")
-
-            if dry_run:
-                if not quiet:
-                    console.print(f"\n[dim]dry run — {file_total} file(s) would be written, 0 written[/dim]")
+    shown_skips: set[tuple[str, str]] = set()
+    shown_inputs: set[Path] = set()
+    for input_svg, resolved_name, variant_name, plan in runs:
+        if not quiet:
+            if batch and input_svg not in shown_inputs:
+                console.print(f"\n[bold]=== {escape(str(input_svg))} ===[/bold]")
+            console.print(_build_tree(resolved_name if variant_specs[variant_name].is_default else f"{resolved_name} · {variant_name}",
+                                      plan.jobs, [], plan.bundle_jobs))
+        shown_inputs.add(input_svg)
+        for skip in plan.skips:                  # the same skip for every variant and logo: said once
+            if (skip.format, skip.colorspace) in shown_skips:
                 continue
-
-            for skip in plan.skips:
-                if quiet:
-                    continue
+            shown_skips.add((skip.format, skip.colorspace))
+            jsonout.add_warning(f"{skip.format}/{skip.colorspace} skipped: {skip.reason}")
+            if not quiet:
                 log_skip(f"{skip.format}/{skip.colorspace} — {escape(skip.reason)}")
 
-            def on_job_done(job, skipped: bool, input_svg=input_svg, variant_name=variant_name) -> None:
+        file_total = len(plan.jobs) + len(plan.bundle_jobs)
+        total_planned += file_total
+
+        if dry_run:
+            for job in [*plan.jobs, *plan.bundle_jobs]:
                 jsonout.add_item(
-                    input=input_svg, output=job.output_path, format=job.format, colorspace=job.colorspace, variant=label_for[variant_name],
-                    status="skipped_existing" if skipped else "written",
+                    input=input_svg, output=job.output_path, format=job.format, variant=label_for[variant_name],
+                    colorspace=job.colorspace, status="planned",
                     **({"size": job.size.label} if hasattr(job, "size") else {"sizes": [s.label for s in job.sizes]}),
                 )
-                if quiet:
-                    return
-                if skipped:
-                    console.print(f"[dim]— exists, skipped: {escape(str(job.output_path))}[/dim]")
-                else:
-                    log_step(str(job.output_path))
+            if not quiet:
+                console.print(f"\n[dim]dry run — {file_total} file(s) would be written, 0 written[/dim]")
+            continue
 
-            if input_svg.suffix.lower() in imp.IMPORT_EXTENSIONS:          # PDF / AI / EPS / SVGZ: converted to SVG once, then treated as one
-                if input_svg not in converted:
-                    try:
-                        if import_dir is None:
-                            import_dir = Path(tempfile.mkdtemp(prefix="mysuite-export-import-"))
-                            atexit.register(shutil.rmtree, import_dir, True)
-                        require_tools(config.tools, "svg-import") if input_svg.suffix.lower() != ".svgz" else None
-                        converted[input_svg] = imp.to_svg(input_svg, import_dir / str(len(converted)), tools=config.tools).svg
-                    except (imp.ImportError_, MysuiteToolError) as exc:
-                        log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
-                        raise typer.Exit(1) from exc
-                source_svg = converted[input_svg]
+        def on_job_done(job, skipped: bool, input_svg=input_svg, variant_name=variant_name) -> None:
+            jsonout.add_item(
+                input=input_svg, output=job.output_path, format=job.format, colorspace=job.colorspace, variant=label_for[variant_name],
+                status="skipped_existing" if skipped else "written",
+                **({"size": job.size.label} if hasattr(job, "size") else {"sizes": [s.label for s in job.sizes]}),
+            )
+            if quiet:
+                return
+            if skipped:
+                console.print(f"[dim]— exists, skipped: {escape(str(job.output_path))}[/dim]")
             else:
-                source_svg = input_svg
-            render_svg, is_temp = apply_recolor(source_svg, resolved_recolor_map, resolved_recolor_tolerance)
-            if not variant_specs[variant_name].is_default:
-                try:
-                    render_svg, is_temp, variant_notes = make_variant_svg(render_svg, is_temp, variant_specs[variant_name], token_view, overrides=negative_overrides, tolerance=negative_tolerance)
-                except (VariantError, TokenError) as exc:
-                    log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
-                    raise typer.Exit(1) from exc
-                for note in variant_notes:
-                    jsonout.add_warning(f"{variant_name}: {note}")
-                    if not quiet:
-                        log_note(escape(f"{variant_name}: {note}"))
-            try:
-                result = renderer.execute(plan, render_svg, on_job_done=on_job_done)
-            except CmykError as exc:
-                log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
-                raise typer.Exit(1) from exc
-            except MysuiteToolError as exc:
-                detail = (exc.stderr or "").strip().splitlines()
-                log_error(f"{escape(str(input_svg))}: {escape(detail[-1] if detail else str(exc))}")
-                raise typer.Exit(1) from exc
-            except OSError as exc:
-                log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
-                raise typer.Exit(1) from exc
-            finally:
-                if is_temp:
-                    render_svg.unlink(missing_ok=True)
-            if result.cmyk_conversions and not quiet:
-                console.print(
-                    f"[dim]CMYK ({escape(resolved_cmyk.mode)}"
-                    f"{':' + str(resolved_cmyk.step) if resolved_cmyk.mode == 'clean' else ''}, "
-                    f"{escape(renderer._engine.description)}):[/dim]"
-                )
-                for conv in sorted(result.cmyk_conversions, key=lambda c: c.rgb):
-                    console.print(f"[dim]  {escape(conv.label())}[/dim]")
-            if result.cmyk_conversions:
-                jsonout.set_extra(cmyk={
-                    "mode": resolved_cmyk.mode, "step": resolved_cmyk.step if resolved_cmyk.mode == "clean" else None,
-                    "profile": renderer._engine.description,
-                    "colours": [
-                        {"rgb": f"#{c.rgb[0]:02x}{c.rgb[1]:02x}{c.rgb[2]:02x}", "cmyk": list(c.cmyk),
-                         "delta_e": c.delta_e, "neutral": c.neutral, "fixed": c.fixed}
-                        for c in sorted(result.cmyk_conversions, key=lambda c: c.rgb)
-                    ],
-                })
-            for note in result.cmyk_notes:
-                log_note(escape(note))
-            total_written += len(result.written)
-            total_skipped_existing += len(result.skipped_existing)
+                log_step(str(job.output_path))
 
-            if not quiet and batch:
-                console.print(
-                    f"[bold green]done[/bold green] — {len(result.written)} written, "
-                    f"{len(result.skipped_existing)} already existed"
-                )
+        source_svg = source_of(input_svg)
+        render_svg, is_temp = apply_recolor(source_svg, resolved_recolor_map, resolved_recolor_tolerance)
+        if not variant_specs[variant_name].is_default:
+            try:
+                render_svg, is_temp, variant_notes = make_variant_svg(render_svg, is_temp, variant_specs[variant_name], token_view, overrides=negative_overrides, tolerance=negative_tolerance)
+            except (VariantError, TokenError) as exc:
+                log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+                raise typer.Exit(1) from exc
+            for note in variant_notes:
+                jsonout.add_warning(f"{variant_name}: {note}")
+                if not quiet:
+                    log_note(escape(f"{variant_name}: {note}"))
+        try:
+            result = renderer.execute(plan, render_svg, on_job_done=on_job_done)
+        except CmykError as exc:
+            log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+            raise typer.Exit(1) from exc
+        except MysuiteToolError as exc:
+            detail = (exc.stderr or "").strip().splitlines()
+            log_error(f"{escape(str(input_svg))}: {escape(detail[-1] if detail else str(exc))}")
+            raise typer.Exit(1) from exc
+        except OSError as exc:
+            log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")
+            raise typer.Exit(1) from exc
+        finally:
+            if is_temp:
+                render_svg.unlink(missing_ok=True)
+        if result.cmyk_conversions and not quiet:
+            console.print(
+                f"[dim]CMYK ({escape(resolved_cmyk.mode)}"
+                f"{':' + str(resolved_cmyk.step) if resolved_cmyk.mode == 'clean' else ''}, "
+                f"{escape(renderer._engine.description)}):[/dim]"
+            )
+            for conv in sorted(result.cmyk_conversions, key=lambda c: c.rgb):
+                console.print(f"[dim]  {escape(conv.label())}[/dim]")
+        if result.cmyk_conversions:
+            jsonout.set_extra(cmyk={
+                "mode": resolved_cmyk.mode, "step": resolved_cmyk.step if resolved_cmyk.mode == "clean" else None,
+                "profile": renderer._engine.description,
+                "colours": [
+                    {"rgb": f"#{c.rgb[0]:02x}{c.rgb[1]:02x}{c.rgb[2]:02x}", "cmyk": list(c.cmyk),
+                     "delta_e": c.delta_e, "neutral": c.neutral, "fixed": c.fixed}
+                    for c in sorted(result.cmyk_conversions, key=lambda c: c.rgb)
+                ],
+            })
+        for note in result.cmyk_notes:
+            log_note(escape(note))
+        total_written += len(result.written)
+        total_skipped_existing += len(result.skipped_existing)
+
+        if not quiet and batch:
+            console.print(
+                f"[bold green]done[/bold green] — {len(result.written)} written, "
+                f"{len(result.skipped_existing)} already existed"
+            )
 
     if dry_run:
         if not quiet and batch:

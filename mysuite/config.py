@@ -6,15 +6,15 @@ from pathlib import Path
 
 from mysuite.compress.presets import BUILT_IN_COMPRESS_PRESETS
 from mysuite.enhance.presets import BUILT_IN_ENHANCE_PRESETS
-from mysuite.export.naming import DEFAULT_BUNDLE_NAMING_TEMPLATE
+from mysuite.export.naming import (  # noqa: F401  (re-exported: callers import the defaults from here)
+    DEFAULT_BUNDLE_NAMING_TEMPLATE,
+    DEFAULT_NAMING_TEMPLATE,
+    DEFAULT_PATH_TEMPLATE,
+)
 
 
 class MysuiteConfigError(RuntimeError):
     pass
-
-
-DEFAULT_NAMING_TEMPLATE = "{name}_{size}{ext}"
-DEFAULT_PATH_TEMPLATE = "{format}/{colorspace}/{naming}"
 
 # Ready-to-use presets available even without a mysuite.toml. A user-defined
 # preset of the same name (in [presets.NAME]) overrides the built-in one.
@@ -48,6 +48,8 @@ class ExportSettings:
     naming_template: str = DEFAULT_NAMING_TEMPLATE
     path_template: str = DEFAULT_PATH_TEMPLATE
     bundle_naming_template: str = DEFAULT_BUNDLE_NAMING_TEMPLATE
+    name_folder: bool = True
+    """Put each logo's files in a folder named after it (exports/<name>/...). False: straight into out_dir."""
     strict: bool = False
     normalize_png: bool = True
     overwrite: bool = False

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
-
 from pathlib import Path
+from typing import Callable
 
+from mysuite.export.artwork import raster_dims
 from mysuite.export.models import BundleJob, ExportJob, ExportPlan, SkipReason
-from mysuite.export.naming import DEFAULT_BUNDLE_NAMING_TEMPLATE, render_bundle_path, render_path
-from mysuite.export.units import Size
+from mysuite.export.naming import DEFAULT_BUNDLE_NAMING_TEMPLATE, NamingError, render_bundle_path, render_path
+from mysuite.export.units import Margin, Size
 
 # PNG/WebP/ICO/ICNS have no CMYK color mode, SVG color is defined in RGB/sRGB by
 # spec, and CMYK JPEG has well-known viewer-compatibility issues — so CMYK is
@@ -61,7 +62,33 @@ def build_plan(
     bundle_naming_template: str = DEFAULT_BUNDLE_NAMING_TEMPLATE,
     variant: str = "",
     strict: bool = False,
+    name_folder: bool = True,
+    artwork: tuple[float, float] | None = None,
+    margin_for: Callable[[int], Margin] | None = None,
 ) -> ExportPlan:
+    """artwork = the source's own (width, height), for {width}/{height}; margin_for(pixels) = the raster margin."""
+    try:
+        return _build_plan(
+            name=name, out_dir=out_dir, sizes=sizes, formats=formats, profiles=profiles,
+            naming_template=naming_template, path_template=path_template,
+            bundle_naming_template=bundle_naming_template, variant=variant, strict=strict,
+            name_folder=name_folder, artwork=artwork, margin_for=margin_for,
+        )
+    except NamingError as exc:
+        raise MysuitePlannerError(str(exc)) from exc
+
+
+def _dims(artwork, size: Size, margin_for) -> tuple[int | None, int | None]:
+    if artwork is None:
+        return None, None
+    return raster_dims(artwork, size, margin_for(size.pixels) if margin_for else None)
+
+
+def _build_plan(
+    *, name, out_dir, sizes, formats, profiles, naming_template, path_template, bundle_naming_template,
+    variant, strict, name_folder, artwork, margin_for,
+) -> ExportPlan:
+    sizes, formats, profiles = (list(dict.fromkeys(x)) for x in (sizes, formats, profiles))   # 32,32 is one size
     jobs: list[ExportJob] = []
     bundle_jobs: list[BundleJob] = []
     skips: list[SkipReason] = []
@@ -96,6 +123,7 @@ def build_plan(
                     format=fmt,
                     colorspace=colorspace,
                     variant=variant,
+                    name_folder=name_folder,
                 ), out_dir)
                 bundle_jobs.append(
                     BundleJob(
@@ -105,6 +133,7 @@ def build_plan(
                 continue
 
             for size in sizes:
+                width, height = _dims(artwork, size, margin_for)
                 output_path = _confined(render_path(
                     path_template,
                     naming_template,
@@ -114,9 +143,28 @@ def build_plan(
                     format=fmt,
                     colorspace=colorspace,
                     variant=variant,
+                    width=width,
+                    height=height,
+                    name_folder=name_folder,
                 ), out_dir)
                 jobs.append(
                     ExportJob(size=size, format=fmt, colorspace=colorspace, output_path=output_path)
                 )
 
-    return ExportPlan(jobs=jobs, skips=skips, bundle_jobs=bundle_jobs)
+    plan = ExportPlan(jobs=jobs, skips=skips, bundle_jobs=bundle_jobs)
+    find_clashes([plan])
+    return plan
+
+
+def find_clashes(plans: list[ExportPlan]) -> None:
+    """Two outputs of one run must never land on the same file (the second would silently be 'skipped' or replace the first)."""
+    seen: dict[str, object] = {}
+    for plan in plans:
+        for job in [*plan.jobs, *plan.bundle_jobs]:
+            key = os.path.normcase(os.path.abspath(job.output_path))
+            if key in seen:
+                raise MysuitePlannerError(
+                    f"two outputs would be written to the same file {job.output_path} - add {{size}}, {{format}}, "
+                    "{colorspace}, {variant} or {name} to the naming/path template so every file gets its own name"
+                )
+            seen[key] = job
