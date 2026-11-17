@@ -520,12 +520,13 @@ def number_pages(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths
     def baseline(h: float) -> float:          # from the top, like SVG
         return margin + size if gy == 0.0 else (h - margin if gy == 1.0 else h / 2 + size / 3)
 
-    try:
-        fmt.encode("cp1252")
-    except UnicodeEncodeError:
-        pass                                   # not in the PDF core font's character set: draw it with rsvg-convert
-    else:
-        return _number_fast(path, out, overwrite, chosen, label_for, baseline, gx, size, rgb, margin, dry_run)
+    if dry_run:
+        return _number_fast(path, out, overwrite, chosen, label_for, baseline, gx, size, rgb, margin, None, dry_run)
+    text = "".join({label_for(i, count) for i in chosen})
+    glyphs = _Glyphs.render(text, tools, color)
+    if glyphs is not None:
+        return _number_fast(path, out, overwrite, chosen, label_for, baseline, gx, size, rgb, margin, glyphs, dry_run)
+    # a font rsvg-convert could only embed as a composite font (e.g. CJK): one overlay per page, slower
 
     def body(i: int, total: int, w: float, h: int) -> str | None:
         if i not in chosen:
@@ -538,36 +539,77 @@ def number_pages(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths
     return _apply_overlay(path, "_numbered", out, overwrite, tools, body, dry_run=dry_run)
 
 
-# Helvetica (regular) advance widths, 1/1000 em, for printable ASCII; others count as 0.556 em.
-_HELV = dict(zip(
-    " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
-    [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556,
-     556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
-     667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556,
-     556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584]))
+class _Glyphs:
+    """Every character the page labels use, drawn ONCE by rsvg-convert in Helvetica/Arial. The embedded (subset) font that
+    cairo writes is then reused for every page's label, with its exact widths: a print preflight sees embedded fonts, and
+    4,000 pages need one rsvg-convert call instead of 4,000."""
+
+    def __init__(self, fonts: dict[str, Any], codes: dict[str, tuple[str, bytes]]):
+        self.fonts = fonts            # cairo's font name -> font dictionary (in the rsvg output)
+        self.codes = codes            # character -> (font name, the bytes that draw it)
+
+    @classmethod
+    def render(cls, text: str, tools: ToolPaths, color: str) -> "_Glyphs | None":
+        from pypdf.generic import ArrayObject, ContentStream
+
+        chars = [c for c in dict.fromkeys(text) if not c.isspace()]
+        if not chars:
+            return cls({}, {})
+        body = "".join(f'<text x="0" y="{(n + 1) * 120}" font-family="Helvetica, Arial, sans-serif" font-size="100">'
+                       f'{_esc(c)}</text>' for n, c in enumerate(chars))
+        reader = PdfReader(io.BytesIO(_overlay_pdf(200, (len(chars) + 1) * 120, body, tools)))
+        page = reader.pages[0]
+        font_dict = (page.get("/Resources") or {}).get("/Font") or {}
+        fonts, shown, current = {}, [], None
+        for operands, op in ContentStream(page.get_contents(), reader).operations:
+            if op == b"Tf":
+                current = str(operands[0])
+            elif op in (b"Tj", b"TJ"):
+                parts = operands[0] if op == b"TJ" else [operands[0]]
+                raw = b"".join(_raw_bytes(x) for x in (parts if isinstance(parts, (list, ArrayObject)) else [parts])
+                               if not isinstance(x, (int, float)))
+                shown.append((current, raw))
+        if len(shown) != len(chars) or any(len(raw) != 1 for _, raw in shown):
+            return None
+        for name, _ in shown:
+            font = font_dict[name].get_object()
+            if font.get("/Subtype") not in ("/TrueType", "/Type1") or "/Widths" not in font:
+                return None           # a composite font (two-byte codes): use the per-page overlay instead
+            fonts[name] = font
+        return cls(fonts, dict(zip(chars, shown)))
+
+    def width(self, ch: str, size: float) -> float:
+        if ch not in self.codes:
+            return 0.278 * size       # a space (not drawn): Helvetica's space width
+        name, raw = self.codes[ch]
+        font = self.fonts[name]
+        first, widths = int(font.get("/FirstChar", 0)), font["/Widths"]
+        k = raw[0] - first
+        return (float(widths[k]) if 0 <= k < len(widths) else 556.0) / 1000 * size
 
 
-def _pdf_string(text: str) -> bytes:
-    raw = text.encode("cp1252")
-    return b"(" + raw.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)") + b")"
+def _raw_bytes(obj: Any) -> bytes:
+    if isinstance(obj, bytes):
+        return bytes(obj)
+    get = getattr(obj, "get_original_bytes", None)
+    return get() if get else str(obj).encode("latin-1")
 
 
 def _number_fast(path: Path, out: Path | None, overwrite: bool, chosen: set[int], label_for, baseline, gx: float,
-                 size: float, rgb: tuple[int, int, int], margin: float, dry_run: bool = False) -> OutFile:
-    """Page numbers written straight into each page's content with the PDF core font Helvetica (every reader has it,
-    nothing is embedded): no rsvg-convert call and no overlay page per page, so 4,000 pages take seconds, not minutes."""
+                 size: float, rgb: tuple[int, int, int], margin: float, glyphs: "_Glyphs | None",
+                 dry_run: bool = False) -> OutFile:
+    """Page numbers written straight into each page's content with the embedded font from _Glyphs: no overlay page and
+    no rsvg-convert call per page, so 4,000 pages take about a second instead of minutes."""
     from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject
 
     reader = open_pdf(path)
     target = _suffix_path(Path(os.path.abspath(path)), "_numbered", out)
     if (skip := _plan_or_skip(target, overwrite, dry_run)):
         return skip
+    assert glyphs is not None
     writer = PdfWriter()
-    font = writer._add_object(DictionaryObject({
-        NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"),
-        NameObject("/BaseFont"): NameObject("/Helvetica"), NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
-    }))
-    fname = NameObject("/MysuiteNum")
+    names = {name: NameObject(f"/MysuiteNum{n}") for n, name in enumerate(glyphs.fonts)}
+    refs = {name: writer._add_object(font.clone(writer)) for name, font in glyphs.fonts.items()}
     push = writer._add_object(DecodedStreamObject())
     push.get_object().set_data(b"q\n")
     colour = " ".join(f"{c / 255:.4f}" for c in rgb).encode()
@@ -582,13 +624,17 @@ def _number_fast(path: Path, out: Path | None, overwrite: bool, chosen: set[int]
         box = wp.mediabox
         left, bottom, w, h = float(box.left), float(box.bottom), float(box.width), float(box.height)
         label = label_for(i, total)
-        width = sum(_HELV.get(ch, 556) for ch in label) / 1000 * size
-        x = left + margin + gx * (w - 2 * margin) - gx * width
+        x = left + margin + gx * (w - 2 * margin) - gx * sum(glyphs.width(ch, size) for ch in label)
         y = bottom + h - baseline(h)
-        draw = (b"\nQ q BT " + fname.encode() + f" {size:g} Tf ".encode() + colour + b" rg "
-               + f"{x:.2f} {y:.2f} Td ".encode() + _pdf_string(label) + b" Tj ET Q\n")
+        draw = [b"\nQ q BT " + colour + b" rg"]
+        for ch in label:
+            if ch in glyphs.codes:
+                name, raw = glyphs.codes[ch]
+                draw.append(f" {names[name]} {size:g} Tf 1 0 0 1 {x:.2f} {y:.2f} Tm <{raw.hex()}> Tj".encode())
+            x += glyphs.width(ch, size)
+        draw.append(b" ET Q\n")
         stream = DecodedStreamObject()
-        stream.set_data(draw)
+        stream.set_data(b"".join(draw))
         # the page's own drawing runs inside q … Q, so whatever state it leaves cannot move or recolour the number
         contents = wp.get("/Contents")
         existing = [] if contents is None else (list(contents.get_object()) if isinstance(contents.get_object(), ArrayObject) else [contents])
@@ -597,7 +643,8 @@ def _number_fast(path: Path, out: Path | None, overwrite: bool, chosen: set[int]
         res = DictionaryObject() if res is None else res.get_object()
         fonts = res.get("/Font")
         fonts = DictionaryObject() if fonts is None else fonts.get_object()
-        fonts[fname] = font
+        for name, ref in refs.items():
+            fonts[names[name]] = ref
         res[NameObject("/Font")] = fonts
         wp[NameObject("/Resources")] = res
     _write(target, writer)
