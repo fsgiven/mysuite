@@ -46,14 +46,15 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | to crop, trim borders, rotate, flip, resize, pad to a size/aspect, round corners | `mysuite transform FILE --crop-aspect 1:1 --resize 512 --round 50% --json` |
 | to change the lighting direction/tint of a cut-out, product or logo (experimental) | `mysuite relight FILE --preset golden-hour --json` or `--direction left --height 30` |
 | to use the company's defaults (tokens, brand, variants, sizes, CMYK, metadata policy, allowed folders) | `mysuite --profile acme export logo.svg --json` (see `mysuite profiles list --json`) |
-| to strip the old metadata and credit the company in one go | `mysuite --profile acme metadata apply photo.jpg --json` (or `--policy strip,credit --author "Acme"`) |
+| to strip the old metadata and credit the company in one go | `mysuite --profile acme metadata apply photo.jpg --json` (or `--policy strip,credit --author "Acme"`); one output file, no intermediates |
+| to protect & credit a photo before publishing (GPS/camera out, credit in, 'no AI' notice, optional mark) | `mysuite metadata protect photo.jpg --author "Name" --copyright "© 2026 Name" --json` → `photo_protected.jpg` (add `--mark` with `MYSUITE_MARK_KEY` set for the invisible mark) |
 | an invisible ownership mark, or to check whether a picture carries it | `mysuite mark embed photo.png --key SECRET --json` / `mysuite mark detect suspect.jpg --key SECRET --json` (the key is the user's secret: never invent or log one; `MYSUITE_MARK_KEY` also works). docs/PROTECTION.md says what it survives |
-| a 'no AI training/use' declaration in the file | `mysuite metadata declare photo.jpg --owner "Name" --json`; `metadata credit --no-ai` adds the C2PA assertion (a request that cooperating tools honour, not a lock) |
-| to protect an image against AI editing (experimental; slow, needs a one-time ~1.4 GB component) | `mysuite shield photo.png --json` (exit 4 + `missing_components` if not installed: ask the user before running `mysuite install shield --yes`). Read docs/SHIELD.md and do not promise protection |
+| a 'no AI training/use' declaration in the file | `mysuite metadata declare photo.jpg --owner "Name" --json` (removes nothing: a warning says when GPS is still in the file); `metadata credit --no-ai` writes it too, plus the C2PA assertion when c2patool is installed (a request that cooperating tools honour, not a lock) |
+| to protect an image against AI editing (experimental; slow, needs a one-time ~1.4 GB component) | `mysuite shield photo.png --json` (exit 4 + `missing_components` if not installed: ask the user before running `mysuite install shield --yes`). It only targets Stable Diffusion-style editors: it does NOT stop ChatGPT, Gemini, Midjourney, training or copying, and resizing removes most of it. Read docs/SHIELD.md and do not promise protection |
 | files to try the tools on (an agent trial, a demo) | `mysuite testcases make --out DIR --json` writes ~60 generated, CC0 files with a README saying what each one exercises |
 | a whole set of files from one logo (favicon, iOS/Android app icons, social images, retina) | `mysuite kit make logo.svg --kit favicon --json` (`mysuite kit list --json` shows all kits) |
 | a logo that arrives as PDF / Illustrator .ai / EPS / SVGZ, or to shrink an SVG | `mysuite svg import logo.ai --json` (also: `mysuite export logo.ai …` takes them directly) · `mysuite svg optimise logo.svg --json` (renders before/after and refuses a file that would look different; needs poppler for `.ai`/PDF/EPS: `mysuite install tools --yes`) |
-| to merge / split / extract / rotate / resize / number / stamp / strip / compress a PDF, or turn pages into images and images into a PDF | `mysuite pdf merge a.pdf b.pdf --json`, `mysuite pdf extract doc.pdf --pages 1,3-5 --json` … (`mysuite pdf --help`) |
+| to merge / split / extract / rotate / resize / number / stamp / strip / compress a PDF, or turn pages into images and images into a PDF | `mysuite pdf merge a.pdf b.pdf --json`, `mysuite pdf extract doc.pdf --pages 1,3-5 --json` (→ `doc_p1_3-5.pdf`), `mysuite pdf compress doc.pdf --max-size 10MB --json` … (`mysuite pdf --help`; every writer has `--dry-run`; `stamp --logo` and `from-images` take SVG) |
 | an image at an exact size or print size (500 px, 10x15cm at 300 dpi), dpi stored in the file | `mysuite print photo.jpg --size 10x15cm --dpi 300 --fit cover --json` |
 | to rename many files by a pattern | `mysuite rename DIR --pattern "trip_{n:3}{ext}" --dry-run --json` (copies by default; `--move` renames in place) |
 | one picture showing many pictures | `mysuite sheet DIR --out sheet.png --columns 5 --json` |
@@ -67,9 +68,9 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | whether a logo uses the real brand colours | `mysuite tokens check logo.svg --tokens tokens/ --brand bild --json` (`--strict` exits 1 when a colour is off-palette) |
 | to look up design tokens | `mysuite tokens list tokens/ --brand bild --filter brand --json`, `mysuite tokens show tokens/ text-color-brand --brand bild --json` |
 | a bigger/cleaner photo | `mysuite enhance run FILE --preset gentle --json` |
-| no hidden data (GPS, serials) | `mysuite metadata strip FILE --json` |
-| a plausible different camera identity | `mysuite metadata randomize FILE --json` |
-| authorship/copyright embedded | `mysuite metadata credit FILE --author "Name" --copyright "© 2026 Name" --json` |
+| no hidden data (GPS, serials) | `mysuite metadata strip FILE --json` (keeps the colour profile; `--keep-credit` keeps author/copyright/credit line; `--drop-icc`; PDFs too) |
+| a plausible different camera identity | `mysuite metadata randomize FILE --advanced --json`: hidden and refused without `--advanced` (a made-up camera and date is false provenance; only if the user insists) |
+| authorship/copyright embedded | `mysuite metadata credit FILE --author "Name" --copyright "© 2026 Name" [--credit-line …] [--source …] --json` (IPTC Core via exiftool; C2PA only when c2patool is installed: `items[].c2pa` says which) |
 | to know whether the tools are installed | `mysuite doctor --json` (exit 0 when every required tool is there; `missing_optional` and each item's `unlocks` say what the optional ones add) |
 
 ## Examples (these are run by the test suite)
@@ -160,7 +161,8 @@ Precedence: command-line options > `--preset` > the profile > `[export]` in the 
 invalid profile is an error (exit 1), never silently ignored. Manage them with `mysuite profiles list|show|save|delete|check`;
 `check` validates keys, loads the token source (remote git/Figma sources only with `--online`), the brand, folders and tools.
 `metadata apply` runs the profile's policy: each step works on the previous step's output (`strip` then `credit` gives
-`name_stripped_credited.jpg`).
+`name_stripped_credited.jpg`, and only that file: steps run on temporary copies). Policy steps: `strip`, `strip-private`
+(keeps the credit), `credit`, `declare`, `mark`, `protect` (= strip-private, credit, declare).
 
 ## On-demand components (mysuite stays small)
 
@@ -175,7 +177,7 @@ with `missing_components[].install`. Nothing is fetched implicitly.
 `print`, `kit`, `pdf` and `profile` are deterministic one-shot jobs: the output has exactly the size/spec asked for, so
 there is nothing to review. `print --size 10x15cm --dpi 300` writes 1181x1772 px with 300 dpi stored in the file.
 `kit` writes every file of a set (and says which ones it skipped, e.g. `favicon.svg` when the logo is not an SVG).
-`pdf` never opens password-protected files and never modifies the original. `rename` makes copies unless you pass
+`pdf` never opens files that need a password to open (owner-password-only PDFs open) and never modifies the original. `rename` makes copies unless you pass
 `--move`; always `--dry-run` first. `ocr` and `qr read` need the macOS helper `mysuite-vision` (exit code 4 if missing).
 
 ## Several tools in one go: pipelines

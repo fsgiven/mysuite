@@ -1,6 +1,10 @@
 # mysuite shield - what it does, what it does not
 
-`mysuite shield photo.png` makes an image **resist AI image editing**. It is experimental. Read this before relying on it.
+`mysuite shield photo.png` makes an image **resist Stable Diffusion-style AI image editing**. It is experimental and kept
+in the background: a CLI command only, not on the dashboard's Protect card. Read this before relying on it.
+
+**In one sentence:** it does not stop ChatGPT, Gemini, Midjourney or other closed services, it does not stop AI training,
+scraping or copying, and resizing the picture removes most of it.
 
 ## What it is
 
