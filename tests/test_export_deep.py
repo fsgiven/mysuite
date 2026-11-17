@@ -41,7 +41,7 @@ def run_export(logo: Path, out: Path, *args):
 def test_every_single_file_format_produces_a_valid_file_rgb(logo, tmp_path, fmt, magic):
     res = run_export(logo, tmp_path / "o", "--formats", fmt, "--sizes", "64", "-q")
     assert res.exit_code == 0, res.stdout
-    (f,) = (tmp_path / "o").rglob(f"*_64.*")
+    (f,) = (tmp_path / "o").rglob("*.*")      # vectors come once at the artwork size (logo.pdf), rasters per size
     head = f.read_bytes()[:4]
     assert head.startswith(magic) or (fmt == "tiff" and head[:2] in (b"II", b"MM")), (fmt, head)
     if fmt not in ("pdf", "eps", "svg"):

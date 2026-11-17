@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import re
 import shutil
@@ -229,14 +230,19 @@ def _render_cmyk_tiff(
     _atomic_write_via(output_path, write, preserve_extension=True)
 
 
-def _render_pdf_rgb(input_svg: Path, output_path: Path, size: Size, dpi: float, tools: ToolPaths) -> None:
+# Vector output is written at 72 dpi: rsvg-convert then makes 1 SVG px = 1 PDF pt (what design tools mean by
+# "px" in an SVG) and keeps mm/cm/in artboards at their physical size. --dpi only matters for rasters.
+VECTOR_DPI = 72
+
+
+def _render_pdf_rgb(input_svg: Path, output_path: Path, size: Size, tools: ToolPaths) -> None:
     def write(tmp_path: Path) -> None:
         run([
             tools.rsvg_convert,
             "--format=pdf",
             *_box_args(*size.box()),
-            f"--dpi-x={dpi}",
-            f"--dpi-y={dpi}",
+            f"--dpi-x={VECTOR_DPI}",
+            f"--dpi-y={VECTOR_DPI}",
             "--keep-aspect-ratio",
             f"--output={tmp_path}",
             str(input_svg),
@@ -285,6 +291,25 @@ def _build_cmyk_pdf(
     return remaining[0]
 
 
+_BBOX_RE = re.compile(rb"(?m)^%%(HiRes)?BoundingBox:[^\r\n]*")
+
+
+def match_bounding_box(eps: bytes, box: tuple[float, float, float, float]) -> bytes:
+    """Ghostscript's eps2write sets %%BoundingBox to the ink, so an EPS came out smaller than the PDF it was made
+    from whenever the artboard had space around the logo. Make the box the PDF page, like the PDF."""
+    llx, lly, urx, ury = box
+    whole = f"{math.floor(llx)} {math.floor(lly)} {math.ceil(urx)} {math.ceil(ury)}".encode()
+    hires = f"{llx:.2f} {lly:.2f} {urx:.2f} {ury:.2f}".encode()
+    return _BBOX_RE.sub(lambda m: b"%%HiResBoundingBox: " + hires if m.group(1) else b"%%BoundingBox: " + whole, eps)
+
+
+def _pdf_page_box(pdf: Path) -> tuple[float, float, float, float]:
+    from pypdf import PdfReader
+
+    box = PdfReader(pdf).pages[0].mediabox
+    return float(box.left), float(box.bottom), float(box.right), float(box.top)
+
+
 def _convert_pdf_to_eps(input_pdf: Path, output_path: Path, tools: ToolPaths) -> None:
     def write(tmp_path: Path) -> None:
         run([
@@ -297,13 +322,14 @@ def _convert_pdf_to_eps(input_pdf: Path, output_path: Path, tools: ToolPaths) ->
             f"-sOutputFile={tmp_path}",
             str(input_pdf),
         ])
+        tmp_path.write_bytes(match_bounding_box(tmp_path.read_bytes(), _pdf_page_box(input_pdf)))
 
     _atomic_write_via(output_path, write)
 
 
 def _render_svg(input_svg: Path, output_path: Path, size: Size, dpi: float, tools: ToolPaths) -> None:
     native = native_svg_size(input_svg) if size.fit == "longest" else native_svg_side(input_svg, size.fit)
-    if native == size.pixels:
+    if size.is_artwork or native == size.pixels:
         def write(tmp_path: Path) -> None:
             shutil.copyfile(input_svg, tmp_path)
     else:
@@ -501,7 +527,7 @@ class Renderer:
                 # output_path, even when overwrite is off and that file exists.
                 target = input_svg.parent / f".mysuite-tmp-{input_svg.stem}-{size.label}-{colorspace}.pdf"
                 if colorspace == "rgb":
-                    _render_pdf_rgb(input_svg, target, size, self.dpi, self.tools)
+                    _render_pdf_rgb(input_svg, target, size, self.tools)
                 else:
                     rgb_master = get_pdf_master("rgb")
                     unflat = _build_cmyk_pdf(rgb_master, target, self.tools, self._cmyk_engine())

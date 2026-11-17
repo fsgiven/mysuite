@@ -73,6 +73,9 @@ class ExportSettings:
     rendering. Colours are matched by value (#d00 = #dd0000 = rgb(221,0,0) = hsl(...))
     and, within recolor_tolerance (CIEDE2000), near-identical colours too."""
     recolor_tolerance: float = 2.0
+    vector_sizes: list[str | int] = field(default_factory=lambda: ["artwork"])
+    """Sizes svg/pdf/eps are written at, once each: "artwork" (the logo's own size, 1 px = 1 pt) or a size
+    (512, 100mm) that fits like a raster size does (see size_by)."""
     size_by: str = "longest"
     """What a size sets: "longest" side (fits a size x size box), "height" or "width"."""
     cmyk_mode: str = "exact"

@@ -242,6 +242,7 @@ Batch-export an SVG into multiple sizes, formats, and color profiles.
 - argument `inputs` (path, required, repeatable) One or more SVG files (also .svgz, PDF, Illustrator .ai and EPS: converted to SVG first), and/or directories of SVGs (non-recursive unless --recursive).
 - `--sizes / -s` (str) Comma-separated sizes: plain numbers are pixels, or suffix with mm/cm/in (e.g. 16,32,5cm,2in).
 - `--formats / -f` (str) Comma-separated: png,pdf,eps,svg,jpeg,webp,tiff,ico,icns (ico/icns bundle multiple sizes into one file).
+- `--vector-size` (str) Sizes the vector formats (svg, pdf, eps) are written at, once per variant and colour space: 'artwork' (default: the logo's own size, 1 px = 1 pt, no size in the file name) and/or sizes like 512 or 100mm, which fit like --sizes do (see --size-by). --sizes only sets the raster sizes.
 - `--size-by` (str) What each size sets: longest (default: the logo fits a SIZE x SIZE box), height or width. E.g. --sizes 512,1080 --size-by height makes a wide logo exactly 512 and 1080 px high.
 - `--profiles / -p` (str) Comma-separated: rgb,cmyk
 - `--dpi / --ppi` (float) Pixels/dots per inch used to convert mm/cm/in sizes to pixels (default from config, usually 300).
