@@ -1,9 +1,21 @@
 """WS-A item 6: export options with a fixed set of values declare it, so the schema (and agents) can see it."""
 from __future__ import annotations
 
+import re
+
 from mysuite import schema
 from mysuite.export.units import SIZE_BY, VALID_UNITS
 from tests.helpers import cli, write_svg
+
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def plain(text: str) -> str:
+    """CLI output as a person reads it: no colour codes (CI forces colour), no Rich box, wrapped lines joined."""
+    text = _ANSI.sub("", text)
+    text = re.sub(r"[│╭╮╰╯─]", " ", text)
+    return " ".join(text.split())
 
 
 def _options() -> dict[str, dict]:
@@ -22,4 +34,6 @@ def test_choices_are_case_insensitive_and_still_rejected_when_wrong(tmp_path):
     ok = cli("export", svg, "--formats", "png", "--sizes", "16", "--size-by", "HEIGHT", "--unit", "PX", "--out", tmp_path / "o", "--dry-run", "-q")
     assert ok.exit_code == 0, ok.stdout
     bad = cli("export", svg, "--formats", "png", "--theme", "sepia", "--out", tmp_path / "o", "--dry-run", "-q")
-    assert bad.exit_code == 2 and "theme" in bad.output
+    assert bad.exit_code == 2
+    shown = plain(bad.output)
+    assert "--theme" in shown and "'light'" in shown and "'dark'" in shown      # the user sees what is allowed

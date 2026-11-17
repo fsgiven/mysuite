@@ -14,6 +14,7 @@ from PIL import Image
 from mysuite.export.naming import NamingError, fill, render_filename
 from mysuite.export.units import Size
 from tests.helpers import cli, write_svg
+from tests.test_export_choices import plain
 
 need = pytest.mark.skipif(not all(shutil.which(t) for t in ("rsvg-convert", "magick", "gs")), reason="needs rsvg/magick/gs")
 
@@ -97,7 +98,7 @@ def test_unknown_token_on_the_cli_exits_1_without_a_traceback(tmp_path):
     res = cli("export", svg, "--formats", "png", "--sizes", "64", "--naming", "{name}_{colour}{ext}",
               "--out", tmp_path / "o", "--dry-run", "-q")
     assert res.exit_code == 1
-    assert "Traceback" not in res.stdout and "unknown token {colour}" in res.stdout
+    assert "Traceback" not in res.output and "unknown token {colour}" in plain(res.output)
 
 
 def test_unknown_token_in_config_is_friendly_too(tmp_path):
@@ -105,7 +106,7 @@ def test_unknown_token_in_config_is_friendly_too(tmp_path):
     cfg.write_text('[export]\npath_template = "{fmt}/{naming}"\n')
     res = cli("export", _wide(tmp_path), "--config", cfg, "--formats", "png", "--sizes", "64", "--out", tmp_path / "o",
               "--dry-run", "-q")
-    assert res.exit_code == 1 and "unknown token {fmt}" in res.stdout
+    assert res.exit_code == 1 and "unknown token {fmt}" in plain(res.output)
 
 
 @need
@@ -144,11 +145,11 @@ def test_two_outputs_with_the_same_name_are_refused_before_writing(tmp_path):
     svg = _wide(tmp_path)
     res = cli("export", svg, "--formats", "png", "--sizes", "64,128", "--naming", "{name}{ext}",
               "--out", tmp_path / "o", "-q")
-    assert res.exit_code == 1 and "same file" in res.stdout
+    assert res.exit_code == 1 and "same file" in plain(res.output)
     assert not (tmp_path / "o").exists()
 
 
 def test_naming_template_cannot_contain_a_folder_climb(tmp_path):
     res = cli("export", _wide(tmp_path), "--formats", "png", "--sizes", "64", "--path", "../../{naming}",
               "--out", tmp_path / "o", "--dry-run", "-q")
-    assert res.exit_code == 1 and "outside the output folder" in res.stdout
+    assert res.exit_code == 1 and "outside the output folder" in plain(res.output)

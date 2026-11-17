@@ -9,6 +9,7 @@ import pytest
 
 from mysuite.color.cmyk import find_default_profile
 from tests.helpers import cli, write_svg
+from tests.test_export_choices import plain
 
 need = pytest.mark.skipif(not all(shutil.which(t) for t in ("rsvg-convert", "magick", "gs")), reason="needs rsvg/magick/gs")
 
@@ -41,7 +42,8 @@ def test_a_skip_is_said_once_for_all_variants(tmp_path):
     res = cli("export", _logo(tmp_path), "--formats", "png,svg", "--profiles", "rgb,cmyk", "--sizes", "16,32",
               "--variants", "default,invert,grayscale", "--out", tmp_path / "o", "--dry-run")
     assert res.exit_code == 0, res.stdout
-    assert res.stdout.count("png/cmyk") == 1 and res.stdout.count("svg/cmyk") == 1, res.stdout
+    shown = plain(res.output)
+    assert shown.count("png/cmyk") == 1 and shown.count("svg/cmyk") == 1, shown
     doc = cli("export", _logo(tmp_path), "--formats", "png,svg", "--profiles", "rgb,cmyk", "--sizes", "16,32",
               "--variants", "default,invert,grayscale", "--out", tmp_path / "o", "--dry-run", "--json")
     warnings = json.loads(doc.stdout)["warnings"]
@@ -96,5 +98,6 @@ def test_cmyk_table_and_notes_are_printed_once_for_all_variants(tmp_path):
     res = cli("export", svg, "--formats", "pdf", "--profiles", "cmyk", "--variants", "default,invert,grayscale",
               "--out", tmp_path / "o")
     assert res.exit_code == 0, res.stdout
-    assert res.stdout.count("CMYK (exact") == 1 and res.stdout.count("#dd0000 ->") == 1, res.stdout
-    assert res.stdout.count("near-black") == 1
+    shown = plain(res.output)
+    assert shown.count("CMYK (exact") == 1 and shown.count("#dd0000 ->") == 1, shown
+    assert shown.count("near-black") == 1

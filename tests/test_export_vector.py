@@ -11,6 +11,7 @@ import pytest
 from pypdf import PdfReader
 
 from tests.helpers import cli, write_svg
+from tests.test_export_choices import plain
 
 need = pytest.mark.skipif(not all(shutil.which(t) for t in ("rsvg-convert", "magick", "gs")), reason="needs rsvg/magick/gs")
 
@@ -97,7 +98,7 @@ def test_dry_run_lists_vectors_once(tmp_path):
 
 def test_bad_vector_size_is_rejected(tmp_path):
     res = cli("export", _logo(tmp_path), "--formats", "pdf", "--vector-size", "huge", "--out", tmp_path / "o", "-q")
-    assert res.exit_code != 0 and "vector-size" in res.stdout
+    assert res.exit_code == 1 and "--vector-size" in plain(res.output) and "artwork" in plain(res.output)
 
 
 def test_vector_size_from_config(tmp_path):
