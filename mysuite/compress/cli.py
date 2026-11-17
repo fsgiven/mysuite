@@ -6,12 +6,7 @@ from typing import List, Optional
 import typer
 
 from rich.markup import escape
-from mysuite.compress._parsing import (
-    CODECS,
-    InvalidCompressInputError,
-    check_no_output_collisions,
-    output_path_for,
-)
+from mysuite.compress._parsing import CODECS, output_paths_for
 from mysuite.compress.compress import CompressError, compress_file
 from mysuite import profiles as profiles_mod
 from mysuite.config import MysuiteConfigError, load_config
@@ -19,7 +14,7 @@ from mysuite.profiles import ProfileError
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.doctor import require_tools
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
 # Which of the ToolPaths attrs a given codec actually needs — so `compress`
@@ -33,6 +28,16 @@ _TOOL_ATTR_BY_CODEC: dict[str, str] = {
     "pngquant": "pngquant",
     "gifsicle": "gifsicle",
 }
+
+
+def _kb(n: int) -> str:
+    return f"{n / 1_000_000:.1f} MB" if n >= 1_000_000 else f"{max(n / 1000, 0.1):.1f} KB" if n < 10_000 \
+        else f"{n / 1000:.0f} KB"
+
+
+def _saved(outcome) -> str:
+    ratio = outcome.ratio or 1.0
+    return f"{(1 - ratio) * 100:.0f}% smaller" if ratio < 1 else f"{(ratio - 1) * 100:.0f}% larger"
 
 
 @jsonout.with_json("compress")
@@ -119,6 +124,15 @@ def compress(
     lossy: Optional[int] = typer.Option(
         None, "--lossy", min=0, max=200, help="[gifsicle] Lossy compression amount, 0-200 (default 0)."
     ),
+    background: Optional[str] = typer.Option(
+        None, "--background",
+        help="Flatten transparency onto this colour (e.g. white, #ffffff). JPEG (mozjpeg) always flattens, on white "
+        "unless you set this; other codecs keep transparency unless you set it.",
+    ),
+    allow_larger: bool = typer.Option(
+        False, "--allow-larger",
+        help="Write the result even when it is larger than the original (by default nothing is written then).",
+    ),
     recursive: bool = typer.Option(
         False, "--recursive", "-r", help="Recurse into subdirectories for folder inputs."
     ),
@@ -193,15 +207,11 @@ def compress(
 
     require_tools(config.tools, f"compress-{resolved_codec}")
 
-    try:
-        check_no_output_collisions(input_files, resolved_codec)
-    except InvalidCompressInputError as exc:
-        log_error(str(exc))
-        raise typer.Exit(1) from exc
+    outputs = output_paths_for(input_files, resolved_codec)
 
     if dry_run:
         for input_path in input_files:
-            output_path = output_path_for(input_path, resolved_codec)
+            output_path = outputs[input_path]
             jsonout.add_item(input=input_path, output=output_path, status="planned")
             if not quiet:
                 console.print(f"[dim]{escape(str(input_path))} -> {escape(str(output_path))}[/dim]")
@@ -211,13 +221,15 @@ def compress(
 
     total_written = 0
     total_skipped = 0
+    total_bigger = 0
     failures: list[tuple[Path, str]] = []
 
     for input_path in input_files:
         try:
             outcome = compress_file(
-                input_path, resolved_codec,
-                tools=config.tools, overwrite=overwrite, **settings,
+                input_path, resolved_codec, output_path=outputs[input_path],
+                tools=config.tools, overwrite=overwrite, background=background, allow_larger=allow_larger,
+                **settings,
             )
         except (CompressError, MysuiteToolError) as exc:
             failures.append((input_path, str(exc)))
@@ -226,22 +238,38 @@ def compress(
                 log_error(f"{escape(str(input_path))}: {escape(str(exc))}")
             continue
 
-        jsonout.add_item(input=input_path, output=outcome.output_path,
-                         status="skipped_existing" if outcome.status == "skipped_existing" else "written")
         if outcome.status == "skipped_existing":
             total_skipped += 1
+            jsonout.add_item(input=input_path, output=outcome.output_path, status="skipped_existing")
             if not quiet:
                 console.print(f"[dim]— exists, skipped: {escape(str(outcome.output_path))}[/dim]")
-        else:
-            total_written += 1
+            continue
+        sizes = {"bytes_before": outcome.bytes_before, "bytes_after": outcome.bytes_after, "ratio": outcome.ratio,
+                 "width": outcome.size[0], "height": outcome.size[1]}
+        if outcome.quality is not None:
+            sizes["quality"] = outcome.quality
+        for note in outcome.notes:
+            log_note(f"{escape(input_path.name)}: {escape(note)}")
+        if outcome.status == "not_smaller":
+            total_bigger += 1
+            jsonout.add_item(input=input_path, status="not_smaller", notes=outcome.notes, **sizes)
             if not quiet:
-                log_step(escape(str(outcome.output_path)))
+                console.print(f"[dim]— not smaller than the original ({_kb(outcome.bytes_before)} → "
+                              f"{_kb(outcome.bytes_after)}), nothing written: {escape(input_path.name)} "
+                              "(--allow-larger writes it anyway)[/dim]")
+            continue
+        total_written += 1
+        jsonout.add_item(input=input_path, output=outcome.output_path, status="written", notes=outcome.notes, **sizes)
+        if not quiet:
+            log_step(f"{escape(str(outcome.output_path))}  [dim]{_kb(outcome.bytes_before)} → "
+                     f"{_kb(outcome.bytes_after)} ({_saved(outcome)})[/dim]")
 
     if not quiet:
         console.print(
             f"\n[bold green]done[/bold green] — {total_written} written, "
             f"{total_skipped} already existed (use --overwrite to replace), "
-            f"{len(failures)} failed"
+            + (f"{total_bigger} not smaller (nothing written), " if total_bigger else "")
+            + f"{len(failures)} failed"
         )
 
     if failures:
