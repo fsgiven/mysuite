@@ -152,6 +152,8 @@ Re-encode image(s) via a best-in-class codec (mozjpeg/webp/avif/oxipng/pngquant/
 - `--list-presets` (boolean) List available compress presets and exit.
 - `--codec` (str) Target codec: mozjpeg, webp, avif, oxipng, pngquant, gifsicle. Required unless --preset supplies one.
 - `--quality` (int range) Codec quality, 0-100 (mozjpeg/webp/avif only — ignored by oxipng/gifsicle, use --quality-range for pngquant).
+- `--max-kb` (int range) Save for web: the file must be at most this many KB (1 KB = 1000 bytes). The highest quality that fits is searched for (mozjpeg/webp/avif); --quality, if given, is the highest it may use.
+- `--max-size` (int range) Save for web: shrink so the longest side is at most this many pixels (never enlarges).
 - `--sharpen-amount` (float) Unsharp mask amount applied before encoding (e.g. 1.0). Unset = no sharpening.
 - `--sharpen-radius` (float) Unsharp mask radius (default 2.0).
 - `--sharpen-sigma` (float) Unsharp mask sigma / blur amount (default 1.0).
@@ -169,6 +171,8 @@ Re-encode image(s) via a best-in-class codec (mozjpeg/webp/avif/oxipng/pngquant/
 - `--dither / --no-dither` (boolean) [pngquant] Floyd-Steinberg dithering (default on).
 - `--optimize-level` (int range) [gifsicle] Optimization level, 1-3 (default 3).
 - `--lossy` (int range) [gifsicle] Lossy compression amount, 0-200 (default 0).
+- `--background` (str) Flatten transparency onto this colour (e.g. white, #ffffff). JPEG (mozjpeg) always flattens, on white unless you set this; other codecs keep transparency unless you set it.
+- `--allow-larger` (boolean) Write the result even when it is larger than the original (by default nothing is written then).
 - `--recursive / -r` (boolean) Recurse into subdirectories for folder inputs.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing output files.
 - `--dry-run` (boolean) Preview input -> output pairs without compressing.

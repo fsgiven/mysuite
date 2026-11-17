@@ -7,7 +7,7 @@ import typer
 
 from rich.markup import escape
 from mysuite.compress._parsing import CODECS, output_paths_for
-from mysuite.compress.compress import CompressError, compress_file
+from mysuite.compress.compress import MAX_KB_CODECS, CompressError, compress_file
 from mysuite import profiles as profiles_mod
 from mysuite.config import MysuiteConfigError, load_config
 from mysuite.profiles import ProfileError
@@ -63,6 +63,15 @@ def compress(
     quality: Optional[int] = typer.Option(
         None, "--quality", min=0, max=100,
         help="Codec quality, 0-100 (mozjpeg/webp/avif only — ignored by oxipng/gifsicle, use --quality-range for pngquant).",
+    ),
+    max_kb: Optional[int] = typer.Option(
+        None, "--max-kb", min=1,
+        help="Save for web: the file must be at most this many KB (1 KB = 1000 bytes). The highest quality that "
+        "fits is searched for (mozjpeg/webp/avif); --quality, if given, is the highest it may use.",
+    ),
+    max_size: Optional[int] = typer.Option(
+        None, "--max-size", min=1,
+        help="Save for web: shrink so the longest side is at most this many pixels (never enlarges).",
     ),
     sharpen_amount: Optional[float] = typer.Option(
         None, "--sharpen-amount",
@@ -181,7 +190,7 @@ def compress(
         preset = active_profile.compress_preset
 
     explicit = {
-        "codec": codec, "quality": quality,
+        "codec": codec, "quality": quality, "max_kb": max_kb, "max_size": max_size,
         "sharpen_amount": sharpen_amount, "sharpen_radius": sharpen_radius,
         "sharpen_sigma": sharpen_sigma, "sharpen_threshold": sharpen_threshold,
         "progressive": progressive, "subsample": subsample,
@@ -204,6 +213,11 @@ def compress(
     if resolved_codec not in CODECS:
         log_error(f"unknown codec: {resolved_codec!r} — expected one of {', '.join(CODECS)}")
         raise typer.Exit(1)
+
+    if settings.get("max_kb") is not None and resolved_codec not in MAX_KB_CODECS:
+        log_error(f"--max-kb needs a codec with a quality setting ({', '.join(MAX_KB_CODECS)}); "
+                  f"{resolved_codec} is lossless or palette-based")
+        raise typer.Exit(2)
 
     require_tools(config.tools, f"compress-{resolved_codec}")
 
