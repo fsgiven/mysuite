@@ -1,6 +1,7 @@
 """WS-D: mark checks the key once, keeps the input format and metadata, notes 16-bit sources, and has --dry-run."""
 from __future__ import annotations
 
+import io
 import json
 import shutil
 import subprocess
@@ -103,3 +104,29 @@ def test_dry_run_writes_nothing(tmp_path):
     assert res.exit_code == 0
     assert doc["items"][0]["status"] == "planned" and doc["items"][0]["output"].endswith("p_marked.png")
     assert not (tmp_path / "p_marked.png").exists()
+
+
+GENERIC_CMYK = "/System/Library/ColorSync/Profiles/Generic CMYK Profile.icc"
+
+
+@pytest.mark.parametrize("with_icc", [False, True])
+def test_a_cmyk_source_becomes_srgb_with_a_matching_profile(tmp_path, with_icc):
+    import os
+
+    from PIL import ImageCms
+
+    if with_icc and not os.path.exists(GENERIC_CMYK):
+        pytest.skip("needs a CMYK ICC profile (macOS)")
+    base = Image.open(photo(tmp_path / "base.png")).convert("CMYK")
+    src = tmp_path / "c.jpg"
+    base.save(src, quality=95, **({"icc_profile": open(GENERIC_CMYK, "rb").read()} if with_icc else {}))
+    res, doc = run("embed", src, "--key", KEY)
+    assert res.exit_code == 0, res.output
+    item = doc["items"][0]
+    assert any("CMYK" in n for n in item["notes"])
+    with Image.open(item["output"]) as im:
+        assert im.mode == "RGB"
+        icc = im.info.get("icc_profile")
+        if icc:                                         # never a CMYK profile on RGB pixels
+            assert ImageCms.ImageCmsProfile(io.BytesIO(icc)).profile.xcolor_space.strip() == "RGB"
+    assert run("detect", item["output"], "--key", KEY)[1]["items"][0]["detected"]
