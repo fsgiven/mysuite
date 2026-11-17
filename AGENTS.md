@@ -127,7 +127,8 @@ canvas instead of cropping; `--round 50%` on a square makes a circle (needs PNG/
 
 ## Relighting (experimental)
 
-`mysuite relight FILE --preset side` re-shades a picture as if lit from another direction. It is **classical image
+`mysuite relight FILE --preset side` re-shades a picture as if lit from another direction (hidden from the main help
+and the dashboard: experimental, kept in the background; `--format png|jpg|webp`, `--quality`). It is **classical image
 math, not an AI model**: a pseudo-depth (the picture's own brightness blurred, plus a rounded dome from any
 transparency) is lit with a directional light. Good for cut-outs, products and logos (try `--preset key-left`,
 `dramatic`, `golden-hour`, `cool-fill`); it cannot invent light on faces or complex scenes. Output

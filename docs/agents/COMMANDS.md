@@ -1248,6 +1248,8 @@ Experimental: re-shade a picture as if lit from another direction (classical, no
 - `--depth` (float) How pronounced the pseudo-3D is, 0-5. Default 1.
 - `--specular` (float) Sheen, 0 = matte. Default 0.
 - `--color` (str) Tint of the light, e.g. '#ffb36b' (warm) or '#9ec5ff' (cool).
+- `--format` (str, default `png`) Output format: png, jpg, webp (jpg flattens transparency on white).
+- `--quality` (int range, default `90`) JPEG/WebP quality, 1-100.
 - `--recursive / -r` (boolean) Recurse into subdirectories.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
 - `--dry-run` (boolean) List input -> output pairs, write nothing.

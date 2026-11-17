@@ -100,7 +100,9 @@ app.command("inspect", help="Report facts about image/vector files (size, colour
 app.command("transform", help="Quick edits: trim, crop, rotate, flip, resize, pad, round corners, background (fixed, predictable order).")(
     transform_command
 )
-app.command("relight", help="Experimental: re-shade a picture as if lit from another direction (classical, no AI model).")(
+# Hidden (decision 2, 2026-11-16): kept in the background, experimental; `mysuite relight --help` still works.
+app.command("relight", hidden=True,
+            help="Experimental: re-shade a picture as if lit from another direction (classical, no AI model).")(
     relight_command
 )
 app.command("ocr", help="Read the text in images (macOS Vision, on device).")(ocr_command)
