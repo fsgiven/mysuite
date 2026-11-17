@@ -377,3 +377,37 @@ def test_pdf_images_with_no_pictures_says_so(tmp_path):
     assert res.exit_code == 0
     assert doc["items"][0]["status"] == "no_images" and "no embedded pictures" in doc["items"][0]["note"]
     assert "no embedded pictures" in " ".join(doc["warnings"])
+
+
+# ------------------------------------------------------------------ preflight facts in `pdf info`
+def test_info_preflight_on_a_picture_pdf(tmp_path):
+    src = tmp_path / "pic.pdf"
+    Image.new("RGB", (600, 300), "red").save(src, format="PDF", resolution=150.0)        # 4x2 in page, 150 ppi
+    res, doc = run_pdf("info", src)
+    pre = doc["items"][0]["preflight"]
+    assert pre["colour_spaces"] == ["DeviceRGB"] and pre["images"] == 1
+    assert pre["lowest_image_ppi"] == 150
+    assert pre["fonts"] == [] and pre["fonts_not_embedded"] == []
+    assert pre["trim_box"] is False and pre["bleed_box"] is False and pre["standard"] is None
+
+
+@need_rsvg
+def test_info_preflight_sees_embedded_and_missing_fonts_and_boxes(tmp_path):
+    from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, FloatObject, NameObject
+
+    src = _long_pdf(tmp_path / "doc.pdf", 1)
+    numbered = ops.number_pages(src, None, False, ToolPaths()).path            # embedded subset font
+    w = PdfWriter(clone_from=str(numbered))
+    page = w.pages[0]
+    core = w._add_object(DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"),
+                                           NameObject("/BaseFont"): NameObject("/Times-Roman")}))
+    page["/Resources"]["/Font"][NameObject("/FX")] = core
+    page[NameObject("/TrimBox")] = ArrayObject([FloatObject(9), FloatObject(9), FloatObject(291), FloatObject(391)])
+    page[NameObject("/BleedBox")] = ArrayObject([FloatObject(0), FloatObject(0), FloatObject(300), FloatObject(400)])
+    out = tmp_path / "pre.pdf"
+    w.write(str(out))
+    _, doc = run_pdf("info", out)
+    pre = doc["items"][0]["preflight"]
+    assert "Times-Roman" in pre["fonts_not_embedded"] and any("Helvetica" in f for f in pre["fonts"])
+    assert not any("Helvetica" in f for f in pre["fonts_not_embedded"])
+    assert pre["trim_box"] is True and pre["bleed_box"] is True
