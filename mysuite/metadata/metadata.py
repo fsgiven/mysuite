@@ -288,3 +288,119 @@ GPS_KEPT = ("the GPS location is still in this file (declare only adds the notic
 def has_gps(path: Path, tools: ToolPaths) -> bool:
     out = run([tools.exiftool, "-q", "-q", "-s3", "-GPSLatitude", "-GPSLongitude", "-GPSPosition", str(path)]).stdout
     return bool(out.strip())
+
+
+# ------------------------------------------------------------------------------------- several steps, one file
+# "protect" is the Protect & credit flow: private data out (credit kept), your credit in, the no-AI notice, and the
+# invisible mark when a key is given. The mark goes before the metadata steps (it copies the metadata anyway) and the
+# C2PA record is always signed last, so it covers the finished file.
+PROTECT_STEPS = ("strip-private", "credit", "declare")
+STEP_NAMES = {"strip": "stripped", "strip-private": "stripped", "credit": "credited", "declare": "declared",
+              "mark": "marked", "randomize": "randomized"}
+
+
+@dataclass
+class ChainOptions:
+    author: str | None = None
+    copyright_notice: str | None = None
+    credit_line: str | None = None
+    source: str | None = None
+    usage_terms: str | None = None
+    owner: str | None = None
+    terms_url: str | None = None
+    declare_policy: str = "prohibited"
+    no_ai: bool = False
+    mark_key: str | None = None
+    mark_id: str | None = None
+    c2pa: bool = True
+    generator: str = "mysuite"
+
+
+def expand_steps(steps: list[str], *, mark: bool = False) -> list[str]:
+    """'protect' -> strip-private, (mark,) credit, declare; duplicates dropped, order kept."""
+    out: list[str] = []
+    for step in steps:
+        for s in ((PROTECT_STEPS[0], *(("mark",) if mark else ()), *PROTECT_STEPS[1:]) if step == "protect" else (step,)):
+            if s not in out:
+                out.append(s)
+    return out
+
+
+def chain_output_path(input_path: Path, steps: list[str], requested: list[str]) -> Path:
+    if requested == ["protect"]:
+        return output_path_for(input_path, "protected")
+    return output_path_for(input_path, "_".join(dict.fromkeys(STEP_NAMES[s] for s in steps)))
+
+
+def run_chain(input_path: Path, steps: list[str], *, output_path: Path, tools: ToolPaths, opts: ChainOptions,
+              overwrite: bool = False, rng: random.Random | None = None) -> MetadataOutcome:
+    """Runs the steps on working copies in a temporary folder and writes ONE file, output_path; nothing else is left
+    behind, even when a step fails."""
+    if not overwrite and output_path.exists():
+        return MetadataOutcome(input_path, output_path, "skipped_existing")
+    if input_path.suffix.lower() == ".pdf":
+        raise ValueError("metadata apply/protect work on pictures; for a PDF use `metadata strip` or `pdf strip`")
+    notes: list[str] = []
+    tool = c2pa_tool(tools) if (opts.c2pa and "credit" in steps) else None
+    extra: dict = {"steps": steps}
+    if "credit" in steps:
+        extra["c2pa"] = C2PA_TEST_CERT if tool else (C2PA_MISSING if opts.c2pa else "not added (switched off)")
+        if opts.c2pa and not tool:
+            notes.append(f"C2PA {C2PA_MISSING} (the IPTC credit was written)")
+
+    def write(tmp_path: Path) -> None:
+        with tempfile.TemporaryDirectory(prefix="mysuite-protect-") as d:
+            current = input_path
+            for n, step in enumerate(steps):
+                nxt = Path(d) / f"{n}{input_path.suffix}"
+                _run_step(step, current, nxt, tools=tools, opts=opts, notes=notes, rng=rng)
+                current = nxt
+            if tool:
+                c2pa_sign(current, tmp_path, tools=tools, tool=tool, author=opts.author or "", generator=opts.generator,
+                          copyright_notice=opts.copyright_notice, no_ai=opts.no_ai or "declare" in steps)
+            else:
+                shutil.copyfile(current, tmp_path)
+
+    atomic_write_via(output_path, write, preserve_extension=True)
+    if "declare" in steps and not any(s.startswith("strip") or s == "randomize" for s in steps) and has_gps(output_path, tools):
+        notes.append(GPS_KEPT)
+    return MetadataOutcome(input_path, output_path, "written", notes=notes, extra=extra)
+
+
+def _run_step(step: str, src: Path, dst: Path, *, tools: ToolPaths, opts: ChainOptions, notes: list[str],
+              rng: random.Random | None) -> None:
+    if step in ("strip", "strip-private"):
+        _strip_into(src, dst, tools, keep_credit=step == "strip-private")
+    elif step == "randomize":
+        _, decoy = build_decoy_tags(rng)
+        _strip_into(src, dst, tools)
+        run([tools.exiftool, "-overwrite_original", *[f"-EXIF:{k}={v}" for k, v in decoy.items()], str(dst)])
+    elif step == "credit":
+        if not opts.author:
+            raise ValueError("the credit step needs an author")
+        args = credit_args(author=opts.author, copyright_notice=opts.copyright_notice, credit_line=opts.credit_line,
+                           source=opts.source, usage_terms=opts.usage_terms)
+        if opts.no_ai:
+            args += [a for a in declare_args(policy="prohibited", owner=opts.author)
+                     if not (opts.usage_terms and a.startswith("-XMP-xmpRights:UsageTerms="))]
+        shutil.copyfile(src, dst)
+        _exiftool_write(tools, dst, args)
+    elif step == "declare":
+        args = declare_args(policy=opts.declare_policy, owner=opts.owner or opts.author, terms_url=opts.terms_url)
+        if opts.usage_terms:          # your own usage terms win over the generic no-AI sentence
+            args = [a for a in args if not a.startswith("-XMP-xmpRights:UsageTerms=")]
+        shutil.copyfile(src, dst)
+        _exiftool_write(tools, dst, args)
+    elif step == "mark":
+        from mysuite.mark import core as mark_core
+
+        if not opts.mark_key:
+            raise ValueError("the mark step needs a key (--key or MYSUITE_MARK_KEY)")
+        try:
+            result = mark_core.embed_file(src, key=opts.mark_key, ident=opts.mark_id, out=dst, overwrite=True,
+                                          fmt=mark_core.target_format(src, None), exiftool=tools.exiftool)
+        except mark_core.MarkError as exc:
+            raise ValueError(f"mark: {exc}") from exc
+        notes.extend(result.notes or [])
+    else:
+        raise ValueError(f"unknown step {step!r}")

@@ -292,7 +292,8 @@ def _two_page_pdf(path):
     return path
 
 
-def test_dry_run_does_not_run_a_step_whose_command_has_no_dry_run(work):
+def test_dry_run_plans_a_pdf_step_now_that_pdf_has_a_real_dry_run(work):
+    """Phase 0 skipped pdf steps in a dry run (no --dry-run then); WS-D gave every PDF writer a real one."""
     _two_page_pdf(work / "doc.pdf")
     p = write_pipeline(work, '''
 inputs = ["doc.pdf"]
@@ -311,9 +312,7 @@ codec = "oxipng"
     assert sorted(f.name for f in work.iterdir()) == before, "a dry run wrote files"
     assert res.exit_code == 0, doc
     step1 = doc["items"][0]
-    assert step1["status"] == "skipped" and step1["exit_code"] is None
-    assert "--dry-run" in step1["note"] and "not run" in step1["note"]
-    assert any("step 1" in w and "not run" in w for w in doc["warnings"])
+    assert step1["status"] == "planned" and step1["result"]["items"][0]["output"].endswith("doc_rotated.pdf")
     assert doc["items"][1]["status"] == "planned"            # later steps stay symbolic
     # the real run still works
     res, real = run_pipeline(p, "--keep-intermediate")

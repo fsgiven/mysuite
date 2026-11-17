@@ -30,7 +30,7 @@ import os
 from dataclasses import dataclass, field, fields
 from typing import Any
 
-POLICIES = ("strip", "randomize", "credit", "declare")
+POLICIES = ("strip", "strip-private", "credit", "declare", "mark", "protect", "randomize")
 TOP_KEYS = {"description", "tokens", "brand", "theme", "variants", "negative_map", "allow", "compress_preset",
             "enhance_preset", "export", "metadata"}
 META_KEYS = {"policy", "author", "copyright", "no_ai", "terms_url"}

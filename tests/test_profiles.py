@@ -185,10 +185,10 @@ def test_metadata_apply_follows_the_profile_policy(work):
 @need_meta
 def test_metadata_apply_policy_flag_chains_steps_and_dry_run(work):
     subprocess.run(["magick", "-size", "40x30", "xc:red", "p.jpg"], check=True)
-    res, doc = run("metadata", "apply", "p.jpg", "--policy", "strip,randomize", "--dry-run")
+    res, doc = run("metadata", "apply", "p.jpg", "--policy", "strip,randomize", "--advanced", "--dry-run")
     assert doc["items"][0]["output"].endswith("p_stripped_randomized.jpg") and not list(work.glob("*_stripped*"))
-    res, doc = run("metadata", "apply", "p.jpg", "--policy", "strip,randomize")
-    assert (work / "p_stripped_randomized.jpg").exists() and (work / "p_stripped.jpg").exists()
+    res, doc = run("metadata", "apply", "p.jpg", "--policy", "strip,randomize", "--advanced")
+    assert (work / "p_stripped_randomized.jpg").exists() and not (work / "p_stripped.jpg").exists()   # one file, no leftovers
     cam = subprocess.run(["exiftool", "-s3", "-Make", str(work / "p_stripped_randomized.jpg")], capture_output=True, text=True).stdout.strip()
     assert cam                                                                                  # decoy camera written after the strip
 

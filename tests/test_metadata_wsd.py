@@ -202,3 +202,80 @@ def test_declare_on_a_file_without_gps_has_no_warning(tmp_path):
     src = plain(tmp_path / "p.jpg")
     res, doc = run("metadata", "declare", src)
     assert res.exit_code == 0 and not doc["warnings"]
+
+
+# ------------------------------------------------------------------ protect & credit in one go: one output, no leftovers
+def big_seeded(path):
+    """A photo large enough to carry a mark, with private data, a stale credit and a colour profile."""
+    import numpy as np
+
+    rng = np.random.default_rng(1)
+    arr = np.clip(rng.normal(128, 40, (320, 400, 3)), 0, 255).astype("uint8")
+    profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    Image.fromarray(arr).save(path, quality=95, icc_profile=profile)
+    subprocess.run(["exiftool", "-q", "-overwrite_original", "-charset", "iptc=UTF8", *PRIVATE, str(path)], check=True)
+    return path
+
+
+def test_protect_strips_private_data_credits_and_declares_into_one_file(tmp_path):
+    src = big_seeded(tmp_path / "photo.jpg")
+    res, doc = run("metadata", "protect", src, "--author", "Jane Doe", "--copyright", "© 2026 Jane Doe",
+                   "--credit-line", "Jane Doe / Acme News")
+    assert res.exit_code == 0, res.output
+    item = doc["items"][0]
+    assert item["output"].endswith("photo_protected.jpg") and item["steps"] == ["strip-private", "credit", "declare"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["photo.jpg", "photo_protected.jpg"]       # nothing left over
+    t = tags(item["output"])
+    assert not [k for k in t if "GPS" in k or k.endswith(":Make") or "Serial" in k or k.endswith("UserComment")]
+    assert t["IPTC:By-line"] == "Jane Doe" and t["XMP-dc:Rights"] == "© 2026 Jane Doe" and t["IPTC:Credit"] == "Jane Doe / Acme News"
+    assert t["XMP-plus:DataMining"].startswith("Prohibited")
+    assert any(k.startswith("ICC") for k in t)
+    assert item["c2pa"]                                                # says whether C2PA was added
+
+
+def test_protect_with_a_mark_key_marks_too_and_keeps_the_credit(tmp_path, monkeypatch):
+    from mysuite.mark import core as M
+
+    monkeypatch.setenv("MYSUITE_MARK_KEY", "correct horse battery")
+    src = big_seeded(tmp_path / "photo.jpg")
+    res, doc = run("metadata", "protect", src, "--author", "Jane Doe", "--mark")
+    assert res.exit_code == 0, res.output
+    item = doc["items"][0]
+    assert item["steps"] == ["strip-private", "mark", "credit", "declare"]
+    assert M.detect_file(item["output"], key="correct horse battery").detected
+    assert tags(item["output"])["IPTC:By-line"] == "Jane Doe"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["photo.jpg", "photo_protected.jpg"]
+
+
+def test_protect_mark_without_a_key_is_refused_before_anything_runs(tmp_path, monkeypatch):
+    monkeypatch.delenv("MYSUITE_MARK_KEY", raising=False)
+    src = big_seeded(tmp_path / "photo.jpg")
+    res, doc = run("metadata", "protect", src, "--author", "Jane Doe", "--mark")
+    assert res.exit_code != 0 and not (tmp_path / "photo_protected.jpg").exists()
+
+
+def test_protect_dry_run(tmp_path):
+    src = big_seeded(tmp_path / "photo.jpg")
+    res, doc = run("metadata", "protect", src, "--author", "Jane Doe", "--dry-run")
+    assert res.exit_code == 0 and doc["items"][0]["status"] == "planned"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["photo.jpg"]
+
+
+def test_apply_writes_only_the_final_file(tmp_path):
+    src = big_seeded(tmp_path / "photo.jpg")
+    res, doc = run("metadata", "apply", src, "--policy", "strip,declare", "--author", "Jane Doe")
+    assert res.exit_code == 0, res.output
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["photo.jpg", "photo_stripped_declared.jpg"]
+
+
+def test_apply_protect_policy_name(tmp_path):
+    src = big_seeded(tmp_path / "photo.jpg")
+    res, doc = run("metadata", "apply", src, "--policy", "protect", "--author", "Jane Doe")
+    assert res.exit_code == 0, res.output
+    assert doc["items"][0]["output"].endswith("photo_protected.jpg")
+
+
+def test_policies_known_to_profiles():
+    from mysuite.profiles import POLICIES
+
+    assert {"strip", "strip-private", "credit", "declare", "mark", "protect", "randomize"} <= set(POLICIES)
