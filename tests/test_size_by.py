@@ -11,6 +11,7 @@ from PIL import Image
 from pypdf import PdfReader
 
 from tests.helpers import cli, write_svg
+from tests.test_export_choices import plain
 
 need = pytest.mark.skipif(not all(shutil.which(t) for t in ("rsvg-convert", "magick")), reason="needs rsvg/magick")
 
@@ -70,7 +71,9 @@ def test_height_at_native_size_keeps_the_svg_drawing(tmp_path):
 def test_bad_size_by_is_rejected(tmp_path):
     svg = write_svg(tmp_path / "bug.svg", WIDE, width=876, height=512)
     res = cli("export", svg, "--formats", "png", "--size-by", "diagonal", "--out", tmp_path / "o", "-q")
-    assert res.exit_code != 0 and "size-by" in res.output
+    assert res.exit_code == 2                              # a declared choice: Click's usage error
+    shown = plain(res.output)
+    assert "--size-by" in shown and all(f"'{v}'" in shown for v in ("longest", "height", "width"))
 
 
 @need
