@@ -501,21 +501,104 @@ def number_pages(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths
         raise PdfError("size must be between 4 and 72 points")
     if "{n}" not in fmt and "{total}" not in fmt:
         raise PdfError("format must contain {n} (and may contain {total})")
+    try:
+        from PIL import ImageColor
+
+        rgb = ImageColor.getrgb(color)[:3]
+    except ValueError as exc:
+        raise PdfError(f"unknown colour {color!r}: use #rrggbb or a colour name") from exc
     count = len(open_pdf(path).pages)
     chosen = set(parse_pages(pages, count))
     gx, gy = POSITIONS[position]
 
+    def label_for(i: int, total: int) -> str:
+        return fmt.replace("{n}", str(i + start)).replace("{total}", str(total - 1 + start if start != 1 else total))
+
+    def baseline(h: float) -> float:          # from the top, like SVG
+        return margin + size if gy == 0.0 else (h - margin if gy == 1.0 else h / 2 + size / 3)
+
+    try:
+        fmt.encode("cp1252")
+    except UnicodeEncodeError:
+        pass                                   # not in the PDF core font's character set: draw it with rsvg-convert
+    else:
+        return _number_fast(path, out, overwrite, chosen, label_for, baseline, gx, size, rgb, margin)
+
     def body(i: int, total: int, w: float, h: int) -> str | None:
         if i not in chosen:
             return None
-        label = fmt.replace("{n}", str(i + start)).replace("{total}", str(total - 1 + start if start != 1 else total))
         x = margin + gx * (w - 2 * margin)
-        y = margin + size if gy == 0.0 else (h - margin if gy == 1.0 else h / 2 + size / 3)
         anchor = {0.0: "start", 0.5: "middle", 1.0: "end"}[gx]
-        return (f'<text x="{x}" y="{y}" font-family="Helvetica, Arial, sans-serif" font-size="{size}" '
-                f'fill="{_esc(color)}" text-anchor="{anchor}">{_esc(label)}</text>')
+        return (f'<text x="{x}" y="{baseline(h)}" font-family="Helvetica, Arial, sans-serif" font-size="{size}" '
+                f'fill="{_esc(color)}" text-anchor="{anchor}">{_esc(label_for(i, total))}</text>')
 
     return _apply_overlay(path, "_numbered", out, overwrite, tools, body)
+
+
+# Helvetica (regular) advance widths, 1/1000 em, for printable ASCII; others count as 0.556 em.
+_HELV = dict(zip(
+    " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+    [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556,
+     556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+     667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556,
+     556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584]))
+
+
+def _pdf_string(text: str) -> bytes:
+    raw = text.encode("cp1252")
+    return b"(" + raw.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)") + b")"
+
+
+def _number_fast(path: Path, out: Path | None, overwrite: bool, chosen: set[int], label_for, baseline, gx: float,
+                 size: float, rgb: tuple[int, int, int], margin: float) -> OutFile:
+    """Page numbers written straight into each page's content with the PDF core font Helvetica (every reader has it,
+    nothing is embedded): no rsvg-convert call and no overlay page per page, so 4,000 pages take seconds, not minutes."""
+    from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject
+
+    reader = open_pdf(path)
+    target = _suffix_path(Path(os.path.abspath(path)), "_numbered", out)
+    if (skip := _plan_or_skip(target, overwrite)):
+        return skip
+    writer = PdfWriter()
+    font = writer._add_object(DictionaryObject({
+        NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"),
+        NameObject("/BaseFont"): NameObject("/Helvetica"), NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+    }))
+    fname = NameObject("/MysuiteNum")
+    push = writer._add_object(DecodedStreamObject())
+    push.get_object().set_data(b"q\n")
+    colour = " ".join(f"{c / 255:.4f}" for c in rgb).encode()
+    total = len(reader.pages)
+    for i, page in enumerate(reader.pages):
+        if page.get("/Rotate", 0):
+            page = page.transfer_rotation_to_content()
+        writer.add_page(page)
+        if i not in chosen:
+            continue
+        wp = writer.pages[-1]
+        box = wp.mediabox
+        left, bottom, w, h = float(box.left), float(box.bottom), float(box.width), float(box.height)
+        label = label_for(i, total)
+        width = sum(_HELV.get(ch, 556) for ch in label) / 1000 * size
+        x = left + margin + gx * (w - 2 * margin) - gx * width
+        y = bottom + h - baseline(h)
+        draw = (b"\nQ q BT " + fname.encode() + f" {size:g} Tf ".encode() + colour + b" rg "
+               + f"{x:.2f} {y:.2f} Td ".encode() + _pdf_string(label) + b" Tj ET Q\n")
+        stream = DecodedStreamObject()
+        stream.set_data(draw)
+        # the page's own drawing runs inside q … Q, so whatever state it leaves cannot move or recolour the number
+        contents = wp.get("/Contents")
+        existing = [] if contents is None else (list(contents.get_object()) if isinstance(contents.get_object(), ArrayObject) else [contents])
+        wp[NameObject("/Contents")] = ArrayObject([push, *existing, writer._add_object(stream)])
+        res = wp.get("/Resources")
+        res = DictionaryObject() if res is None else res.get_object()
+        fonts = res.get("/Font")
+        fonts = DictionaryObject() if fonts is None else fonts.get_object()
+        fonts[fname] = font
+        res[NameObject("/Font")] = fonts
+        wp[NameObject("/Resources")] = res
+    _write(target, writer)
+    return OutFile(target, pages=total)
 
 
 def stamp(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths, *, text: str | None = None, logo: Path | None = None,
