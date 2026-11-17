@@ -355,6 +355,62 @@ def strip_metadata(path: Path, out: Path | None, overwrite: bool) -> OutFile:
     return OutFile(target, pages=len(reader.pages))
 
 
+# ---------------------------------------------------------------------------- SVG logos (kept as vectors)
+SVG_SUFFIXES = (".svg", ".svgz")
+_SVG_NS = "http://www.w3.org/2000/svg"
+
+
+def is_svg(path: Path) -> bool:
+    return Path(path).suffix.lower() in SVG_SUFFIXES
+
+
+def _svg_number(value: str | None) -> float | None:
+    m = re.fullmatch(r"\s*([0-9.]+)\s*(px|pt|mm|cm|in)?\s*", value or "")
+    if not m:
+        return None
+    return float(m.group(1)) * {"px": 1.0, None: 1.0, "pt": 96 / 72, "mm": 96 / 25.4, "cm": 96 / 2.54, "in": 96.0}[m.group(2)]
+
+
+class SvgLogo:
+    """An SVG file nested inside the overlay SVG as an <svg> element, so rsvg-convert writes it as vectors (an <image>
+    with an SVG data URI would be rasterised)."""
+
+    def __init__(self, path: Path):
+        import gzip
+        import xml.etree.ElementTree as ET
+
+        raw = Path(path).read_bytes()
+        if raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
+        try:
+            root = ET.fromstring(raw)
+        except ET.ParseError as exc:
+            raise PdfError(f"can't read {Path(path).name} as SVG: {exc}") from exc
+        if root.tag != f"{{{_SVG_NS}}}svg":
+            raise PdfError(f"{Path(path).name} is not an SVG file")
+        vb = (root.get("viewBox") or "").replace(",", " ").split()
+        if len(vb) == 4:
+            vw, vh = float(vb[2]), float(vb[3])
+        else:
+            vw, vh = _svg_number(root.get("width")) or 0.0, _svg_number(root.get("height")) or 0.0
+            root.set("viewBox", f"0 0 {vw} {vh}")
+        if vw <= 0 or vh <= 0:
+            raise PdfError(f"{Path(path).name} has no size (no viewBox and no width/height)")
+        self.ratio = vh / vw
+        self.width_px, self.height_px = (_svg_number(root.get("width")) or vw), (_svg_number(root.get("height")) or vh)
+        self._root = root
+
+    def element(self, x: float, y: float, w: float, h: float) -> str:
+        import xml.etree.ElementTree as ET
+
+        ET.register_namespace("", _SVG_NS)
+        ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
+        for k, v in (("x", x), ("y", y), ("width", w), ("height", h)):
+            self._root.set(k, f"{v:.3f}")
+        self._root.set("preserveAspectRatio", "xMidYMid meet")
+        return ET.tostring(self._root, encoding="unicode")
+
+
 # ---------------------------------------------------------------------------- overlays (number / stamp)
 def _overlay_pdf(width: float, height: float, body: str, tools: ToolPaths) -> bytes:
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
@@ -477,7 +533,11 @@ def stamp(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths, *, te
         raise PdfError("scale must be between 1 and 100 (percent of the page width)")
     logo_uri = ""
     logo_ratio = 1.0
-    if logo:
+    svg_logo: SvgLogo | None = None
+    if logo and is_svg(logo):
+        svg_logo = SvgLogo(logo)
+        logo_ratio = svg_logo.ratio
+    elif logo:
         try:
             with Image.open(logo) as im:
                 im = im.convert("RGBA")
@@ -497,14 +557,18 @@ def stamp(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths, *, te
             return None
         parts = []
         boxes: list[tuple[float, float, float, float]] = []          # (left, top, right, bottom) before rotation
-        lw = w * scale / 100 if logo_uri else 0.0
+        has_logo = bool(logo_uri or svg_logo)
+        lw = w * scale / 100 if has_logo else 0.0
         lh = lw * logo_ratio
-        if logo_uri:
+        if svg_logo:
+            parts.append(svg_logo.element(-lw / 2, -lh / 2, lw, lh))
+        elif logo_uri:
             parts.append(f'<image x="{-lw / 2}" y="{-lh / 2}" width="{lw}" height="{lh}" '
                          f'xlink:href="{logo_uri}" href="{logo_uri}" preserveAspectRatio="xMidYMid meet"/>')
+        if has_logo:
             boxes.append((-lw / 2, -lh / 2, lw / 2, lh / 2))
         if text:
-            dy = lh / 2 + size if logo_uri else size * 0.35                 # baseline; caps centred when there is no logo
+            dy = lh / 2 + size if has_logo else size * 0.35                 # baseline; caps centred when there is no logo
             parts.append(f'<text x="0" y="{dy}" font-family="Helvetica, Arial, sans-serif" font-weight="bold" '
                          f'font-size="{size}" fill="{_esc(color)}" text-anchor="middle">{_esc(text)}</text>')
             boxes.append((-text_w / 2, dy - size * 0.75, text_w / 2, dy + size * 0.22))
@@ -573,9 +637,12 @@ def render(path: Path, out_dir: Path | None, overwrite: bool, tools: ToolPaths, 
 
 
 def from_images(images: list[Path], out: Path | None, overwrite: bool, *, size: str | None = None, dpi: int = 300,
-                margin_mm: float = 0.0) -> OutFile:
+                margin_mm: float = 0.0, tools: ToolPaths | None = None) -> OutFile:
+    """One page per image. Raster images are placed at `dpi`; SVG files stay vectors (rsvg-convert), at their artwork
+    size or fitted on the paper size."""
     if not images:
         raise PdfError("from-images needs at least one image")
+    tools = tools or ToolPaths()
     first = Path(os.path.abspath(images[0]))
     default_name = f"{first.stem}{'_images' if len(images) > 1 else ''}.pdf"
     if out is None:
@@ -585,35 +652,61 @@ def from_images(images: list[Path], out: Path | None, overwrite: bool, *, size: 
         target = out if out.suffix.lower() == ".pdf" else out / default_name
     if (skip := _plan_or_skip(target, overwrite)):
         return skip
-    page_px = None
-    if size and size.lower() != "fit":
-        w_pt, h_pt = parse_page_size(size)
-        page_px = (round(w_pt / 72 * dpi), round(h_pt / 72 * dpi))
-    pages: list[Image.Image] = []
+    paper_pt = parse_page_size(size) if size and size.lower() != "fit" else None
+    pages: list[PageObject] = []
     for p in images:
-        try:
-            with Image.open(p) as im:
-                im.seek(0)
-                rgba = ImageOps.exif_transpose(im).convert("RGBA")       # a phone photo stored sideways is shown upright
-        except Exception as exc:  # noqa: BLE001
-            raise PdfError(f"can't read {Path(p).name}: {exc}") from exc
-        flat = Image.new("RGB", rgba.size, "white")
-        flat.paste(rgba, mask=rgba.getchannel("A"))
-        if page_px:
-            pw, ph = page_px if (flat.width <= flat.height) == (page_px[0] <= page_px[1]) else page_px[::-1]
-            m = round(margin_mm / 25.4 * dpi)
-            scale = min((pw - 2 * m) / flat.width, (ph - 2 * m) / flat.height)
-            fitted = flat.resize((max(1, round(flat.width * scale)), max(1, round(flat.height * scale))), Image.Resampling.LANCZOS)
-            sheet = Image.new("RGB", (pw, ph), "white")
-            sheet.paste(fitted, ((pw - fitted.width) // 2, (ph - fitted.height) // 2))
-            flat = sheet
-        pages.append(flat)
-
-    def write(tmp: Path) -> None:
-        pages[0].save(tmp, format="PDF", save_all=True, append_images=pages[1:], resolution=float(dpi))
-
-    atomic_write_via(target, write, preserve_extension=True)
+        pages.append(_svg_page(p, paper_pt, margin_mm, tools) if is_svg(p) else _raster_page(p, paper_pt, dpi, margin_mm))
+    writer = PdfWriter()
+    for page in pages:
+        writer.add_page(page)
+    _write(target, writer)
     return OutFile(target, pages=len(pages))
+
+
+def _turned(paper: tuple[float, float], w: float, h: float) -> tuple[float, float]:
+    """The paper in the image's orientation (a landscape picture goes on a landscape sheet)."""
+    pw, ph = paper
+    return (pw, ph) if (w <= h) == (pw <= ph) else (ph, pw)
+
+
+def _raster_page(p: Path, paper_pt: tuple[float, float] | None, dpi: int, margin_mm: float) -> PageObject:
+    try:
+        with Image.open(p) as im:
+            im.seek(0)
+            rgba = ImageOps.exif_transpose(im).convert("RGBA")       # a phone photo stored sideways is shown upright
+    except Exception as exc:  # noqa: BLE001
+        raise PdfError(f"can't read {Path(p).name}: {exc}") from exc
+    flat = Image.new("RGB", rgba.size, "white")
+    flat.paste(rgba, mask=rgba.getchannel("A"))
+    if paper_pt:
+        pw, ph = (round(v / 72 * dpi) for v in _turned(paper_pt, flat.width, flat.height))
+        m = round(margin_mm / 25.4 * dpi)
+        scale = min((pw - 2 * m) / flat.width, (ph - 2 * m) / flat.height)
+        fitted = flat.resize((max(1, round(flat.width * scale)), max(1, round(flat.height * scale))), Image.Resampling.LANCZOS)
+        sheet = Image.new("RGB", (pw, ph), "white")
+        sheet.paste(fitted, ((pw - fitted.width) // 2, (ph - fitted.height) // 2))
+        flat = sheet
+    buf = io.BytesIO()
+    flat.save(buf, format="PDF", resolution=float(dpi))
+    return PdfReader(io.BytesIO(buf.getvalue())).pages[0]
+
+
+def _svg_page(p: Path, paper_pt: tuple[float, float] | None, margin_mm: float, tools: ToolPaths) -> PageObject:
+    SvgLogo(p)                                                        # a clear error for a broken SVG
+    rsvg = _need(tools.rsvg_convert, "SVG pages", "rsvg-convert")
+    with tempfile.TemporaryDirectory(prefix="mysuite-pdf-") as d:
+        dst = Path(d) / "page.pdf"
+        run([rsvg, "--format=pdf", f"--output={dst}", str(Path(os.path.abspath(p)))])
+        art = PdfReader(io.BytesIO(dst.read_bytes())).pages[0]
+    if not paper_pt:
+        return art
+    w, h = float(art.mediabox.width), float(art.mediabox.height)
+    pw, ph = _turned(paper_pt, w, h)
+    m = margin_mm / 25.4 * 72
+    scale = min((pw - 2 * m) / w, (ph - 2 * m) / h)
+    sheet = PageObject.create_blank_page(width=pw, height=ph)
+    sheet.merge_transformed_page(art, Transformation().scale(scale, scale).translate((pw - w * scale) / 2, (ph - h * scale) / 2))
+    return sheet
 
 
 def compress(path: Path, level: str, out: Path | None, overwrite: bool, tools: ToolPaths) -> OutFile:
