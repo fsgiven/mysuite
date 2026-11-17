@@ -168,7 +168,7 @@ def number(files: List[Path] = PDFS, position: str = typer.Option("bottom-center
 @app.command("stamp", help="Stamp text and/or a logo on pages (e.g. DRAFT, CONFIDENTIAL), with opacity and angle.")
 @jsonout.with_json("pdf-stamp")
 def stamp(files: List[Path] = PDFS, text: Optional[str] = typer.Option(None, "--text", help="Text to stamp, e.g. DRAFT."),
-          logo: Optional[Path] = typer.Option(None, "--logo", exists=True, dir_okay=False, help="PNG/JPEG logo to stamp (raster)."),
+          logo: Optional[Path] = typer.Option(None, "--logo", exists=True, dir_okay=False, help="Logo to stamp: SVG (stays sharp vectors) or PNG/JPEG."),
           position: str = typer.Option("center", "--position", help=f"{', '.join(ops.POSITIONS)}"),
           opacity: float = typer.Option(0.25, "--opacity", help="0-1."),
           angle: float = typer.Option(0.0, "--angle", help="Degrees counter-clockwise (e.g. 45 for a diagonal stamp)."),
@@ -204,13 +204,13 @@ def render(files: List[Path] = PDFS, dpi: int = typer.Option(150, "--dpi", help=
 
 @app.command("from-images", help="Make a PDF from images (one page each), optionally fitted on a paper size.")
 @jsonout.with_json("pdf-from-images")
-def from_images(files: List[Path] = typer.Argument(..., exists=True, readable=True, dir_okay=False, help="Image files, in page order."),
+def from_images(files: List[Path] = typer.Argument(..., exists=True, readable=True, dir_okay=False, help="Images (PNG, JPEG, … or SVG, which stays vectors), in page order."),
                 size: Optional[str] = typer.Option(None, "--size", help="Paper size (a4, letter, 210x297mm …); default: each page is its image's size."),
                 dpi: int = typer.Option(300, "--dpi", help="Resolution used for the pages."),
                 margin: float = typer.Option(0.0, "--margin", help="Margin in mm when --size is used."),
                 out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
     try:
-        result = ops.from_images(_check_inputs(files), out, overwrite, size=size, dpi=dpi, margin_mm=margin)
+        result = ops.from_images(_check_inputs(files), out, overwrite, size=size, dpi=dpi, margin_mm=margin, tools=_tools())
     except ops.PdfError as exc:
         jsonout.add_item(status="failed", error=str(exc))
         log_error(escape(str(exc)))
