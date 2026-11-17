@@ -49,10 +49,14 @@ def _private_exif() -> bytes:
     return ex.tobytes()
 
 
+_SRGB = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+
+
 def _srgb_tagged(im: Image.Image) -> bool:
+    """An sRGB ICC profile, or (PNG) the 13-byte sRGB chunk, which Pillow reports as info["srgb"]."""
     icc = im.info.get("icc_profile")
     if not icc:
-        return False
+        return im.format == "PNG" and "srgb" in im.info
     return "srgb" in ImageCms.getProfileDescription(ImageCms.ImageCmsProfile(io.BytesIO(icc))).lower()
 
 
@@ -108,7 +112,7 @@ def test_max_size_shrinks_the_longest_side_and_never_enlarges(tmp_path):
 def test_web_output_drops_gps_and_serials_keeps_copyright_and_is_srgb(tmp_path, codec):
     if not _have(codec):
         pytest.skip(f"requires the {codec} encoder")
-    src = _photo(tmp_path / "photo.jpg", size=(400, 300), quality=97, exif=_private_exif())
+    src = _photo(tmp_path / "photo.jpg", size=(400, 300), quality=97, exif=_private_exif(), icc_profile=_SRGB)
     out = compress_file(src, codec, tools=ToolPaths(), quality=60, allow_larger=True)
     if codec == "avif":
         from PIL import features
@@ -149,3 +153,36 @@ def test_save_for_web_preset_bundles_the_web_defaults(tmp_path):
     assert res.exit_code == 0, doc
     item = doc["items"][0]
     assert item["bytes_after"] <= 500_000 and max(item["width"], item["height"]) == 2048
+
+
+# --------------------------------------------------------------------------- tiny PNGs (CI: test_pipeline_through_mcp)
+@pytest.mark.parametrize("codec", ["oxipng", "pngquant"])
+def test_png_output_declares_srgb_with_the_small_chunk_not_a_600_byte_profile(tmp_path, codec):
+    """A source with a colour profile is converted, and the PNG says sRGB with its 13-byte chunk. An untagged
+    source stays untagged (untagged already means sRGB on the web, and every byte counts on a small icon)."""
+    if not _have(codec):
+        pytest.skip(f"requires the {codec} encoder")
+    img = Image.new("RGB", (200, 150), (240, 240, 240))  # few colours: pngquant can always meet its quality range
+    img.paste((221, 0, 0), (40, 30, 160, 120))
+    img.save(tmp_path / "tagged.png", icc_profile=_SRGB)
+    img.save(tmp_path / "plain.png")
+    tagged = compress_file(tmp_path / "tagged.png", codec, tools=ToolPaths(), allow_larger=True)
+    plain = compress_file(tmp_path / "plain.png", codec, tools=ToolPaths(), allow_larger=True)
+    raw = tagged.output_path.read_bytes()
+    assert b"sRGB" in raw and b"iCCP" not in raw
+    assert b"sRGB" not in plain.output_path.read_bytes() and b"iCCP" not in plain.output_path.read_bytes()
+
+
+def test_a_tiny_exported_logo_png_still_gets_smaller_with_oxipng(tmp_path):
+    """CI's test_pipeline_through_mcp: an exported 32 px logo is about 300 bytes, and a 600-byte ICC profile made
+    every oxipng result 'not smaller', so the pipeline's compress step handed nothing on."""
+    if not (_have("oxipng") and shutil.which("rsvg-convert")):
+        pytest.skip("requires oxipng and rsvg-convert")
+    from tests.helpers import SIMPLE_SVG
+
+    (tmp_path / "logo.svg").write_text(SIMPLE_SVG)
+    res = runner.invoke(app, ["export", str(tmp_path / "logo.svg"), "--formats", "png", "--sizes", "32",
+                              "--out", str(tmp_path / "dist"), "--json"])
+    src = Path(json.loads(res.stdout)["items"][0]["output"])
+    out = compress_file(src, "oxipng", tools=ToolPaths())
+    assert out.status == "written" and out.bytes_after < out.bytes_before

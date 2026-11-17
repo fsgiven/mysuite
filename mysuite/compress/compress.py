@@ -105,8 +105,10 @@ def _png_add_chunks(path: Path, chunks: list[bytes]) -> None:
     path.write_bytes(data[:ihdr_end] + b"".join(new) + data[ihdr_end:])
 
 
-def _iccp_chunk(icc: bytes) -> bytes:
-    return _png_chunk(b"iCCP", b"sRGB\x00\x00" + zlib.compress(icc))
+def _srgb_chunk() -> bytes:
+    """PNG's own 13-byte way to say "these pixels are sRGB" (rendering intent 0, perceptual). An ICC profile
+    (about 600 bytes) would make a small icon or logo larger than the original."""
+    return _png_chunk(b"sRGB", b"\x00")
 
 
 def _exif_chunk(exif: bytes) -> bytes:
@@ -151,7 +153,9 @@ def _write_prepared(web: WebImage, input_path: Path, codec: str, tools: ToolPath
         image.save(tmp, format="GIF")
     else:
         extra = {"exif": web.exif} if web.exif else {}
-        image.save(tmp, format="PNG", compress_level=1, icc_profile=srgb_icc(), **extra)
+        if codec == "webp":                     # cwebp copies the profile from its input (-metadata icc)
+            extra["icc_profile"] = srgb_icc()
+        image.save(tmp, format="PNG", compress_level=1, **extra)
     if sharpen is None:
         return tmp
     sharp = _tmp_sibling(input_path, ".sharpened" + ext)
@@ -165,7 +169,7 @@ def _write_prepared(web: WebImage, input_path: Path, codec: str, tools: ToolPath
 
 
 def _encode(codec: str, source: Path, dest: Path, tools: ToolPaths, icc_file: Path | None, s: dict,
-            exif: bytes | None = None, exif_file: Path | None = None) -> None:
+            exif: bytes | None = None, exif_file: Path | None = None, png_srgb: bool = False) -> None:
     quality = s["quality"]
     if codec == "mozjpeg":
         cmd = [tools.cjpeg, "-sample", "1x1" if s["subsample"] == "4:4:4" else "2x2", "-outfile", str(dest)]
@@ -192,17 +196,19 @@ def _encode(codec: str, source: Path, dest: Path, tools: ToolPaths, icc_file: Pa
         cmd += ["--exif", str(exif_file)] if exif_file is not None else ["--ignore-exif", "--ignore-xmp"]
         run([*cmd, str(source), str(dest)])
     elif codec == "oxipng":
-        # A prepared PNG holds only iCCP (+ eXIf with the copyright): keep them. A native APNG is stripped.
+        # A prepared PNG holds only the eXIf with the copyright: keep it. A native APNG is stripped.
         strip = ["--strip", "safe"] if icc_file is None else []
         cmd = [tools.oxipng, "-o", str(s["effort"]), *strip, "-i", "on" if s["interlace"] else "off"]
         run([*cmd, str(source), "--out", str(dest)])
+        if png_srgb:
+            _png_add_chunks(dest, [_srgb_chunk()])
     elif codec == "pngquant":
         cmd = [tools.pngquant, f"--quality={s['quality_range']}", "--speed", str(s["pngquant_speed"]), "--force"]
         if not s["dither"]:
             cmd.append("--nofs")
         run([*cmd, str(source), "-o", str(dest)])
         if icc_file is not None:
-            _png_add_chunks(dest, [_iccp_chunk(icc_file.read_bytes()), *([_exif_chunk(exif)] if exif else [])])
+            _png_add_chunks(dest, [*([_srgb_chunk()] if png_srgb else []), *([_exif_chunk(exif)] if exif else [])])
     else:  # gifsicle
         cmd = [tools.gifsicle, f"--optimize={s['optimize_level']}"]
         if s["lossy"]:
@@ -305,6 +311,7 @@ def compress_file(
     size: tuple[int, int] = (0, 0)
     exif: bytes | None = None
     exif_file: Path | None = None
+    png_srgb = False         # PNG: say "sRGB" only when a profile was converted (untagged already means sRGB)
     try:
         if _native(input_path, source_format, codec) and sharpen is None and max_size is None:
             source, icc_file = input_path, None
@@ -326,13 +333,14 @@ def compress_file(
             icc_file.write_bytes(srgb_icc())
             temps.append(icc_file)
             exif = web.exif
+            png_srgb = web.had_profile
             if exif and codec == "avif":
                 exif_file = _tmp_sibling(input_path, ".exif")
                 exif_file.write_bytes(exif)
                 temps.append(exif_file)
 
         def encode(dest: Path, q: int | None) -> int:
-            _encode(codec, source, dest, tools, icc_file, {**settings, "quality": q}, exif, exif_file)
+            _encode(codec, source, dest, tools, icc_file, {**settings, "quality": q}, exif, exif_file, png_srgb)
             return dest.stat().st_size
 
         if max_kb is not None:

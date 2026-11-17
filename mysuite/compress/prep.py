@@ -38,6 +38,7 @@ class WebImage:
     notes: list[str] = field(default_factory=list)
     frames: int = 1
     exif: bytes | None = None                # only the copyright and author, for the output (nothing else)
+    had_profile: bool = False                # the source carried an ICC profile (its pixels were converted)
 
 
 # The web rule: the output carries the sRGB profile and who owns the picture, nothing else - no GPS, no
@@ -193,6 +194,7 @@ def load_for_web(path: Path, *, flatten: str | None = None, max_size: int | None
     image = open_checked(path, notes)
     frames = image.info.get("_frames", 1)
     exif = rights_exif(image.info.get("_rights") or {})
+    had_profile = bool(image.info.get("icc_profile"))
     if frames > 1:
         notes.append(f"{frames} frames in the source; only the first was kept")
     image = imageio.normalize(image)
@@ -203,4 +205,4 @@ def load_for_web(path: Path, *, flatten: str | None = None, max_size: int | None
         factor = max_size / max(image.size)
         image = image.resize((max(1, round(image.width * factor)), max(1, round(image.height * factor))),
                              Image.LANCZOS)
-    return WebImage(image, notes, frames, exif)
+    return WebImage(image, notes, frames, exif, had_profile)
