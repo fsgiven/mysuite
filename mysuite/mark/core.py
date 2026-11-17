@@ -38,9 +38,15 @@ class MarkError(ValueError):
     pass
 
 
-def _rng(key: str, ident: str | None) -> np.random.Generator:
+def check_key(key: str | None) -> str:
+    """The key, or MarkError. Checked once, before any file, so a short key is one error and not one per picture."""
     if not key or len(key) < 4:
         raise MarkError("the key must be at least 4 characters (it is your secret: keep it)")
+    return key
+
+
+def _rng(key: str, ident: str | None) -> np.random.Generator:
+    check_key(key)
     seed = int.from_bytes(hashlib.sha256(f"mysuite-mark\0{key}\0{ident or ''}".encode()).digest()[:8], "big")
     return np.random.default_rng(seed)
 
@@ -93,37 +99,86 @@ class EmbedResult:
     notes: list[str] | None = None
 
 
-def output_path_for(path: Path, fmt: str = "png") -> Path:
-    return path.with_name(f"{path.stem}_marked.{ 'jpg' if fmt == 'jpeg' else fmt}")
+FORMATS = {"png": "PNG", "jpeg": "JPEG", "tiff": "TIFF", "webp": "WEBP"}
+_BY_SUFFIX = {".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".tif": "tiff", ".tiff": "tiff", ".webp": "webp"}
 
 
-def embed_file(path: Path, *, key: str, ident: str | None = None, strength: str = "standard", fmt: str = "png",
-               quality: int = 95, overwrite: bool = False) -> EmbedResult:
+def target_format(path: Path, fmt: str | None) -> str:
+    """The format to write: the one asked for, else the input's own (JPEG in, JPEG out); PNG for anything else."""
+    if fmt:
+        fmt = "jpeg" if fmt == "jpg" else fmt
+        if fmt not in FORMATS:
+            raise MarkError(f"format must be one of {', '.join(FORMATS)}")
+        return fmt
+    return _BY_SUFFIX.get(Path(path).suffix.lower(), "png")
+
+
+def output_path_for(path: Path, fmt: str | None = None) -> Path:
+    path = Path(path)
+    fmt = target_format(path, fmt)
+    ext = path.suffix if _BY_SUFFIX.get(path.suffix.lower()) == fmt else {"jpeg": ".jpg", "tiff": ".tif"}.get(fmt, f".{fmt}")
+    return path.with_name(f"{path.stem}_marked{ext}")
+
+
+def _sixteen_bit(im: Image.Image) -> bool:
+    if im.mode in ("I;16", "I;16B", "I;16L", "I;16N", "I", "F"):
+        return True
+    try:
+        return any(";16" in str(t[3][0] if isinstance(t[3], tuple) else t[3]) for t in im.tile)
+    except (IndexError, TypeError):
+        return False
+
+
+def copy_metadata(src: Path, dst: Path, exiftool: str | None) -> bool:
+    """Every tag from the original (EXIF, IPTC, XMP: author, copyright, the no-AI declaration …) onto the marked copy,
+    with Orientation reset to 1 because the pixels were turned upright. False when exiftool is not installed."""
+    import shutil
+
+    from mysuite.utils.subprocess_utils import run
+
+    tool = shutil.which(exiftool or "exiftool")
+    if not tool:
+        return False
+    run([tool, "-q", "-q", "-m", "-overwrite_original", "-tagsfromfile", str(src), "-all:all", "-unsafe", "-icc_profile",
+         "-Orientation#=1", str(dst)])
+    return True
+
+
+def embed_file(path: Path, *, key: str, ident: str | None = None, strength: str = "standard", fmt: str | None = None,
+               quality: int = 95, overwrite: bool = False, out: Path | None = None, dry_run: bool = False,
+               exiftool: str | None = "exiftool") -> EmbedResult:
+    """Marks a copy (name_marked.ext, or `out`) in the input's own format unless `fmt` says otherwise, with the
+    original's metadata copied over (exiftool). Never changes the original."""
     if strength not in STRENGTHS:
         raise MarkError(f"strength must be one of {', '.join(STRENGTHS)}")
-    if fmt not in ("png", "jpeg", "tiff"):
-        raise MarkError("format must be png, jpeg or tiff")
-    tile = make_tile(key, ident)
     path = Path(os.path.abspath(path))
-    out = output_path_for(path, fmt)
+    fmt = target_format(path, fmt)
+    out = Path(os.path.abspath(out)) if out else output_path_for(path, fmt)
     if out == path:
         raise MarkError("the output would replace the input")
     if out.exists() and not overwrite:
         return EmbedResult(out, "skipped_existing")
+    if dry_run:
+        return EmbedResult(out, "planned")
+    tile = make_tile(key, ident)
+    notes: list[str] = []
     try:
         with Image.open(path) as im:
             if im.width * im.height > MAX_PIXELS:
                 raise MarkError("image is too large")
             im.seek(0)
             icc = im.info.get("icc_profile")
-            image = ImageOps.exif_transpose(im).convert("RGBA")
+            if _sixteen_bit(im):
+                notes.append("16-bit source: the marked copy is 8-bit per channel")
+            from mysuite.utils.imageio import normalize
+
+            image = normalize(im).convert("RGBA")              # upright, 16-bit scaled (not clipped) to 8-bit
     except MarkError:
         raise
     except Exception as exc:  # noqa: BLE001
         raise MarkError(f"can't read {path.name}: {exc}") from exc
     if min(image.size) < MIN_SIDE:
         raise MarkError(f"the image is too small to carry a reliable mark (at least {MIN_SIDE} px on each side)")
-    notes: list[str] = []
     rgba = np.asarray(image, dtype=np.float64)
     rgb, alpha = rgba[..., :3], rgba[..., 3]
     h, w, _ = rgb.shape
@@ -135,18 +190,27 @@ def embed_file(path: Path, *, key: str, ident: str | None = None, strength: str 
     mse = float(np.mean((out_rgb - rgb) ** 2))
     result = Image.fromarray(out_rgb.astype(np.uint8), "RGB")
     if alpha.min() < 255:
-        result = result.convert("RGBA")
-        result.putalpha(Image.fromarray(alpha.astype(np.uint8), "L"))
+        if fmt == "jpeg":
+            notes.append("JPEG has no transparency: transparent areas are now black-backed; use PNG to keep them")
+        else:
+            result = result.convert("RGBA")
+            result.putalpha(Image.fromarray(alpha.astype(np.uint8), "L"))
     if fmt == "jpeg":
         result = result.convert("RGB")
-        notes.append("saved as JPEG: the mark is built to survive this, but PNG keeps it strongest")
-    pil = {"png": "PNG", "jpeg": "JPEG", "tiff": "TIFF"}[fmt]
+        if _BY_SUFFIX.get(path.suffix.lower()) != "jpeg":
+            notes.append("saved as JPEG: the mark is built to survive this, but PNG keeps it strongest")
     kwargs: dict[str, Any] = {"icc_profile": icc} if icc else {}
     if fmt == "jpeg":
         kwargs.update(quality=quality, subsampling=0)
+    elif fmt == "webp":
+        kwargs.update(quality=max(quality, 95), method=6)
+    elif fmt == "tiff":
+        kwargs.update(compression="tiff_lzw")
 
     def write(tmp: Path) -> None:
-        result.save(tmp, format=pil, **kwargs)
+        result.save(tmp, format=FORMATS[fmt], **kwargs)
+        if exiftool is not None and not copy_metadata(path, tmp, exiftool):
+            notes.append("metadata not copied: exiftool is not installed (the colour profile is kept)")
 
     atomic_write_via(out, write, preserve_extension=True)
     return EmbedResult(out, "written", None if mse == 0 else round(10 * float(np.log10(255 ** 2 / mse)), 2), amplitude, notes)
@@ -195,7 +259,9 @@ def detect_file(path: Path, *, key: str, ident: str | None = None, max_side: int
             if im.width * im.height > MAX_PIXELS:
                 raise MarkError("image is too large")
             im.seek(0)
-            gray = ImageOps.exif_transpose(im).convert("RGBA")
+            from mysuite.utils.imageio import normalize
+
+            gray = normalize(im).convert("RGBA")
     except MarkError:
         raise
     except Exception as exc:  # noqa: BLE001

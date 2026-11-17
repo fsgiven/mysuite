@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import typer
 from rich.markup import escape
@@ -16,11 +16,16 @@ app = typer.Typer(help="Invisible ownership mark: embed it in your pictures, lat
 
 
 def _key(key: Optional[str]) -> str:
+    """The key from --key or MYSUITE_MARK_KEY, checked once before any file is read."""
     key = key or os.environ.get("MYSUITE_MARK_KEY")
     if not key:
         log_error("a key is needed: --key SECRET or the MYSUITE_MARK_KEY environment variable (keep it secret; without it nobody can check the mark)")
         raise typer.Exit(1)
-    return key
+    try:
+        return core.check_key(key)
+    except core.MarkError as exc:
+        log_error(escape(str(exc)))
+        raise typer.Exit(jsonout.EXIT_USAGE) from exc
 
 
 def _files(inputs: List[Path], recursive: bool) -> list[Path]:
@@ -35,23 +40,27 @@ def _files(inputs: List[Path], recursive: bool) -> list[Path]:
     return files
 
 
-@app.command("embed", help="Add your invisible mark. Output: <name>_marked.png beside the original.")
+@app.command("embed", help="Add your invisible mark to a copy, <name>_marked.<ext> beside the original, in the same format "
+             "(JPEG in, JPEG out) with its metadata (author, copyright, no-AI declaration) copied over.")
 @jsonout.with_json("mark-embed")
 def embed(
     inputs: List[Path] = typer.Argument(..., exists=True, readable=True, help="Images / folders."),
     key: Optional[str] = typer.Option(None, "--key", help="Your secret key (or MYSUITE_MARK_KEY). Same key = same mark."),
     ident: Optional[str] = typer.Option(None, "--id", help="Optional label mixed into the mark, e.g. a campaign or recipient: a different id is a different mark."),
-    strength: str = typer.Option("standard", "--strength", help="subtle (~44 dB), standard (~40 dB), strong (~37 dB): stronger survives more, shows more."),
-    output_format: str = typer.Option("png", "--format", help="png (best), tiff or jpeg."),
-    quality: int = typer.Option(95, "--quality", help="JPEG quality."),
+    strength: Literal["subtle", "standard", "strong"] = typer.Option("standard", "--strength", help="subtle (~44 dB), standard (~40 dB), strong (~37 dB): stronger survives more, shows more."),
+    output_format: Optional[Literal["png", "jpeg", "jpg", "tiff", "webp"]] = typer.Option(
+        None, "--format", help="Default: the input's own format. PNG keeps the mark strongest."),
+    quality: int = typer.Option(95, "--quality", help="JPEG/WebP quality."),
     recursive: bool = typer.Option(False, "--recursive", "-r"),
     overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show the files that would be written, write nothing."),
 ) -> None:
     secret = _key(key)
     failed = 0
     for f in _files(inputs, recursive):
         try:
-            r = core.embed_file(f, key=secret, ident=ident, strength=strength, fmt=output_format, quality=quality, overwrite=overwrite)
+            r = core.embed_file(f, key=secret, ident=ident, strength=strength, fmt=output_format, quality=quality,
+                                overwrite=overwrite, dry_run=dry_run)
         except core.MarkError as exc:
             failed += 1
             jsonout.add_item(input=f, status="failed", error=str(exc))
@@ -60,6 +69,10 @@ def embed(
         if r.status == "skipped_existing":
             jsonout.add_item(input=f, output=r.path, status="skipped_existing")
             console.print(f"[dim]— exists, skipped: {escape(str(r.path))}[/dim]")
+            continue
+        if r.status == "planned":
+            jsonout.add_item(input=f, output=r.path, status="planned")
+            console.print(f"[dim]{escape(str(f))} -> {escape(str(r.path))}[/dim]")
             continue
         jsonout.add_item(input=f, output=r.path, status="written", psnr_db=r.psnr_db, strength=r.strength, notes=r.notes or [])
         log_step(f"{escape(str(r.path))}  [dim]{r.psnr_db} dB[/dim]")
