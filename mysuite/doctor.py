@@ -129,8 +129,10 @@ def run_doctor(tools: ToolPaths, needed: tuple[str, ...] | None = None) -> bool:
 
 
 def require_tools(tools: ToolPaths, key: str) -> None:
-    """Exit 4 (with the doctor table and, for --json, structured install hints) if a command's tools are missing."""
+    """Exit 4 if a command's tools are missing: one line per missing tool with how to install it (and, for --json,
+    structured install hints). The full table is `mysuite doctor`'s job."""
     import typer
+    from rich.markup import escape
 
     from mysuite.utils import jsonout
 
@@ -141,5 +143,7 @@ def require_tools(tools: ToolPaths, key: str) -> None:
     hints = {spec.attr: spec.install_hint for spec in TOOL_SPECS}
     jsonout.add_error("missing required tool(s): " + ", ".join(missing))
     jsonout.set_extra(missing_tools=[{"tool": name, "install_hint": hints[name]} for name in missing])
-    run_doctor(tools, needed)
+    for name in missing:
+        console.print(f"[#F87171]✗[/#F87171] {escape(key.replace('-', ' '))} needs {escape(name)}, which is not installed: "
+                      f"{escape(hints[name])}", soft_wrap=True)
     raise typer.Exit(jsonout.EXIT_MISSING_TOOL)

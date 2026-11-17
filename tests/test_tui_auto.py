@@ -141,7 +141,7 @@ async def test_helpers_contrast_runs_without_files():
         screen.query_one(f"#{ids['background']}", Input).value = "#ffffff"
         screen.action_run()
         await finish(pilot)
-        assert screen.last_summary_text.startswith("done") and "21.0:1" in screen.last_output
+        assert screen.last_summary_text.startswith("done") and "21.00:1" in screen.last_output
 
 
 @pytest.mark.asyncio

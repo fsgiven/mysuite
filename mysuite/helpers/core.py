@@ -53,8 +53,30 @@ def read_codes(path: Path, tools: ToolPaths) -> list[dict[str, Any]]:
 
 
 # ------------------------------------------------------------------------------------- QR make
+QR_FORMATS = {".png": "png", ".svg": "svg", ".jpg": "jpeg", ".jpeg": "jpeg", ".pdf": "pdf", ".eps": "eps"}
+QR_MIN_CONTRAST = 3.0     # below this many phone cameras struggle; the spec assumes dark modules on light
+
+
+def qr_colour_warnings(dark: str, light: str | None) -> list[str]:
+    """Warnings for colours that scan badly: too little contrast, or light modules on a dark background."""
+    d = parse_color(dark)
+    l = parse_color(light) if light else None
+    if d is None or l is None:
+        return []
+    ratio = contrast_ratio((d.r, d.g, d.b), (l.r, l.g, l.b))
+    out = []
+    if ratio < QR_MIN_CONTRAST:
+        out.append(f"low contrast between --dark and --light ({ratio:.2f}:1): many scanners need {QR_MIN_CONTRAST:.0f}:1 "
+                   "or more, so test it with a phone")
+    if luminance((d.r, d.g, d.b)) > luminance((l.r, l.g, l.b)):
+        out.append("--dark is lighter than --light (an inverted code): some scanners can't read it")
+    return out
+
+
 def make_qr(text: str, out: Path, *, fmt: str = "png", scale: int = 10, border: int = 4, error: str = "m",
             dark: str = "#000000", light: str | None = "#ffffff", overwrite: bool = False) -> dict[str, Any]:
+    """Write a QR code. The output format follows the file extension (.png .svg .jpg .pdf .eps); a file without an
+    extension gets `fmt`. Any other extension is refused instead of silently writing something else."""
     import segno
 
     if not text:
@@ -63,26 +85,39 @@ def make_qr(text: str, out: Path, *, fmt: str = "png", scale: int = 10, border: 
         raise HelperError("text is too long for a QR code (limit about 2900 bytes)")
     if error.lower() not in ("l", "m", "q", "h"):
         raise HelperError("error correction must be l, m, q or h")
-    if fmt not in ("png", "svg"):
-        raise HelperError("format must be png or svg")
     if not 1 <= scale <= 100 or not 0 <= border <= 20:
         raise HelperError("scale must be 1-100 and border 0-20")
     for name, value in (("dark", dark), ("light", light)):
         if value and parse_color(value) is None:
             raise HelperError(f"{name}: not a colour: {value!r}")
     target = Path(os.path.abspath(out))
-    if target.suffix.lower() not in (".png", ".svg"):
-        target = target.with_suffix("." + fmt)
-    fmt = target.suffix.lower().lstrip(".")
+    if not target.suffix:
+        if fmt not in QR_FORMATS.values():
+            raise HelperError("format must be png, svg, jpeg, pdf or eps")
+        target = target.with_suffix("." + {"jpeg": "jpg"}.get(fmt, fmt))
+    kind = QR_FORMATS.get(target.suffix.lower())
+    if kind is None:
+        raise HelperError(f"can't write a QR code as {target.suffix}: use .png, .svg, .jpg, .pdf or .eps")
+    warnings = qr_colour_warnings(dark, light)
     if target.exists() and not overwrite:
-        return {"path": target, "status": "skipped_existing"}
+        return {"path": target, "status": "skipped_existing", "warnings": warnings}
     qr = segno.make(text, error=error.lower(), micro=False)
 
     def write(tmp: Path) -> None:
-        qr.save(str(tmp), kind=fmt, scale=scale, border=border, dark=dark, light=light)
+        if kind == "jpeg":                         # segno has no JPEG writer: render a PNG, then encode it
+            import io
+
+            buf = io.BytesIO()
+            qr.save(buf, kind="png", scale=scale, border=border, dark=dark, light=light or "#ffffff")
+            buf.seek(0)
+            with Image.open(buf) as im:
+                im.convert("RGB").save(tmp, format="JPEG", quality=95, subsampling=0)
+        else:
+            qr.save(str(tmp), kind=kind, scale=scale, border=border, dark=dark, light=light)
 
     atomic_write_via(target, write, preserve_extension=True)
-    return {"path": target, "status": "written", "version": qr.version, "modules": qr.symbol_size(border=0)[0]}
+    return {"path": target, "status": "written", "format": kind, "version": qr.version,
+            "modules": qr.symbol_size(border=0)[0], "warnings": warnings}
 
 
 # --------------------------------------------------------------------------------- duplicates
@@ -93,14 +128,48 @@ class ImageFact:
     width: int
     height: int
     sha: str
-    dhash: int
+    dhash: int                 # left/right gradients, 64 bits
+    vhash: int = 0             # up/down gradients, 64 bits
+    informative: bool = True   # False for flat or nearly featureless pictures: their hashes match anything
+    frames: int = 1
+
+
+def _bits(a: np.ndarray) -> int:
+    return int("".join("1" if b else "0" for b in a.flatten()), 2)
+
+
+def _grey(im: Image.Image) -> Image.Image:
+    """8-bit greyscale of the upright picture (16-bit is scaled, not clipped; animations use their frames' mean)."""
+    from mysuite.utils import imageio
+
+    frames = getattr(im, "n_frames", 1)
+    if frames <= 1:
+        return imageio.normalize(im).convert("L")
+    acc = None
+    picked = range(0, frames, max(1, frames // 8))           # up to ~8 frames spread over the animation
+    for i in picked:
+        im.seek(i)
+        a = np.asarray(imageio.normalize(im, orient=False).convert("L").resize((64, 64)), dtype=np.float64)
+        acc = a if acc is None else acc + a
+    im.seek(0)
+    return Image.fromarray((acc / len(picked)).astype(np.uint8), "L")
+
+
+def _hashes(im: Image.Image) -> tuple[int, int, bool]:
+    g = _grey(im)
+    h = np.asarray(g.resize((9, 8), Image.Resampling.LANCZOS), dtype=np.int16)
+    v = np.asarray(g.resize((8, 9), Image.Resampling.LANCZOS), dtype=np.int16)
+    dh, vh = h[:, 1:] > h[:, :-1], v[1:, :] > v[:-1, :]
+    small = np.asarray(g.resize((32, 32)), dtype=np.float64)
+    # A flat picture, or a plain ramp, sets (almost) no bits or all of them in both directions: it would "match"
+    # every other flat or ramp picture, so it only takes part in byte-identical groups.
+    lopsided = lambda bits: min(int(bits.sum()), bits.size - int(bits.sum())) <= 2
+    informative = small.std() >= 2.0 and not (lopsided(dh) and lopsided(vh))
+    return _bits(dh), _bits(vh), informative
 
 
 def _dhash(im: Image.Image) -> int:
-    g = ImageOps.exif_transpose(im).convert("L").resize((9, 8), Image.Resampling.LANCZOS)
-    a = np.asarray(g, dtype=np.int16)
-    bits = (a[:, 1:] > a[:, :-1]).flatten()
-    return int("".join("1" if b else "0" for b in bits), 2)
+    return _hashes(im)[0]
 
 
 def fact_for(path: Path) -> ImageFact:
@@ -108,9 +177,22 @@ def fact_for(path: Path) -> ImageFact:
     try:
         with Image.open(path) as im:
             im.seek(0)
-            return ImageFact(path, len(data), im.width, im.height, hashlib.sha256(data).hexdigest(), _dhash(im))
+            width, height, frames = im.width, im.height, getattr(im, "n_frames", 1)
+            if (ImageOps.exif_transpose(im).size != im.size):
+                width, height = height, width
+            dh, vh, informative = _hashes(im)
+            return ImageFact(path, len(data), width, height, hashlib.sha256(data).hexdigest(), dh, vh, informative, frames)
     except Exception as exc:  # noqa: BLE001
         raise HelperError(f"can't read {path.name}: {exc}") from exc
+
+
+def _similar(a: ImageFact, b: ImageFact, threshold: int) -> bool:
+    if not (a.informative and b.informative):
+        return False
+    ra, rb = a.width / max(1, a.height), b.width / max(1, b.height)
+    if abs(ra - rb) / max(ra, rb) > 0.03:                    # a resized copy keeps its shape
+        return False
+    return bin(a.dhash ^ b.dhash).count("1") <= threshold and bin(a.vhash ^ b.vhash).count("1") <= threshold
 
 
 def find_duplicates(paths: list[Path], threshold: int = 5, limit: int = 5000) -> tuple[list[dict[str, Any]], list[tuple[Path, str]]]:
@@ -137,7 +219,7 @@ def find_duplicates(paths: list[Path], threshold: int = 5, limit: int = 5000) ->
     for i in range(len(facts)):
         for j in range(i + 1, len(facts)):
             same = facts[i].sha == facts[j].sha
-            close = bin(facts[i].dhash ^ facts[j].dhash).count("1") <= threshold
+            close = _similar(facts[i], facts[j], threshold)
             if same or close:
                 parent[find(j)] = find(i)
                 if same:
@@ -155,7 +237,9 @@ def find_duplicates(paths: list[Path], threshold: int = 5, limit: int = 5000) ->
             "kind": "identical" if len(shas) == 1 else "similar",
             "keep_suggestion": str(facts[best].path),
             "wasted_bytes": sum(facts[i].bytes for i in members if i != best),
-            "files": [{"path": str(facts[i].path), "bytes": facts[i].bytes, "width": facts[i].width, "height": facts[i].height}
+            "files": [{"name": facts[i].path.name, "path": str(facts[i].path), "bytes": facts[i].bytes,
+                       "width": facts[i].width, "height": facts[i].height,
+                       **({"frames": facts[i].frames} if facts[i].frames > 1 else {})}
                       for i in sorted(members, key=lambda i: str(facts[i].path))],
         })
     out.sort(key=lambda g: -g["wasted_bytes"])
@@ -163,16 +247,67 @@ def find_duplicates(paths: list[Path], threshold: int = 5, limit: int = 5000) ->
 
 
 # ---------------------------------------------------------------------------------------- diff
-def diff_images(a: Path, b: Path, *, threshold: int = 16, out: Path | None = None, overwrite: bool = False) -> dict[str, Any]:
+VECTOR_KINDS = ("svg", "pdf", "eps")
+DIFF_RENDER_SIZE = 1024   # SVGs are drawn this many px on their longer side; PDF/EPS pages at DIFF_RENDER_DPI
+DIFF_RENDER_DPI = 150
+
+
+def rasterise(path: Path, tools: ToolPaths | None) -> Image.Image:
+    """Page 1 of an SVG/PDF/EPS as RGBA (SVG transparency is kept), for comparing pictures."""
+    import tempfile
+
+    from mysuite.convert._parsing import detect_source_format
+
+    if tools is None:
+        raise HelperError("comparing vector files needs the tool paths")
+    kind = detect_source_format(path)
+    handle = tempfile.NamedTemporaryFile(suffix=".png", prefix="mysuite-diff-", delete=False)
+    handle.close()
+    png = Path(handle.name)
+    try:
+        if kind == "svg":
+            run([tools.rsvg_convert, "--format=png", f"--width={DIFF_RENDER_SIZE}", "--keep-aspect-ratio",
+                 f"--output={png}", os.path.abspath(path)])
+        else:
+            run([tools.gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=pngalpha", "-dFirstPage=1", "-dLastPage=1",
+                 *(["-dEPSCrop"] if kind == "eps" else []), f"-r{DIFF_RENDER_DPI}", f"-sOutputFile={png}", os.path.abspath(path)])
+        with Image.open(png) as im:
+            return im.convert("RGBA")
+    except FileNotFoundError as exc:
+        raise HelperError(f"rendering {path.name} needs {'rsvg-convert' if kind == 'svg' else 'Ghostscript (gs)'}") from exc
+    except MysuiteToolError as exc:
+        raise HelperError(f"can't render {path.name}: {(exc.stderr or str(exc)).strip()[:200]}") from exc
+    finally:
+        png.unlink(missing_ok=True)
+
+
+def _load_for_diff(path: Path, tools: ToolPaths | None) -> tuple[Image.Image, str | None]:
+    from mysuite.convert._parsing import detect_source_format
+    from mysuite.utils import imageio
+
+    kind = detect_source_format(path)
+    if kind in VECTOR_KINDS:
+        how = f"{DIFF_RENDER_SIZE} px on the longer side" if kind == "svg" else f"page 1 at {DIFF_RENDER_DPI} dpi"
+        return rasterise(path, tools), f"{path.name} was rendered ({how}) for the comparison"
+    with Image.open(path) as im:
+        im.seek(0)
+        return imageio.normalize(im).convert("RGBA"), None
+
+
+def diff_images(a: Path, b: Path, *, threshold: int = 16, out: Path | None = None, overwrite: bool = False,
+                tools: ToolPaths | None = None) -> dict[str, Any]:
+    """Compare two pictures. SVG/PDF/EPS are rendered first (needs `tools`); rasters are compared as stored, upright."""
     if not 0 <= threshold <= 255:
         raise HelperError("threshold must be 0-255")
+    notes: list[str] = []
     try:
-        with Image.open(a) as ia, Image.open(b) as ib:
-            ia.seek(0)
-            ib.seek(0)
-            ra, rb = ImageOps.exif_transpose(ia).convert("RGBA"), ImageOps.exif_transpose(ib).convert("RGBA")
+        ra, na = _load_for_diff(a, tools)
+        rb, nb = _load_for_diff(b, tools)
+    except HelperError:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise HelperError(f"can't read the images: {exc}") from exc
+    notes += [n for n in (na, nb) if n]
     same_size = ra.size == rb.size
     note = None
     if not same_size:
@@ -188,6 +323,7 @@ def diff_images(a: Path, b: Path, *, threshold: int = 16, out: Path | None = Non
         "identical": bool(delta.max() == 0), "mean_abs_diff": round(float(np.abs(fa - fb).mean()), 3),
         "changed_pct": round(float((delta > threshold).mean() * 100), 3), "max_diff": int(delta.max()),
         "psnr_db": None if mse == 0 else round(10 * np.log10(255 ** 2 / mse), 2), "threshold": threshold, "note": note,
+        "notes": notes,
     }
     if out is not None:
         target = Path(os.path.abspath(out))

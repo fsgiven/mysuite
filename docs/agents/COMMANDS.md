@@ -190,7 +190,11 @@ WCAG contrast ratio of two colours, or of a logo's colours on a background.
 - argument `foreground` (str) Foreground colour, e.g. '#dd0000' (or use --logo).
 - argument `background` (str) Background colour, e.g. white.
 - `--logo` (file) Check every colour of this logo (SVG or image) against --on.
-- `--on` (str, default `#ffffff`) Background for --logo.
+- `--on` (str, default `#ffffff`) Background for --logo (a colour or token:NAME).
+- `--tokens` (str) Design token source (CSS/JSON file or folder, git+…, figma:…): then any colour may be token:NAME, e.g. token:--bg-color-brand-solid.
+- `--brand` (str) Which brand of the token source (when it has several).
+- `--theme` (choice, default `light`, one of `light`, `dark`) Which theme's token values to use.
+- `--tokens-refresh` (boolean) Re-fetch a git token source.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
 Examples:
@@ -198,6 +202,7 @@ Examples:
 ```bash
 mysuite contrast "#dd0000" white --json
 mysuite contrast --logo logo.svg --on "#ffffff" --json
+mysuite contrast token:--text-color-brand token:--bg-color --tokens tokens/ --theme dark --json
 ```
 
 ## `mysuite convert`
@@ -250,8 +255,8 @@ Compare two images: how much changed, optionally as a picture.
 
 *read only unless `--out` (then writes files) · no `--dry-run` · `--json`*
 
-- argument `first` (file, required) Reference image.
-- argument `second` (file, required) Image to compare.
+- argument `first` (file, required) Reference: an image, or an SVG/PDF/EPS (rendered; page 1).
+- argument `second` (file, required) The image (or SVG/PDF/EPS) to compare.
 - `--threshold` (int, default `16`) A pixel counts as changed when any channel differs by more than this (0-255).
 - `--out / -o` (path) Write a PNG with the changed pixels in red over a faded first image.
 - `--overwrite / --no-overwrite` (boolean)
@@ -1184,7 +1189,7 @@ Make a QR code: `mysuite qr make "https://example.com" --out qr.png`.
 *writes files · no `--dry-run` · `--json`*
 
 - argument `text` (str, required) What the code should say (a URL, text, Wi-Fi string…).
-- `--out / -o` (path) Output file (.png or .svg).
+- `--out / -o` (path) Output file: .png, .svg, .jpg, .pdf or .eps (the extension picks the format).
 - `--scale` (int, default `10`) Pixels per module (PNG) / units (SVG), 1-100.
 - `--border` (int, default `4`) Quiet-zone modules around the code (the spec wants 4).
 - `--error` (choice, default `m`, one of `l`, `m`, `q`, `h`) Error correction: l (7%), m (15%), q (25%), h (30%).
