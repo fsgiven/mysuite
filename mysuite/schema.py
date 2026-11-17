@@ -105,6 +105,7 @@ EXAMPLES: dict[str, list[str]] = {
     "metadata apply": ["mysuite metadata apply photo.jpg --policy strip,credit --author Acme --json"],
     "metadata credit": ['mysuite metadata credit photo.jpg --author "Name" --copyright "© 2026 Name" --json'],
     "metadata declare": ["mysuite metadata declare photo.jpg --owner Acme --json"],
+    "metadata protect": ['mysuite metadata protect photo.jpg --author "Name" --copyright "© 2026 Name" --json'],
     "metadata randomize": ["mysuite metadata randomize photo.jpg --dry-run --json"],
     "metadata strip": ["mysuite metadata strip photo.jpg --json"],
     "ocr": ["mysuite ocr shot.png --json"],

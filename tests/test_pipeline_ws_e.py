@@ -88,7 +88,7 @@ def test_validate_catches_a_typo_and_runs_nothing(work):
 
 def test_validate_describes_a_good_pipeline(work):
     p = write(work, 'inputs = ["logo.svg"]\n[[step]]\ntool = "export"\nformats = ["png"]\nsizes = [32]\nout = "dist"\n'
-                    '[[step]]\ntool = "pdf"\naction = "rotate"\ndegrees = 90\n')
+                    '[[step]]\ntool = "profile"\nto = "srgb"\n')         # profile: writes, no --dry-run
     res = runner.invoke(app, ["pipeline", "validate", str(p), "--json"])
     doc = json.loads(res.stdout)
     assert res.exit_code == 0, doc
@@ -107,7 +107,7 @@ def test_validate_reports_inputs_that_match_nothing(work):
 
 # ---------------------------------------------------------------------------- dry-run wording
 def test_dry_run_notes_say_what_happens(work):
-    p = write(work, 'inputs = ["pic.png"]\n[[step]]\ntool = "pdf"\naction = "from-images"\n'
+    p = write(work, 'inputs = ["pic.png"]\n[[step]]\ntool = "profile"\nto = "srgb"\n'
                     '[[step]]\ntool = "convert"\nto = "webp"\n')
     res, doc = run_pipeline(p, "--dry-run")
     first, second = doc["items"]

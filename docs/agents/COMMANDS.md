@@ -663,6 +663,12 @@ Protect & credit in one go, into ONE copy (name_protected.ext): remove private d
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
+Examples:
+
+```bash
+mysuite metadata protect photo.jpg --author "Name" --copyright "© 2026 Name" --json
+```
+
 ## `mysuite metadata randomize`
 
 ADVANCED, hidden: strip all metadata, then write one internally consistent decoy camera identity (make/model/lens/firmware + plausible exposure and a recent capture time; never GPS). A made-up camera and date is false provenance for published pictures, so it runs only with --advanced.
