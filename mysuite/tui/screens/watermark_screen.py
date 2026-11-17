@@ -1,7 +1,7 @@
 """Watermark: stamp a logo (image or SVG) onto photos — a copy beside each original, originals untouched.
 
 A form over `mysuite watermark …`; see mysuite.tui.shell. Stable ids: `#input-files`, `#logo`, `#position`, `#scale`,
-`#opacity`, `#margin`.
+`#opacity`, `#margin`, `#size-by`, `#quality`.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class WatermarkScreen(ToolScreen):
     TOOL_KEY = "watermark"
     CLI = ("watermark",)
     HEADING = "Watermark"
-    PERSIST = ("logo", "position", "scale", "opacity", "margin", "overwrite", "recursive")
+    PERSIST = ("logo", "position", "scale", "opacity", "margin", "size-by", "quality", "overwrite", "recursive")
 
     def compose_form(self) -> ComposeResult:
         yield Label("Photos", classes="section")
@@ -46,8 +46,12 @@ class WatermarkScreen(ToolScreen):
             yield field("Position", Select[str]([(p, p) for p in GRAVITY_BY_POSITION], id="position", prompt="bottom-right"), classes="grow")
             yield field("Opacity 0-100", Input(placeholder="80", id="opacity"), classes="narrow")
         with Horizontal(classes="pair"):
-            yield field("Logo size, % of photo width", Input(placeholder="15", id="scale"))
+            yield field("Logo size, % of the photo's…", Input(placeholder="15", id="scale"))
+            yield field("…measured on", Select[str]([("width", "width"), ("height (same on portrait and landscape)", "height")],
+                                                  id="size-by", allow_blank=False, value="width"), classes="grow")
+        with Horizontal(classes="pair"):
             yield field("Margin, % of photo width", Input(placeholder="3", id="margin"))
+            yield field("JPEG/WebP quality 1-100", Input(placeholder="as the source", id="quality"))
         with Collapsible(title="Safety", collapsed=True, id="adv-safety"):
             yield Checkbox("Replace files that already exist", id="overwrite")
 
@@ -84,10 +88,14 @@ class WatermarkScreen(ToolScreen):
             ("--scale", "scale", "Logo size", False, 0.1, 100),
             ("--opacity", "opacity", "Opacity", True, 0, 100),
             ("--margin", "margin", "Margin", False, 0, 50),
+            ("--quality", "quality", "Quality", True, 1, 100),
         ):
             value = self._number(wid, label, whole=whole, low=low, high=high)
             if value:
                 out += [flag, value]
+        size_by = self.query_one("#size-by", Select).value
+        if size_by not in _BLANK and size_by != "width":
+            out += ["--size-by", str(size_by)]
         if self.query_one("#recursive", Checkbox).value:
             out.append("--recursive")
         if self.query_one("#overwrite", Checkbox).value:
