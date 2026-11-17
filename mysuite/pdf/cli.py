@@ -84,7 +84,8 @@ def _tools():
         raise typer.Exit(1) from exc
 
 
-@app.command("info", help="Pages, page sizes, rotation, metadata, forms - read only.")
+@app.command("info", help="Pages, page sizes, rotation, metadata, forms, and a print preflight: fonts (embedded or not), colour "
+             "spaces, lowest image resolution as placed, trim/bleed boxes, PDF/X or PDF/A - read only.")
 @jsonout.with_json("pdf-info")
 def info(files: List[Path] = PDFS) -> None:
     failed = 0
@@ -99,7 +100,11 @@ def info(files: List[Path] = PDFS) -> None:
         jsonout.add_item(status="ok", **data)
         table = Table(title=escape(data["path"]), show_header=False)
         for k, v in data.items():
-            if k != "path":
+            if k == "preflight":
+                for pk, pv in v.items():
+                    shown = ", ".join(map(str, pv)) if isinstance(pv, list) else pv
+                    table.add_row(escape(f"preflight: {pk}"), escape(str(shown if shown not in ("", None) else "-")))
+            elif k != "path":
                 table.add_row(escape(k), escape(str(v)))
         console.print(table)
     if failed:

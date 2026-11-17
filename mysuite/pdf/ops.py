@@ -218,6 +218,134 @@ def info(path: Path) -> dict[str, Any]:
         "encrypted": "owner password only" if reader.is_encrypted else False,
         "has_forms": bool(reader.get_fields()), "version": reader.pdf_header.lstrip("%PDF-"),
         "bytes": Path(path).stat().st_size,
+        "preflight": preflight(reader),
+    }
+
+
+# ---------------------------------------------------------------------------- preflight (read only)
+def _cs_name(cs: Any) -> str:
+    cs = cs.get_object() if hasattr(cs, "get_object") else cs
+    if isinstance(cs, list) and cs:
+        kind = str(cs[0]).lstrip("/")
+        if kind == "ICCBased":
+            n = cs[1].get_object().get("/N")
+            return f"ICCBased({ {1: 'Gray', 3: 'RGB', 4: 'CMYK'}.get(int(n), n) })"
+        if kind == "Separation":
+            return f"Separation({str(cs[1]).lstrip('/')})"
+        if kind == "Indexed":
+            return f"Indexed({_cs_name(cs[1])})"
+        return kind
+    return str(cs).lstrip("/")
+
+
+def _font_facts(font: Any) -> tuple[str, bool]:
+    font = font.get_object()
+    name = str(font.get("/BaseFont", "/(unnamed)")).lstrip("/")
+    if font.get("/Subtype") == "/Type3":
+        return name, True                                     # drawn by its own glyph procedures
+    if font.get("/Subtype") == "/Type0":
+        font = font["/DescendantFonts"][0].get_object()
+    descriptor = font.get("/FontDescriptor")
+    embedded = descriptor is not None and any(k in descriptor.get_object() for k in ("/FontFile", "/FontFile2", "/FontFile3"))
+    return name, embedded
+
+
+def preflight(reader: PdfReader, max_pages: int = 200) -> dict[str, Any]:
+    """Print-check facts, read only: fonts (embedded or not), colour spaces, image count and the lowest effective image
+    resolution (pixels per inch as placed on the page), trim/bleed boxes, and PDF/X or PDF/A claims. The first
+    `max_pages` pages are looked at."""
+    from pypdf.generic import ContentStream
+
+    fonts: dict[str, bool] = {}
+    spaces: set[str] = set()
+    images = 0
+    lowest: float | None = None
+    seen: set[int] = set()
+
+    def walk(content_owner: Any, resources: Any, ctm: list[float], depth: int) -> None:
+        nonlocal images, lowest
+        resources = resources.get_object() if resources is not None else {}
+        for f in (resources.get("/Font") or {}).values():
+            name, embedded = _font_facts(f)
+            fonts[name] = fonts.get(name, False) or embedded
+        for cs in (resources.get("/ColorSpace") or {}).values():
+            spaces.add(_cs_name(cs))
+        xobjects = {k: v for k, v in (resources.get("/XObject") or {}).items()}
+        try:
+            contents = content_owner.get_contents() if hasattr(content_owner, "get_contents") else content_owner
+            ops_list = ContentStream(contents, reader).operations if contents is not None else []
+        except Exception:  # noqa: BLE001 - an odd content stream must not break `pdf info`
+            return
+        stack: list[list[float]] = []
+        m = list(ctm)
+        for operands, op in ops_list:
+            if op == b"q":
+                stack.append(list(m))
+            elif op == b"Q" and stack:
+                m = stack.pop()
+            elif op == b"cm" and len(operands) == 6:
+                a, b, c, d, e, f = (float(x) for x in operands)
+                m = [a * m[0] + b * m[2], a * m[1] + b * m[3], c * m[0] + d * m[2], c * m[1] + d * m[3],
+                     e * m[0] + f * m[2] + m[4], e * m[1] + f * m[3] + m[5]]
+            elif op in (b"rg", b"RG"):
+                spaces.add("DeviceRGB")
+            elif op in (b"k", b"K"):
+                spaces.add("DeviceCMYK")
+            elif op in (b"g", b"G"):
+                spaces.add("DeviceGray")
+            elif op == b"Do" and operands and operands[0] in xobjects:
+                ref = xobjects[operands[0]]
+                xo = ref.get_object()
+                if xo.get("/Subtype") == "/Image":
+                    images += 1
+                    if "/ColorSpace" in xo:
+                        spaces.add(_cs_name(xo["/ColorSpace"]))
+                    placed_w = (m[0] ** 2 + m[1] ** 2) ** 0.5 / 72
+                    placed_h = (m[2] ** 2 + m[3] ** 2) ** 0.5 / 72
+                    if placed_w > 0 and placed_h > 0:
+                        ppi = min(float(xo["/Width"]) / placed_w, float(xo["/Height"]) / placed_h)
+                        lowest = ppi if lowest is None else min(lowest, ppi)
+                elif xo.get("/Subtype") == "/Form" and depth < 8:
+                    key = getattr(ref, "idnum", id(xo))
+                    if (key, tuple(round(v, 3) for v in m)) in seen:
+                        continue
+                    seen.add((key, tuple(round(v, 3) for v in m)))
+                    fm = [float(v) for v in xo.get("/Matrix", [1, 0, 0, 1, 0, 0])]
+                    walk(xo, xo.get("/Resources") or resources, [
+                        fm[0] * m[0] + fm[1] * m[2], fm[0] * m[1] + fm[1] * m[3], fm[2] * m[0] + fm[3] * m[2],
+                        fm[2] * m[1] + fm[3] * m[3], fm[4] * m[0] + fm[5] * m[2] + m[4], fm[4] * m[1] + fm[5] * m[3] + m[5]],
+                        depth + 1)
+
+    pages = reader.pages[:max_pages]
+    for page in pages:
+        walk(page, page.get("/Resources"), [1.0, 0.0, 0.0, 1.0, 0.0, 0.0], 0)
+    root = reader.trailer["/Root"]
+    standard = None
+    intents = [i.get_object() for i in (root.get("/OutputIntents") or [])]
+    xmp = b""
+    if "/Metadata" in root:
+        try:
+            xmp = root["/Metadata"].get_object().get_data()
+        except Exception:  # noqa: BLE001
+            xmp = b""
+    xmp_x = re.search(rb"GTS_PDFXVersion(?:>|=\")\s*([^<\"]+)", xmp)
+    info_x = (reader.metadata or {}).get("/GTS_PDFXVersion")
+    ma = re.search(rb"pdfaid:part(?:>|=\")\s*(\d)", xmp)
+    conf = re.search(rb"pdfaid:conformance(?:>|=\")\s*([A-Za-z])", xmp)
+    if xmp_x or info_x:
+        standard = (xmp_x.group(1).decode(errors="replace") if xmp_x else str(info_x)).strip()
+    elif any(i.get("/S") == "/GTS_PDFX" for i in intents):
+        standard = "PDF/X (output intent)"
+    elif ma:
+        standard = f"PDF/A-{ma.group(1).decode()}{conf.group(1).decode().lower() if conf else ''}"
+    return {
+        "pages_checked": len(pages),
+        "fonts": sorted(fonts), "fonts_not_embedded": sorted(n for n, e in fonts.items() if not e),
+        "colour_spaces": sorted(spaces), "images": images,
+        "lowest_image_ppi": round(lowest) if lowest is not None else None,
+        "trim_box": any("/TrimBox" in p for p in pages), "bleed_box": any("/BleedBox" in p for p in pages),
+        "standard": standard,
+        "output_intent": next((str(i.get("/OutputConditionIdentifier")) for i in intents if i.get("/OutputConditionIdentifier")), None),
     }
 
 
