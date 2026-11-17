@@ -101,7 +101,7 @@ def test_profile_supplies_export_defaults_and_tokens(work):
     assert res.exit_code == 0, doc
     assert doc["profile"] == "acme" and doc["tokens"]["count"] >= 3
     outs = sorted(i["output"].split("acme-out/")[1] for i in doc["items"])
-    assert outs == ["logo/mono-white/png/rgb/logo_48.png", "logo/png/rgb/logo_48.png"]       # profile: formats, sizes, out_dir, variants
+    assert outs == ["logo/mono-white/png/rgb/logo_mono-white_48.png", "logo/png/rgb/logo_48.png"]       # profile: formats, sizes, out_dir, variants
 
 
 @need

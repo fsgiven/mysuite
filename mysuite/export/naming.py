@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import string
 from datetime import date
 from pathlib import Path
 
@@ -17,21 +19,85 @@ FORMAT_EXTENSIONS = {
     "icns": ".icns",
 }
 
-DEFAULT_BUNDLE_NAMING_TEMPLATE = "{name}{ext}"
+DEFAULT_NAMING_TEMPLATE = "{name}_{variant}_{size}{ext}"
+DEFAULT_PATH_TEMPLATE = "{format}/{colorspace}/{naming}"
+DEFAULT_BUNDLE_NAMING_TEMPLATE = "{name}_{variant}{ext}"
 
 # Variants used when the "date stamp" option is on and the naming/bundle template
 # is still the tool's own default — see resolve_naming_templates().
-DATE_STAMPED_NAMING_TEMPLATE = "{name}_{size}_{date}{ext}"
-DATE_STAMPED_BUNDLE_NAMING_TEMPLATE = "{name}_{date}{ext}"
+DATE_STAMPED_NAMING_TEMPLATE = "{name}_{variant}_{size}_{date}{ext}"
+DATE_STAMPED_BUNDLE_NAMING_TEMPLATE = "{name}_{variant}_{date}{ext}"
 
 # Used when --variant is set and path_template is still the tool's own default —
 # see resolve_path_template_for_variant(). Nests output under the SAME name
 # folder as the primary export, one level down per variant.
 VARIANT_PATH_TEMPLATE = "{variant}/{format}/{colorspace}/{naming}"
 
+# Every token a file-name template may use; {naming} (the rendered file name) only in the path template.
+# Write a token in CAPITALS ({FORMAT}, {COLORSPACE}, {VARIANT}, ...) to get its value in capitals.
+NAME_TOKENS = ("name", "variant", "size", "size_px", "width", "height", "format", "colorspace", "ext", "date")
+PATH_TOKENS = (*NAME_TOKENS, "naming")
+
+_EMPTY = "\x00"          # marks a token that came out empty, so its separator can go with it
+_SEPARATORS = "_- "
+
+
+class NamingError(ValueError):
+    """A naming/path template that can't be filled: unknown token, broken brace, a value that isn't known."""
+
 
 def today_stamp() -> str:
     return date.today().strftime("%Y%m%d")
+
+
+def _collapse(text: str) -> str:
+    """Drop the separator next to every empty token, then empty folder segments: with no variant,
+    `{name}_{variant}_{size}{ext}` is `logo_512.png`, not `logo__512.png`; `{variant}/{format}` is `png`."""
+    sep = re.escape(_SEPARATORS)
+    previous = None
+    while previous != text:
+        previous = text
+        text = re.sub(rf"[{sep}]{_EMPTY}(?=[{sep}./{_EMPTY}]|$)", "", text)
+        text = re.sub(rf"(^|/){_EMPTY}[{sep}]", r"\1", text)
+    text = text.replace(_EMPTY, "")
+    return "/".join(part for part in text.split("/") if part)
+
+
+def fill(template: str, values: dict, *, what: str = "naming template") -> str:
+    """Fill a template. `values[token]` None means "not known here" (e.g. {width} of an icon bundle)."""
+    try:
+        parsed = list(string.Formatter().parse(template))
+    except ValueError as exc:
+        raise NamingError(
+            f"{what} {template!r}: {exc} - tokens look like {{name}}; write {{{{ or }}}} for a literal brace"
+        ) from None
+    out: list[str] = []
+    for literal, token, spec, conversion in parsed:
+        out.append(literal)
+        if token is None:
+            continue
+        key = token.lower() if token.isupper() else token
+        if key not in values or conversion:
+            known = ", ".join("{" + k + "}" for k in values)
+            raise NamingError(f"{what} {template!r}: unknown token {{{token}}} - use one of {known} "
+                              "(in CAPITALS for a capitalised value, e.g. {FORMAT})")
+        value = values[key]
+        if value is None:
+            raise NamingError(f"{what} {template!r}: {{{token}}} isn't known for this file")
+        try:
+            text = format(value, spec) if spec else str(value)
+        except ValueError as exc:
+            raise NamingError(f"{what} {template!r}: {{{token}:{spec}}}: {exc}") from None
+        if token.isupper():
+            text = text.upper()
+        out.append(text if text != "" else _EMPTY)
+    return _collapse("".join(out))
+
+
+def check_template(template: str, *, path: bool = False) -> None:
+    """Fail early (before anything is planned) on an unknown token or a broken brace."""
+    tokens = PATH_TOKENS if path else NAME_TOKENS
+    fill(template, {t: "x" for t in tokens}, what="path template" if path else "naming template")
 
 
 def resolve_naming_templates(
@@ -73,28 +139,39 @@ def resolve_path_template_for_variant(
     return VARIANT_PATH_TEMPLATE if path_template == default_path_template else path_template
 
 
+def _values(*, name: str, size: Size | None, format: str, colorspace: str, variant: str,
+            width: int | None, height: int | None) -> dict:
+    artwork = size is None or size.is_artwork
+    return {
+        "name": name,
+        "variant": variant,
+        "size": "" if artwork else size.label,
+        "size_px": "" if artwork else size.pixels,
+        "width": width,
+        "height": height,
+        "format": format,
+        "colorspace": colorspace,
+        "ext": FORMAT_EXTENSIONS[format],
+        "date": today_stamp(),
+    }
+
+
 def render_filename(
     naming_template: str,
     *,
     name: str,
-    size: Size,
+    size: Size | None,
     format: str,
     colorspace: str,
     variant: str = "",
+    width: int | None = None,
+    height: int | None = None,
 ) -> str:
-    ext = FORMAT_EXTENSIONS[format]
-    return naming_template.format(
-        name=name,
-        size=size.label,
-        size_px=size.pixels,
-        width=size.label,
-        height=size.label,
-        format=format,
-        colorspace=colorspace,
-        ext=ext,
-        date=today_stamp(),
-        variant=variant,
-    )
+    values = _values(name=name, size=size, format=format, colorspace=colorspace, variant=variant, width=width, height=height)
+    filename = fill(naming_template, values)
+    if not filename:
+        raise NamingError(f"naming template {naming_template!r} gives an empty file name")
+    return filename
 
 
 def render_path(
@@ -103,29 +180,20 @@ def render_path(
     *,
     out_dir: Path,
     name: str,
-    size: Size,
+    size: Size | None,
     format: str,
     colorspace: str,
     variant: str = "",
+    width: int | None = None,
+    height: int | None = None,
+    name_folder: bool = True,
 ) -> Path:
     filename = render_filename(
-        naming_template, name=name, size=size, format=format, colorspace=colorspace, variant=variant
+        naming_template, name=name, size=size, format=format, colorspace=colorspace, variant=variant,
+        width=width, height=height,
     )
-    ext = FORMAT_EXTENSIONS[format]
-    relative = path_template.format(
-        name=name,
-        size=size.label,
-        size_px=size.pixels,
-        width=size.label,
-        height=size.label,
-        format=format,
-        colorspace=colorspace,
-        ext=ext,
-        naming=filename,
-        date=today_stamp(),
-        variant=variant,
-    )
-    return out_dir / name / Path(relative)
+    values = _values(name=name, size=size, format=format, colorspace=colorspace, variant=variant, width=width, height=height)
+    return _join(out_dir, name, name_folder, path_template, fill(path_template, {**values, "naming": filename}, what="path template"))
 
 
 def render_bundle_filename(
@@ -136,15 +204,8 @@ def render_bundle_filename(
     colorspace: str,
     variant: str = "",
 ) -> str:
-    ext = FORMAT_EXTENSIONS[format]
-    return bundle_naming_template.format(
-        name=name,
-        format=format,
-        colorspace=colorspace,
-        ext=ext,
-        date=today_stamp(),
-        variant=variant,
-    )
+    values = _values(name=name, size=None, format=format, colorspace=colorspace, variant=variant, width=None, height=None)
+    return fill(bundle_naming_template, values, what="bundle naming template")
 
 
 def render_bundle_path(
@@ -156,25 +217,20 @@ def render_bundle_path(
     format: str,
     colorspace: str,
     variant: str = "",
+    name_folder: bool = True,
 ) -> Path:
     filename = render_bundle_filename(
         bundle_naming_template, name=name, format=format, colorspace=colorspace, variant=variant
     )
-    ext = FORMAT_EXTENSIONS[format]
-    # Bundle paths have no meaningful {size}/{size_px} — a bundle covers several
-    # sizes at once — so those tokens resolve to empty if a custom path_template
-    # references them.
-    relative = path_template.format(
-        name=name,
-        size="",
-        size_px="",
-        width="",
-        height="",
-        format=format,
-        colorspace=colorspace,
-        ext=ext,
-        naming=filename,
-        date=today_stamp(),
-        variant=variant,
-    )
-    return out_dir / name / Path(relative)
+    # Bundle paths have no meaningful {size}/{size_px}/{width}/{height} — a bundle covers
+    # several sizes at once — so those tokens resolve to empty.
+    values = _values(name=name, size=None, format=format, colorspace=colorspace, variant=variant, width="", height="")
+    return _join(out_dir, name, name_folder, path_template, fill(path_template, {**values, "naming": filename}, what="path template"))
+
+
+def _join(out_dir: Path, name: str, name_folder: bool, path_template: str, relative: str) -> Path:
+    if path_template.lstrip().startswith(("/", "\\")):
+        return Path(path_template)        # absolute: the planner's confinement check refuses it with a clear message
+    if not relative:
+        raise NamingError(f"path template {path_template!r} gives an empty path")
+    return (out_dir / name if name_folder else out_dir) / Path(relative)

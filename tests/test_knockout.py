@@ -109,11 +109,11 @@ def test_export_builds_a_named_brand_set_in_one_run(tmp_path):
                             "cut_out_dark=cutout+mono:#1D1D1B")
     assert res.exit_code == 0, res.stdout
     base = tmp_path / "o" / "logo"
-    neg = Image.open(base / "negativ_dark" / "png" / "rgb" / "logo_100.png").convert("RGBA")
+    neg = Image.open(base / "negativ_dark" / "png" / "rgb" / "logo_negativ_dark_100.png").convert("RGBA")
     assert at(neg, BG) == (29, 29, 27, 255) and at(neg, BAR)[3] == 0 and at(neg, COUNTER)[3] == 255
-    bright = Image.open(base / "negativ_bright" / "png" / "rgb" / "logo_100.png").convert("RGBA")
+    bright = Image.open(base / "negativ_bright" / "png" / "rgb" / "logo_negativ_bright_100.png").convert("RGBA")
     assert at(bright, BG) == (255, 255, 255, 255) and at(bright, RING)[3] == 0
-    cut = Image.open(base / "cut_out_dark" / "png" / "rgb" / "logo_100.png").convert("RGBA")
+    cut = Image.open(base / "cut_out_dark" / "png" / "rgb" / "logo_cut_out_dark_100.png").convert("RGBA")
     assert at(cut, BG)[3] == 0 and at(cut, BAR) == (29, 29, 27, 255)
     assert (base / "png" / "rgb" / "logo_100.png").exists()
 
