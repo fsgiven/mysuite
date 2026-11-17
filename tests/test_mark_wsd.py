@@ -130,3 +130,39 @@ def test_a_cmyk_source_becomes_srgb_with_a_matching_profile(tmp_path, with_icc):
         if icc:                                         # never a CMYK profile on RGB pixels
             assert ImageCms.ImageCmsProfile(io.BytesIO(icc)).profile.xcolor_space.strip() == "RGB"
     assert run("detect", item["output"], "--key", KEY)[1]["items"][0]["detected"]
+
+
+def test_a_grey_profile_is_not_put_on_rgb_pixels(tmp_path):
+    from PIL import ImageCms
+
+    gray = ImageCms.ImageCmsProfile(ImageCms.createProfile("LAB")).tobytes()      # stand-in: any non-RGB profile
+    src = tmp_path / "g.png"
+    Image.open(photo(tmp_path / "base.png")).convert("L").save(src, icc_profile=gray)
+    res, doc = run("embed", src, "--key", KEY)
+    assert res.exit_code == 0, res.output
+    with Image.open(doc["items"][0]["output"]) as im:
+        icc = im.info.get("icc_profile")
+        assert not icc or ImageCms.ImageCmsProfile(io.BytesIO(icc)).profile.xcolor_space.strip() == "RGB"
+
+
+@need_exiftool
+def test_the_unmarked_exif_thumbnail_is_not_copied(tmp_path):
+    src = as_jpeg(photo(tmp_path / "base.png"), tmp_path / "p.jpg")
+    thumb = tmp_path / "t.jpg"
+    Image.open(src).resize((64, 48)).save(thumb)
+    subprocess.run(["exiftool", "-q", "-overwrite_original", f"-ThumbnailImage<={thumb}", str(src)], check=True)
+    res, doc = run("embed", src, "--key", KEY)
+    out = subprocess.run(["exiftool", "-s3", "-ThumbnailImage", doc["items"][0]["output"]], capture_output=True, text=True).stdout
+    assert out.strip() == ""
+
+
+def test_protect_mark_refuses_a_format_it_cannot_write_back(tmp_path, monkeypatch):
+    if shutil.which("exiftool") is None or shutil.which("magick") is None:
+        pytest.skip("needs exiftool+magick")
+    monkeypatch.setenv("MYSUITE_MARK_KEY", KEY)
+    src = tmp_path / "a.gif"
+    Image.open(photo(tmp_path / "base.png")).convert("P").save(src)
+    res = runner.invoke(app, ["metadata", "protect", str(src), "--author", "A", "--mark", "--json"])
+    doc = json.loads(res.stdout)
+    assert res.exit_code == 1 and "GIF" in doc["items"][0]["error"]
+    assert not (tmp_path / "a_protected.gif").exists()

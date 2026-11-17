@@ -396,6 +396,8 @@ def _run_step(step: str, src: Path, dst: Path, *, tools: ToolPaths, opts: ChainO
 
         if not opts.mark_key:
             raise ValueError("the mark step needs a key (--key or MYSUITE_MARK_KEY)")
+        if src.suffix.lower() not in mark_core._BY_SUFFIX:
+            raise ValueError(f"mark: {src.suffix.lstrip('.').upper()} can't be marked in place; convert to PNG or JPEG first")
         try:
             result = mark_core.embed_file(src, key=opts.mark_key, ident=opts.mark_id, out=dst, overwrite=True,
                                           fmt=mark_core.target_format(src, None), exiftool=tools.exiftool)
