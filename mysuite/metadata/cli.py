@@ -12,15 +12,33 @@ from mysuite.profiles import ProfileError
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.doctor import require_tools
 from mysuite.metadata._parsing import output_path_for
+from mysuite.metadata.hidden import KEPT, REMOVED, is_own_output
 from mysuite.metadata.metadata import DATA_MINING, credit_file, declare_file, randomize_file, strip_file
 from mysuite.utils import jsonout
-from mysuite.utils.console import console, log_error, log_step
+from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
 
 app = typer.Typer(
     help="Strip metadata for privacy, replace it with a plausible decoy camera identity, "
     "or embed a signed C2PA provenance record for correct crediting."
 )
+
+
+def _resolve(inputs: list[Path], recursive: bool) -> list[Path]:
+    """Files to work on. In a folder, mysuite's own earlier outputs (photo_stripped.jpg, photo_marked.png …) are skipped,
+    with a note, so a second run doesn't process last run's results. A file named explicitly is always used."""
+    files = resolve_input_files(inputs, recursive=recursive)
+    named = {Path(i).resolve() for i in inputs if Path(i).is_file()}
+    skipped = [f for f in files if is_own_output(f) and f.resolve() not in named]
+    if skipped:
+        names = ", ".join(f.name for f in skipped[:3]) + (f" and {len(skipped) - 3} more" if len(skipped) > 3 else "")
+        msg = f"skipped {len(skipped)} file(s) mysuite wrote earlier: {names} (name one explicitly to process it)"
+        jsonout.add_warning(msg)
+        log_note(escape(msg))
+    files = [f for f in files if f not in skipped]
+    if not files:
+        raise InvalidInputError("nothing to do: the folder only holds files mysuite wrote earlier")
+    return files
 
 
 def _run_batch(input_files: list[Path], *, mode: str, run_one, dry_run: bool, quiet: bool) -> None:
@@ -41,7 +59,7 @@ def _run_batch(input_files: list[Path], *, mode: str, run_one, dry_run: bool, qu
     for input_path in input_files:
         try:
             outcome = run_one(input_path)
-        except MysuiteToolError as exc:
+        except (MysuiteToolError, ValueError) as exc:       # ValueError: PdfError from the PDF engine
             failures.append((input_path, str(exc)))
             jsonout.add_item(input=input_path, status="failed", error=str(exc))
             if not quiet:
@@ -70,13 +88,18 @@ def _run_batch(input_files: list[Path], *, mode: str, run_one, dry_run: bool, qu
         raise typer.Exit(1)
 
 
-@app.command("strip", help="Strip all EXIF/IPTC/XMP/ICC metadata, writing a new file beside the source.")
+@app.command("strip", help=f"Remove hidden data ({REMOVED}) into a copy, name_stripped.ext. Keeps {KEPT}. "
+             "--keep-credit keeps author, copyright and credit line. PDFs: title, author, dates and XMP go (as pdf strip). "
+             "In a folder, files mysuite wrote earlier (_stripped, _marked …) are skipped.")
 @jsonout.with_json("metadata-strip")
 def strip(
     inputs: List[Path] = typer.Argument(
         ..., exists=True, readable=True,
         help="One or more image files, and/or directories (non-recursive unless --recursive).",
     ),
+    keep_credit: bool = typer.Option(False, "--keep-credit", help="Keep author, copyright, credit line and source (EXIF, IPTC, XMP); "
+                                     "still remove GPS, camera, serial numbers, software and comments."),
+    drop_icc: bool = typer.Option(False, "--drop-icc", help="Also remove the colour profile (colours may then look different)."),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Recurse into subdirectories."),
     overwrite: bool = typer.Option(
         False, "--overwrite/--no-overwrite", help="Overwrite existing output files."
@@ -86,7 +109,7 @@ def strip(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress per-file progress, print summary only."),
 ) -> None:
     try:
-        input_files = resolve_input_files(inputs, recursive=recursive)
+        input_files = _resolve(inputs, recursive)
     except InvalidInputError as exc:
         log_error(str(exc))
         raise typer.Exit(1) from exc
@@ -97,11 +120,14 @@ def strip(
         log_error(str(exc))
         raise typer.Exit(1) from exc
 
-    require_tools(config.tools, "metadata-strip")
+    if any(f.suffix.lower() != ".pdf" for f in input_files):
+        require_tools(config.tools, "metadata-strip")
+    if (keep_credit or drop_icc) and any(f.suffix.lower() == ".pdf" for f in input_files):
+        jsonout.add_warning("--keep-credit and --drop-icc apply to pictures; PDFs lose title, author, dates and XMP")
 
     _run_batch(
         input_files, mode="stripped",
-        run_one=lambda p: strip_file(p, tools=config.tools, overwrite=overwrite),
+        run_one=lambda p: strip_file(p, tools=config.tools, overwrite=overwrite, keep_icc=not drop_icc, keep_credit=keep_credit),
         dry_run=dry_run, quiet=quiet,
     )
 
@@ -133,7 +159,7 @@ def credit(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress per-file progress, print summary only."),
 ) -> None:
     try:
-        input_files = resolve_input_files(inputs, recursive=recursive)
+        input_files = _resolve(inputs, recursive)
     except InvalidInputError as exc:
         log_error(str(exc))
         raise typer.Exit(1) from exc
@@ -187,7 +213,7 @@ def randomize(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress per-file progress, print summary only."),
 ) -> None:
     try:
-        input_files = resolve_input_files(inputs, recursive=recursive)
+        input_files = _resolve(inputs, recursive)
     except InvalidInputError as exc:
         log_error(str(exc))
         raise typer.Exit(1) from exc
@@ -227,7 +253,7 @@ def apply(
     from mysuite.profiles import POLICIES
 
     try:
-        input_files = resolve_input_files(inputs, recursive=recursive)
+        input_files = _resolve(inputs, recursive)
         config = load_config(config_path)
         active_profile = profiles_mod.resolve(config)
     except (InvalidInputError, MysuiteConfigError, ProfileError) as exc:
@@ -300,7 +326,7 @@ def declare(
         log_error(f"policy must be one of {', '.join(DATA_MINING)}")
         raise typer.Exit(1)
     try:
-        input_files = resolve_input_files(inputs, recursive=recursive)
+        input_files = _resolve(inputs, recursive)
         config = load_config(config_path)
     except (InvalidInputError, MysuiteConfigError) as exc:
         log_error(escape(str(exc)))

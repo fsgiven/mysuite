@@ -8,6 +8,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from mysuite.config import MysuiteConfigError, load_config
+from mysuite.metadata.hidden import PDF_REMOVED
 from mysuite.pdf import ops
 from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_note, log_step
@@ -149,7 +150,8 @@ def resize(files: List[Path] = PDFS, size: str = typer.Option(..., "--size", hel
     _run_each(_check_inputs(files), lambda p: ops.resize(p, size, out, overwrite, dry_run=dry_run), quiet)
 
 
-@app.command("strip", help="Remove title, author, producer, dates and the XMP packet.")
+@app.command("strip", help=f"Remove hidden data ({PDF_REMOVED}) into a copy, name_stripped.pdf; the pages stay as they are. "
+             "Same engine as `metadata strip` on a PDF.")
 @jsonout.with_json("pdf-strip")
 def strip(files: List[Path] = PDFS, out: Optional[Path] = OUT, overwrite: bool = OVERWRITE, dry_run: bool = DRY_RUN, quiet: bool = typer.Option(False, "--quiet", "-q")) -> None:
     _run_each(_check_inputs(files), lambda p: ops.strip_metadata(p, out, overwrite, dry_run=dry_run), quiet)
