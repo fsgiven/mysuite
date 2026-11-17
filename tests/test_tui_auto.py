@@ -93,10 +93,10 @@ async def test_pdf_card_switches_action_and_runs_it(tmp_path):
         screen.query_one(f"#{ids['pages']}", Input).value = "2-3"
         screen.action_run()
         await finish(pilot)
-        assert screen.last_summary_text.startswith("done") and "doc_pages.pdf" in screen.last_output
+        assert screen.last_summary_text.startswith("done") and "doc_p2-3.pdf" in screen.last_output
     from pypdf import PdfReader
 
-    assert len(PdfReader(str(tmp_path / "doc_pages.pdf")).pages) == 2
+    assert len(PdfReader(str(tmp_path / "doc_p2-3.pdf")).pages) == 2
 
 
 @pytest.mark.asyncio
