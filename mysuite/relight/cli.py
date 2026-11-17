@@ -7,7 +7,7 @@ import typer
 from rich.markup import escape
 
 from mysuite.convert._parsing import InvalidInputError, resolve_input_files
-from mysuite.relight.relight import DIRECTIONS, PRESETS, RelightError, RelightSettings, output_path_for, relight_file
+from mysuite.relight.relight import DIRECTIONS, FORMATS, PRESETS, RelightError, RelightSettings, output_path_for, relight_file
 from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_note, log_step
 
@@ -27,13 +27,18 @@ def relight(
     depth: Optional[float] = typer.Option(None, "--depth", help="How pronounced the pseudo-3D is, 0-5. Default 1."),
     specular: Optional[float] = typer.Option(None, "--specular", help="Sheen, 0 = matte. Default 0."),
     color: Optional[str] = typer.Option(None, "--color", help="Tint of the light, e.g. '#ffb36b' (warm) or '#9ec5ff' (cool)."),
+    output_format: str = typer.Option("png", "--format", help=f"Output format: {', '.join(FORMATS)} (jpg flattens transparency on white)."),
+    quality: int = typer.Option(90, "--quality", min=1, max=100, help="JPEG/WebP quality, 1-100."),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Recurse into subdirectories."),
     overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite", help="Overwrite existing outputs."),
     dry_run: bool = typer.Option(False, "--dry-run", help="List input -> output pairs, write nothing."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Print only the summary."),
 ) -> None:
     """Experimental, classical relighting (no AI model): a lighting nudge for products, cut-outs and logos."""
+    output_format = {"jpeg": "jpg"}.get(output_format.lower(), output_format.lower())
     try:
+        if output_format not in FORMATS:
+            raise RelightError(f"--format must be one of {', '.join(FORMATS)}, not {output_format!r}")
         settings = RelightSettings.from_options(preset, {
             "direction": direction, "angle": angle, "height": height, "intensity": intensity, "ambient": ambient,
             "softness": softness, "depth": depth, "specular": specular, "color": color,
@@ -47,14 +52,14 @@ def relight(
 
     written = skipped = failed = 0
     for f in files:
-        out = output_path_for(f)
+        out = output_path_for(f, output_format)
         if dry_run:
             jsonout.add_item(input=f, output=out, status="planned")
             if not quiet:
                 console.print(f"[dim]{escape(str(f))} -> {escape(str(out))}[/dim]")
             continue
         try:
-            outcome = relight_file(f, settings, overwrite=overwrite)
+            outcome = relight_file(f, settings, overwrite=overwrite, fmt=output_format, quality=quality)
         except RelightError as exc:
             failed += 1
             jsonout.add_item(input=f, status="failed", error=str(exc))

@@ -165,13 +165,24 @@ class RelightOutcome:
     notes: list[str] = field(default_factory=list)
 
 
-def output_path_for(input_path: Path) -> Path:
-    return input_path.with_name(f"{input_path.stem}_relit.png")
+FORMATS = {"png": ".png", "jpg": ".jpg", "webp": ".webp"}
 
 
-def relight_file(input_path: Path, settings: RelightSettings, *, overwrite: bool = False) -> RelightOutcome:
+def output_path_for(input_path: Path, fmt: str = "png") -> Path:
+    return input_path.with_name(f"{input_path.stem}_relit{FORMATS[fmt]}")
+
+
+def relight_file(input_path: Path, settings: RelightSettings, *, overwrite: bool = False, fmt: str = "png",
+                 quality: int = 90) -> RelightOutcome:
+    """Relight one picture into ``<name>_relit.<png|jpg|webp>``. JPEG has no transparency: a cut-out is
+    flattened on white. ``quality`` (1-100) applies to JPEG and WebP."""
+    fmt = {"jpeg": "jpg"}.get(fmt, fmt)
+    if fmt not in FORMATS:
+        raise RelightError(f"--format must be one of {', '.join(FORMATS)}, not {fmt!r}")
+    if not 1 <= quality <= 100:
+        raise RelightError(f"--quality must be 1-100, not {quality}")
     input_path = Path(os.path.abspath(input_path))
-    out = output_path_for(input_path)
+    out = output_path_for(input_path, fmt)
     if out.exists() and not overwrite:
         return RelightOutcome(input_path, out, "skipped_existing")
     notes: list[str] = []
@@ -197,8 +208,19 @@ def relight_file(input_path: Path, settings: RelightSettings, *, overwrite: bool
     result = np.dstack([lit, alpha]) if has_alpha else lit
     img = Image.fromarray((result * 255 + 0.5).astype(np.uint8), "RGBA" if has_alpha else "RGB")
 
+    if fmt == "jpg" and img.mode == "RGBA":
+        flat = Image.new("RGB", img.size, "white")
+        flat.paste(img, mask=img.getchannel("A"))
+        img = flat
+    profile = {"icc_profile": icc} if icc else {}
+
     def write(tmp: Path) -> None:
-        img.save(tmp, format="PNG", **({"icc_profile": icc} if icc else {}))
+        if fmt == "jpg":
+            img.save(tmp, format="JPEG", quality=quality, optimize=True, **profile)
+        elif fmt == "webp":
+            img.save(tmp, format="WEBP", quality=quality, **profile)
+        else:
+            img.save(tmp, format="PNG", **profile)
 
     atomic_write_via(out, write, preserve_extension=True)
     return RelightOutcome(input_path, out, "written", img.size, notes)
