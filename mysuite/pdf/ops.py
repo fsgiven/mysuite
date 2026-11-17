@@ -6,6 +6,7 @@ import base64
 import io
 import os
 import re
+import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -152,6 +153,24 @@ def _suffix_path(src: Path, suffix: str, out: Path | None) -> Path:
         target = src.with_name(f"{src.stem}{suffix}.pdf")
     _refuse_inputs(target, [src])
     return target
+
+
+def _need(tool: str, what: str, label: str = "Ghostscript (gs)") -> str:
+    """The tool's resolved path, or a PdfError naming what needs it. Checked up front, so a FileNotFoundError later
+    (a vanished temp file, a bad name) is never misreported as "tool missing"."""
+    found = shutil.which(tool)
+    if not found:
+        raise PdfError(f"{what} needs {label} installed")
+    return found
+
+
+def _gs_out(path: Path) -> str:
+    """-sOutputFile=… treats %d/%s as page placeholders; a literal % in a file name must be written %%."""
+    return str(path).replace("%", "%%")
+
+
+def _gs_run(gs: str, args: list[str], src: Path, tmp: Path) -> None:
+    run([gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", *args, f"-sOutputFile={_gs_out(tmp)}", str(Path(os.path.abspath(src)))])
 
 
 # ---------------------------------------------------------------------------- read only
@@ -317,10 +336,7 @@ def _overlay_pdf(width: float, height: float, body: str, tools: ToolPaths) -> by
     with tempfile.TemporaryDirectory(prefix="mysuite-pdf-") as d:
         src, dst = Path(d) / "o.svg", Path(d) / "o.pdf"
         src.write_text(svg, encoding="utf-8")
-        try:
-            run([tools.rsvg_convert, "--format=pdf", f"--output={dst}", str(src)])
-        except FileNotFoundError as exc:
-            raise PdfError("page numbers and stamps need rsvg-convert installed") from exc
+        run([_need(tools.rsvg_convert, "page numbers and stamps", "rsvg-convert"), "--format=pdf", f"--output={dst}", str(src)])
         return dst.read_bytes()
 
 
@@ -466,6 +482,7 @@ def render(path: Path, out_dir: Path | None, overwrite: bool, tools: ToolPaths, 
     idx = parse_pages(pages, count)
     folder = Path(os.path.abspath(out_dir)) if out_dir else Path(os.path.abspath(path)).parent
     width = len(str(count))
+    gs = _need(tools.gs, "rendering pages")
     device = "png16m" if fmt == "png" else "jpeg"
     ext = ".png" if fmt == "png" else ".jpg"
     results = []
@@ -476,14 +493,10 @@ def render(path: Path, out_dir: Path | None, overwrite: bool, tools: ToolPaths, 
             continue
 
         def write(tmp: Path, page_no: int = i + 1) -> None:
-            run([tools.gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", f"-sDEVICE={device}", f"-r{dpi}",
-                 "-dTextAlphaBits=4", "-dGraphicsAlphaBits=4", f"-dFirstPage={page_no}", f"-dLastPage={page_no}",
-                 f"-sOutputFile={tmp}", str(Path(os.path.abspath(path)))])
+            _gs_run(gs, [f"-sDEVICE={device}", f"-r{dpi}", "-dTextAlphaBits=4", "-dGraphicsAlphaBits=4",
+                         f"-dFirstPage={page_no}", f"-dLastPage={page_no}"], path, tmp)
 
-        try:
-            atomic_write_via(target, write, preserve_extension=True)
-        except FileNotFoundError as exc:
-            raise PdfError("rendering pages needs Ghostscript (gs) installed") from exc
+        atomic_write_via(target, write, preserve_extension=True)
         with Image.open(target) as im:
             results.append(OutFile(target, extra={"page": i + 1, "size": list(im.size)}))
     return results
@@ -538,6 +551,7 @@ def compress(path: Path, level: str, out: Path | None, overwrite: bool, tools: T
     if level not in levels:
         raise PdfError(f"level must be one of {', '.join(levels)}")
     open_pdf(path)
+    gs = _need(tools.gs, "compressing a PDF")
     target = _suffix_path(Path(os.path.abspath(path)), "_compressed", out)
     if (skip := _plan_or_skip(target, overwrite)):
         return skip
@@ -546,16 +560,13 @@ def compress(path: Path, level: str, out: Path | None, overwrite: bool, tools: T
     sizes: dict[str, int] = {}
 
     def write(tmp: Path) -> None:
-        run([tools.gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.6",
-             f"-dPDFSETTINGS={levels[level]}", f"-sOutputFile={tmp}", str(Path(os.path.abspath(path)))])
+        _gs_run(gs, ["-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.6", f"-dPDFSETTINGS={levels[level]}"], path, tmp)
         sizes["after"] = tmp.stat().st_size
         if sizes["after"] >= before:
             raise _NotSmaller                     # atomic_write_via removes the temp file; nothing is written
 
     try:
         atomic_write_via(target, write, preserve_extension=True)
-    except FileNotFoundError as exc:
-        raise PdfError("compressing a PDF needs Ghostscript (gs) installed") from exc
     except _NotSmaller:
         return OutFile(target, "not_smaller", note=(
             f"not written: the result would not be smaller ({before} -> {sizes['after']} bytes at level {level}); "
