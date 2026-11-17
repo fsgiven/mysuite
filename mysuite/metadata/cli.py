@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import typer
 
@@ -13,10 +15,15 @@ from mysuite.convert._parsing import InvalidInputError, resolve_input_files
 from mysuite.doctor import require_tools
 from mysuite.metadata._parsing import output_path_for
 from mysuite.metadata.hidden import KEPT, REMOVED, is_own_output
-from mysuite.metadata.metadata import DATA_MINING, credit_file, declare_file, randomize_file, strip_file
+from mysuite.metadata.metadata import (
+    DATA_MINING, ChainOptions, chain_output_path, credit_file, declare_file, expand_steps, randomize_file, run_chain, strip_file,
+)
 from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_note, log_step
 from mysuite.utils.subprocess_utils import MysuiteToolError
+
+RANDOMIZE_REFUSED = ("randomize writes a made-up camera and date, which is false provenance for published pictures; "
+                     "it runs only with --advanced (use `metadata strip` to remove the real ones)")
 
 app = typer.Typer(
     help="Strip metadata for privacy, replace it with a plausible decoy camera identity, "
@@ -245,17 +252,116 @@ def randomize(
     )
 
 
+def _chain_batch(input_files: list[Path], requested: list[str], steps: list[str], *, opts, config, overwrite: bool,
+                 dry_run: bool, quiet: bool) -> None:
+    failed = 0
+    for src in input_files:
+        target = chain_output_path(src, steps, requested)
+        if dry_run:
+            jsonout.add_item(input=src, output=target, steps=steps, status="planned")
+            if not quiet:
+                console.print(f"[dim]{escape(str(src))} -> {escape(str(target))}[/dim]")
+            continue
+        try:
+            outcome = run_chain(src, steps, output_path=target, tools=config.tools, opts=opts, overwrite=overwrite)
+        except (MysuiteToolError, ValueError) as exc:
+            failed += 1
+            jsonout.add_item(input=src, status="failed", steps=steps, error=str(exc))
+            log_error(f"{escape(str(src))}: {escape(str(exc))}")
+            continue
+        jsonout.add_item(input=src, output=outcome.output_path, status=outcome.status, **{"steps": steps, **outcome.extra})
+        for note in outcome.notes:
+            jsonout.add_warning(f"{src.name}: {note}")
+            if not quiet:
+                log_note(escape(f"{src.name}: {note}"))
+        if quiet:
+            continue
+        if outcome.status == "skipped_existing":
+            console.print(f"[dim]— exists, skipped: {escape(str(outcome.output_path))}[/dim]")
+        else:
+            log_step(escape(str(outcome.output_path)))
+    if failed:
+        raise typer.Exit(1)
+
+
+def _mark_key(key: Optional[str]) -> str:
+    from mysuite.mark import core as mark_core
+
+    key = key or os.environ.get("MYSUITE_MARK_KEY")
+    if not key:
+        log_error("the mark step needs your secret key: --key SECRET or the MYSUITE_MARK_KEY environment variable")
+        raise typer.Exit(jsonout.EXIT_USAGE)
+    try:
+        return mark_core.check_key(key)
+    except mark_core.MarkError as exc:
+        log_error(escape(str(exc)))
+        raise typer.Exit(jsonout.EXIT_USAGE) from exc
+
+
+@app.command(
+    "protect",
+    help="Protect & credit in one go, into ONE copy (name_protected.ext): remove private data (GPS, camera, serial numbers, "
+    "software; your existing credit and the colour profile stay), write your credit (IPTC Core), declare 'no AI training / data "
+    "mining', and with --mark add your invisible ownership mark. A C2PA record is added last when c2patool is installed (test "
+    "certificate). No intermediate files are left behind.",
+)
+@jsonout.with_json("metadata-protect")
+def protect(
+    inputs: List[Path] = typer.Argument(..., exists=True, readable=True, help="Image files and/or folders."),
+    author: Optional[str] = typer.Option(None, "--author", "-a", help="Author/creator (or the profile's metadata.author)."),
+    copyright_notice: Optional[str] = typer.Option(None, "--copyright", help="Copyright notice, e.g. '© 2026 Jane Doe' (or the profile's)."),
+    credit_line: Optional[str] = typer.Option(None, "--credit-line", help="Credit line as it should be printed."),
+    source: Optional[str] = typer.Option(None, "--source", help="Source: the agency or archive."),
+    usage_terms: Optional[str] = typer.Option(None, "--usage-terms", help="Rights usage terms, e.g. 'Editorial use only'."),
+    policy: Literal["prohibited", "prohibited-ai-training", "prohibited-genai-training"] = typer.Option(
+        "prohibited", "--policy", help="What the no-AI declaration forbids."),
+    terms_url: Optional[str] = typer.Option(None, "--terms-url", help="Link to your AI-use terms (or the profile's)."),
+    mark: bool = typer.Option(False, "--mark", help="Also add the invisible ownership mark (needs --key or MYSUITE_MARK_KEY)."),
+    key: Optional[str] = typer.Option(None, "--key", help="Secret key for --mark (better: the MYSUITE_MARK_KEY environment variable)."),
+    ident: Optional[str] = typer.Option(None, "--id", help="Optional label mixed into the mark."),
+    c2pa: bool = typer.Option(True, "--c2pa/--no-c2pa", help="Add a C2PA record when c2patool is installed (default) or never."),
+    recursive: bool = typer.Option(False, "--recursive", "-r"),
+    overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview the file names, write nothing."),
+    config_path: Optional[Path] = typer.Option(None, "--config", "-c", help="Explicit path to mysuite.toml."),
+    quiet: bool = typer.Option(False, "--quiet", "-q"),
+) -> None:
+    try:
+        input_files = _resolve(inputs, recursive)
+        config = load_config(config_path)
+        active_profile = profiles_mod.resolve(config)
+    except (InvalidInputError, MysuiteConfigError, ProfileError) as exc:
+        log_error(escape(str(exc)))
+        raise typer.Exit(1) from exc
+    meta = active_profile.metadata if active_profile else {}
+    author = author or meta.get("author")
+    if not author:
+        log_error("protect needs an author: --author, or metadata.author in the active profile")
+        raise typer.Exit(1)
+    secret = _mark_key(key) if mark else None
+    require_tools(config.tools, "metadata-strip")
+    opts = ChainOptions(author=author, copyright_notice=copyright_notice or meta.get("copyright"), credit_line=credit_line,
+                        source=source, usage_terms=usage_terms, declare_policy=policy, terms_url=terms_url or meta.get("terms_url"),
+                        no_ai=True, mark_key=secret, mark_id=ident, c2pa=c2pa)
+    steps = expand_steps(["protect"], mark=mark)
+    jsonout.set_extra(steps=steps, profile=active_profile.name if active_profile else None)
+    _chain_batch(input_files, ["protect"], steps, opts=opts, config=config, overwrite=overwrite, dry_run=dry_run, quiet=quiet)
+
+
 @app.command(
     "apply",
-    help="Apply a metadata policy in one go - the active profile's, or --policy: any of strip, randomize, credit, in order "
-    "(e.g. strip,credit removes everything, then embeds your credit). Each step works on the previous step's output.",
+    help="Apply a metadata policy in one go into ONE copy - the active profile's, or --policy: steps from strip, strip-private "
+    "(keeps the credit), credit, declare, mark, or protect (= strip-private, credit, declare), in order. strip,credit writes "
+    "name_stripped_credited.ext and nothing else.",
 )
 @jsonout.with_json("metadata-apply")
 def apply(
     inputs: List[Path] = typer.Argument(..., exists=True, readable=True, help="Image files and/or folders."),
-    policy: Optional[str] = typer.Option(None, "--policy", help="Comma-separated steps: strip, randomize, credit (default: the profile's metadata.policy)."),
+    policy: Optional[str] = typer.Option(None, "--policy", help="Comma-separated steps, e.g. strip,credit or protect (default: the profile's metadata.policy)."),
     author: Optional[str] = typer.Option(None, "--author", "-a", help="For the credit step (default: the profile's metadata.author)."),
     copyright_notice: Optional[str] = typer.Option(None, "--copyright", help="For the credit step (default: the profile's metadata.copyright)."),
+    key: Optional[str] = typer.Option(None, "--key", help="Secret key for a mark step (better: MYSUITE_MARK_KEY)."),
+    advanced: bool = typer.Option(False, "--advanced", hidden=True, help="Allow the randomize step."),
     recursive: bool = typer.Option(False, "--recursive", "-r"),
     overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview the final file names, write nothing."),
@@ -271,50 +377,26 @@ def apply(
     except (InvalidInputError, MysuiteConfigError, ProfileError) as exc:
         log_error(escape(str(exc)))
         raise typer.Exit(1) from exc
-    steps = [s.strip() for s in policy.split(",") if s.strip()] if policy else (active_profile.policy if active_profile else [])
-    if not steps or any(s not in POLICIES for s in steps):
-        log_error("give --policy with steps from: " + ", ".join(POLICIES) + " (or select a profile that has metadata.policy)")
+    requested = [s.strip() for s in policy.split(",") if s.strip()] if policy else (list(active_profile.policy) if active_profile else [])
+    if not requested or any(s not in POLICIES for s in requested):
+        log_error("give --policy with steps from: " + ", ".join(p for p in POLICIES if p != "randomize")
+                  + " (or select a profile that has metadata.policy)")
         raise typer.Exit(1)
-    author = author or (active_profile.metadata.get("author") if active_profile else None)
-    copyright_notice = copyright_notice or (active_profile.metadata.get("copyright") if active_profile else None)
+    if "randomize" in requested and not advanced:
+        log_error(RANDOMIZE_REFUSED)
+        raise typer.Exit(jsonout.EXIT_USAGE)
+    steps = expand_steps(requested)
+    meta = active_profile.metadata if active_profile else {}
+    author = author or meta.get("author")
     if "credit" in steps and not author:
         log_error("the credit step needs an author: --author, or metadata.author in the profile")
         raise typer.Exit(1)
-    for step in steps:
-        require_tools(config.tools, f"metadata-{step}")
-    jsonout.set_extra(policy=steps, profile=active_profile.name if active_profile else None)
-    modes = {"strip": "stripped", "randomize": "randomized", "credit": "credited", "declare": "declared"}
-    profile_meta = active_profile.metadata if active_profile else {}
-    runners = {
-        "strip": lambda p: strip_file(p, tools=config.tools, overwrite=overwrite),
-        "randomize": lambda p: randomize_file(p, tools=config.tools, overwrite=overwrite),
-        "credit": lambda p: credit_file(p, author=author, copyright_notice=copyright_notice, generator="mysuite", tools=config.tools,
-                                        overwrite=overwrite, no_ai=bool(profile_meta.get("no_ai"))),
-        "declare": lambda p: declare_file(p, policy="prohibited", owner=author, terms_url=profile_meta.get("terms_url"),
-                                          tools=config.tools, overwrite=overwrite),
-    }
-    failed = 0
-    for src in input_files:
-        current = src
-        try:
-            for step in steps:
-                if dry_run:
-                    current = output_path_for(current, modes[step])
-                    continue
-                outcome = runners[step](current)
-                current = outcome.output_path
-        except MysuiteToolError as exc:
-            failed += 1
-            jsonout.add_item(input=src, status="failed", step=step, error=str(exc))
-            log_error(f"{escape(str(src))} ({step}): {escape(str(exc))}")
-            continue
-        jsonout.add_item(input=src, output=current, steps=steps, status="planned" if dry_run else "written")
-        if not quiet:
-            console.print(f"[dim]{escape(str(src))} -> {escape(str(current))}[/dim]" if dry_run else "")
-            if not dry_run:
-                log_step(escape(str(current)))
-    if failed:
-        raise typer.Exit(1)
+    secret = _mark_key(key) if "mark" in steps else None
+    require_tools(config.tools, "metadata-strip")
+    jsonout.set_extra(policy=requested, profile=active_profile.name if active_profile else None)
+    opts = ChainOptions(author=author, copyright_notice=copyright_notice or meta.get("copyright"), terms_url=meta.get("terms_url"),
+                        no_ai=bool(meta.get("no_ai")), mark_key=secret)
+    _chain_batch(input_files, requested, steps, opts=opts, config=config, overwrite=overwrite, dry_run=dry_run, quiet=quiet)
 
 
 @app.command(
