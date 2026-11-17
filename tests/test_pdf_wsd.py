@@ -145,3 +145,16 @@ def test_a_corner_stamp_is_not_clipped(tmp_path, position, angle):
     (kl, kt, kr, kb), (w, h) = _red_box(k["items"][0]["output"], tmp_path, "k")
     assert abs((kr - kl) - (cr - cl)) <= 3 and abs((kb - kt) - (cb - ct)) <= 3      # the whole word, not "CONFIDE"
     assert kl >= 10 and kt >= 10 and kr <= w - 10 and kb <= h - 10                     # inside a margin
+
+
+# ------------------------------------------------------------------ 7. from-images honours EXIF orientation
+def test_from_images_turns_a_sideways_phone_photo_upright(tmp_path):
+    im = Image.new("RGB", (400, 300), "white")
+    exif = Image.Exif()
+    exif[0x0112] = 6                                     # "rotate 90° clockwise to display"
+    src = tmp_path / "phone.jpg"
+    im.save(src, exif=exif)
+    res, doc = run_pdf("from-images", src)
+    assert res.exit_code == 0, res.output
+    page = PdfReader(doc["items"][0]["output"]).pages[0]
+    assert float(page.mediabox.height) > float(page.mediabox.width)        # shown upright: portrait

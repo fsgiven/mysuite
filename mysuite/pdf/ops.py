@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
+from PIL import Image, ImageOps
 from pypdf import PageObject, PdfReader, PdfWriter, Transformation
 from pypdf.errors import DependencyError, PdfReadError
 
@@ -594,7 +594,7 @@ def from_images(images: list[Path], out: Path | None, overwrite: bool, *, size: 
         try:
             with Image.open(p) as im:
                 im.seek(0)
-                rgba = im.convert("RGBA")
+                rgba = ImageOps.exif_transpose(im).convert("RGBA")       # a phone photo stored sideways is shown upright
         except Exception as exc:  # noqa: BLE001
             raise PdfError(f"can't read {Path(p).name}: {exc}") from exc
         flat = Image.new("RGB", rgba.size, "white")
