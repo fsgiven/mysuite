@@ -14,7 +14,7 @@ from typing import Any
 
 from PIL import Image
 from pypdf import PageObject, PdfReader, PdfWriter, Transformation
-from pypdf.errors import PdfReadError
+from pypdf.errors import DependencyError, PdfReadError
 
 from mysuite.config import ToolPaths
 from mysuite.utils.subprocess_utils import atomic_write_via, run
@@ -49,7 +49,14 @@ def open_pdf(path: Path) -> PdfReader:
     try:
         reader = PdfReader(str(path))
         if reader.is_encrypted:
-            raise PdfError(f"{Path(path).name} is password-protected; mysuite does not open protected PDFs")
+            # Owner-password-only PDFs ("permissions" PDFs) open with an empty user password, like in any viewer.
+            # One that needs a password to open is refused: mysuite never asks for or guesses passwords.
+            try:
+                opened = reader.decrypt("")
+            except DependencyError as exc:
+                raise PdfError(f"{Path(path).name} is encrypted with AES; opening it needs the 'cryptography' Python package") from exc
+            if not opened:
+                raise PdfError(f"{Path(path).name} needs a password to open; mysuite does not open password-protected PDFs")
         count = len(reader.pages)
     except PdfError:
         raise
@@ -187,6 +194,7 @@ def info(path: Path) -> dict[str, Any]:
         "all_pages_same_size": len({tuple(s) for s in sizes}) == 1,
         "rotations": sorted({int(p.get("/Rotate", 0) or 0) for p in pages[:200]}),
         "metadata": meta, "has_metadata": bool(meta), "has_xmp": reader.xmp_metadata is not None,
+        "encrypted": "owner password only" if reader.is_encrypted else False,
         "has_forms": bool(reader.get_fields()), "version": reader.pdf_header.lstrip("%PDF-"),
         "bytes": Path(path).stat().st_size,
     }
