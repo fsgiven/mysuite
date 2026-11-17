@@ -187,3 +187,18 @@ def test_credit_leaves_no_temporary_files(tmp_path):
     src = plain(tmp_path / "p.jpg")
     run("metadata", "credit", src, "--author", "Jane Doe")
     assert sorted(p.name for p in tmp_path.iterdir()) == ["p.jpg", "p_credited.jpg"]
+
+
+# ------------------------------------------------------------------ declare warns that GPS is kept
+def test_declare_warns_that_the_location_is_still_in_the_file(tmp_path):
+    src = seeded(tmp_path / "photo.jpg")
+    res, doc = run("metadata", "declare", src, "--owner", "Jane Doe")
+    assert res.exit_code == 0, res.output
+    assert any("GPS" in w and "metadata protect" in w for w in doc["warnings"])
+    assert "GPS:GPSLatitude" in tags(doc["items"][0]["output"])        # declare changes nothing else: it is still there
+
+
+def test_declare_on_a_file_without_gps_has_no_warning(tmp_path):
+    src = plain(tmp_path / "p.jpg")
+    res, doc = run("metadata", "declare", src)
+    assert res.exit_code == 0 and not doc["warnings"]
