@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import typer
 from rich.markup import escape
@@ -18,10 +18,10 @@ from PIL import Image
 @jsonout.with_json("shield")
 def shield(
     inputs: List[Path] = typer.Argument(..., exists=True, readable=True, help="Images to protect (PNG/JPEG/WebP/TIFF)."),
-    strength: str = typer.Option("standard", "--strength", help=f"{', '.join(STRENGTHS)}: stronger = more disruption, more visible pattern, slower."),
+    strength: Literal["light", "standard", "strong"] = typer.Option("standard", "--strength", help=f"{', '.join(STRENGTHS)}: stronger = more disruption, more visible pattern, slower."),
     steps: Optional[int] = typer.Option(None, "--steps", help="Optimisation steps (5-400); overrides the strength's default."),
     epsilon: Optional[int] = typer.Option(None, "--epsilon", help="Largest allowed change per pixel, out of 255 (1-32); overrides the strength's default."),
-    device: Optional[str] = typer.Option(None, "--device", help="cpu, mps or cuda (default: the best available)."),
+    device: Optional[Literal["cpu", "mps", "cuda"]] = typer.Option(None, "--device", help="cpu, mps or cuda (default: the best available)."),
     seed: int = typer.Option(0, "--seed", help="Random start (same seed = same result)."),
     recursive: bool = typer.Option(False, "--recursive", "-r"),
     overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite"),

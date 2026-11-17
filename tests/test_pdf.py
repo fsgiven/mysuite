@@ -197,10 +197,15 @@ def test_number_pages_with_format_and_start(three, tmp_path):
 
 
 @need_rsvg
-@pytest.mark.parametrize("args,fragment", [(["--position", "nowhere"], "position"), (["--size", "2"], "size"), (["--format", "x"], "format")])
+@pytest.mark.parametrize("args,fragment", [(["--size", "2"], "size"), (["--format", "x"], "format")])
 def test_number_validation(three, args, fragment):
     res, doc = run_pdf("number", three, *args)
     assert res.exit_code == 1 and fragment in doc["items"][0]["error"]
+
+
+def test_number_position_is_a_fixed_choice(three):
+    res = runner.invoke(app, ["pdf", "number", str(three), "--position", "nowhere", "--json"])
+    assert res.exit_code == 2 and "nowhere" in res.output
 
 
 @need_rsvg

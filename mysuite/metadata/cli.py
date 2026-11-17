@@ -414,7 +414,8 @@ def apply(
 @jsonout.with_json("metadata-declare")
 def declare(
     inputs: List[Path] = typer.Argument(..., exists=True, readable=True, help="Image files and/or folders."),
-    policy: str = typer.Option("prohibited", "--policy", help=f"{', '.join(DATA_MINING)}: what is not allowed."),
+    policy: Literal["prohibited", "prohibited-ai-training", "prohibited-genai-training"] = typer.Option(
+        "prohibited", "--policy", help="What is not allowed."),
     owner: Optional[str] = typer.Option(None, "--owner", help="Copyright owner name to record."),
     terms_url: Optional[str] = typer.Option(None, "--terms-url", help="Link to your AI-use terms."),
     recursive: bool = typer.Option(False, "--recursive", "-r"),
