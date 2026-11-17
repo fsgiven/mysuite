@@ -168,9 +168,14 @@ def test_dry_run_plans_step_one_exactly_and_writes_nothing(work):
 
 @need
 def test_a_failing_step_skips_the_rest_unless_continue_on_error(work):
-    bad = RELEASE.replace('codec = "oxipng"', 'codec = "nonsense"')
-    res, doc = run_pipeline(write_pipeline(work, bad))
-    assert res.exit_code == 1 and [i["status"] for i in doc["items"]] == ["ok", "ok", "failed"]
+    # compress declares its codecs, so a typo is refused before anything runs
+    typo = RELEASE.replace('codec = "oxipng"', 'codec = "nonsense"')
+    res, doc = run_pipeline(write_pipeline(work, typo))
+    assert res.exit_code == 1 and doc["items"] == [] and "not one of mozjpeg" in doc["errors"][0]
+    # a failure only the step itself can find (--max-kb needs a lossy codec: compress exits 2, passed on)
+    bad = RELEASE.replace('codec = "oxipng"', 'codec = "oxipng"\nmax_kb = 1')
+    res, doc = run_pipeline(write_pipeline(work, bad, "late.toml"))
+    assert res.exit_code == 2 and [i["status"] for i in doc["items"]] == ["ok", "ok", "failed"]
 
     text = '''
 inputs = ["logo.svg"]

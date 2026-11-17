@@ -90,7 +90,7 @@ def test_presets_exist_and_explicit_flags_override_them(tmp_path):
 
 
 @pytest.mark.parametrize("args,fragment", [
-    (["--direction", "up"], "direction"), (["--preset", "disco"], "preset"), (["--height", "0"], "height"),
+    (["--height", "0"], "height"),
     (["--intensity", "9"], "intensity"), (["--softness", "99"], "softness"), (["--color", "zz"], "color"),
     (["--specular", "5"], "specular"), (["--depth", "-1"], "depth"),
 ])
@@ -98,6 +98,16 @@ def test_bad_settings_are_clean_errors(tmp_path, args, fragment):
     src = disc(tmp_path / "d.png")
     res, doc = run_r(src, *args)
     assert res.exit_code == 1 and fragment in doc["errors"][0] and not list(tmp_path.glob("*_relit*"))
+
+
+@pytest.mark.parametrize("args", [["--direction", "up"], ["--preset", "disco"]])
+def test_unknown_direction_or_preset_is_a_usage_error(tmp_path, args):
+    """--direction and --preset declare their choices: a typo is refused before anything runs (exit 2)."""
+    from mysuite.cli import app
+    from tests.helpers import runner
+
+    res = runner.invoke(app, ["relight", str(disc(tmp_path / "d.png")), *args])
+    assert res.exit_code == 2 and not list(tmp_path.glob("*_relit*"))
 
 
 def test_never_overwrites_and_original_untouched_and_dry_run(tmp_path):
