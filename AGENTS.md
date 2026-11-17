@@ -39,7 +39,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | another colour in the logo | `… --recolor "#dd0000=#0057b8"` (matches by value, small differences included) |
 | a colour removed from the logo (made transparent) | `… --recolor "#dd0000=transparent"` (`none` works too; only as the TO side) |
 | a favicon / macOS icon | `mysuite export logo.svg --preset favicon` / `--preset macos-icon` |
-| a different file format | `mysuite convert FILE --to png,webp --json` |
+| a different file format | `mysuite convert FILE --to png,webp --json` (`jpg`/`tif` work too; two sources with one name, `x.png` + `x.jpg`, become `x_png.webp` + `x_jpg.webp`) |
 | a watermark | `mysuite watermark FILE --logo logo.svg --position bottom-right --json` |
 | a transparent background (subject cut-out, macOS) | `mysuite cutout FILE --json` |
 | smaller files | `mysuite compress FILE --codec mozjpeg\|webp\|avif\|oxipng\|pngquant\|gifsicle --json` |

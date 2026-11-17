@@ -218,7 +218,7 @@ Convert file(s) to another format, in place beside the source.
 *writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more files, and/or directories, to convert (non-recursive unless --recursive).
-- `--to / -t` (str) Comma-separated target format(s), e.g. webp or png,pdf.
+- `--to / -t` (str) Comma-separated target format(s), e.g. webp or png,pdf: bmp, eps, gif, ico, jpeg, pdf, png, tiff, webp (jpg and tif work too).
 - `--quality` (int range) JPEG/WebP quality, 0-100.
 - `--dpi / --ppi` (float, default `300`) Resolution used only when rasterizing a vector source (svg/pdf/eps); ignored for raster-to-raster conversions.
 - `--background` (str) Flatten transparency onto a color (jpeg/bmp default to white if unset — they have no alpha channel).
