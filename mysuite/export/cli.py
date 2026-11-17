@@ -7,6 +7,8 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional
 
+import enum
+
 import typer
 from rich.tree import Tree
 
@@ -50,6 +52,17 @@ from mysuite.utils.subprocess_utils import MysuiteToolError
 from mysuite.utils import jsonout
 from mysuite.vector import imports as imp
 from mysuite.utils.console import console, log_error, log_note, log_skip, log_step
+
+
+# Options with a fixed set of values are declared as choices, so --help, the schema and agents can list them.
+SizeByChoice = enum.Enum("SizeByChoice", {v: v for v in SIZE_BY}, type=str)
+UnitChoice = enum.Enum("UnitChoice", {v: v for v in ("px", "mm", "cm", "in")}, type=str)
+ThemeChoice = enum.Enum("ThemeChoice", {"light": "light", "dark": "dark"}, type=str)
+assert set(UnitChoice.__members__) == VALID_UNITS
+
+
+def _choice(value):
+    return value.value if isinstance(value, enum.Enum) else value
 
 
 def _lightness(rgb: tuple[int, int, int]) -> float:
@@ -142,8 +155,8 @@ def export(
         "(default: the logo's own size, 1 px = 1 pt, no size in the file name) and/or sizes like 512 or 100mm, which "
         "fit like --sizes do (see --size-by). --sizes only sets the raster sizes.",
     ),
-    size_by: Optional[str] = typer.Option(
-        None, "--size-by",
+    size_by: Optional[SizeByChoice] = typer.Option(
+        None, "--size-by", case_sensitive=False,
         help="What each size sets: longest (default: the logo fits a SIZE x SIZE box), height or width. "
         "E.g. --sizes 512,1080 --size-by height makes a wide logo exactly 512 and 1080 px high.",
     ),
@@ -153,8 +166,8 @@ def export(
         help="Pixels/dots per inch used to convert mm/cm/in sizes to pixels (default from config, "
         "usually 300).",
     ),
-    unit: Optional[str] = typer.Option(
-        None, "--unit",
+    unit: Optional[UnitChoice] = typer.Option(
+        None, "--unit", case_sensitive=False,
         help="Default unit (px, mm, cm, or in) for sizes with no explicit suffix, e.g. --unit mm "
         "--sizes 50,80 means 50mm,80mm. Per-size suffixes still override this.",
     ),
@@ -251,7 +264,7 @@ def export(
         "figma:FILEKEY. Lets --recolor use token:NAME and enables the negative variant.",
     ),
     brand: Optional[str] = typer.Option(None, "--brand", help="Which brand of the token source (when it has several)."),
-    theme: Optional[str] = typer.Option(None, "--theme", help="Which theme's token values --recolor token:NAME uses: light (default) or dark."),
+    theme: Optional[ThemeChoice] = typer.Option(None, "--theme", case_sensitive=False, help="Which theme's token values --recolor token:NAME uses: light (default) or dark."),
     variants: Optional[str] = typer.Option(
         None, "--variants",
         help="Several variants in one run, each in its own folder: default, negative (token-driven, needs --tokens), "
@@ -283,6 +296,7 @@ def export(
     normalize_png: Optional[bool] = typer.Option(None, "--normalize-png/--no-normalize-png", help="Tag PNG output with sRGB via ImageMagick."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress per-file progress, print summary only."),
 ) -> None:
+    size_by, unit, theme = _choice(size_by), _choice(unit), _choice(theme)
     try:
         input_files = resolve_input_files(inputs, recursive=recursive)
     except InvalidInputError as exc:

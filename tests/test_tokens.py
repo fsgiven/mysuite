@@ -450,8 +450,8 @@ def test_negative_map_picks_the_dark_value_explicitly(logo, ds, tmp_path):
 @pytest.mark.parametrize("args,fragment", [
     (["--variants", "negative"], "pass --tokens"), (["--variants", "sepia"], "variants must be"),
     (["--variants", "invert,invert"], "unique"), (["--variants", "invert", "--variant", "x"], "either --variant"),
-    (["--recolor", "#dd0000=token:--x"], "need --tokens"), (["--theme", "blue"], "--theme must be"),
-])
+    (["--recolor", "#dd0000=token:--x"], "need --tokens"),
+])                      # --theme blue is a usage error now (a declared choice, exit 2): see test_export_choices.py
 def test_export_option_errors(logo, tmp_path, args, fragment):
     res, doc = run("export", logo, "--formats", "png", "--sizes", "100", *args, "--out", tmp_path / "o")
     assert res.exit_code != 0 and fragment in " ".join(doc["errors"])

@@ -375,10 +375,10 @@ Batch-export an SVG into multiple sizes, formats, and color profiles.
 - `--sizes / -s` (str) Comma-separated sizes: plain numbers are pixels, or suffix with mm/cm/in (e.g. 16,32,5cm,2in).
 - `--formats / -f` (str) Comma-separated: png,pdf,eps,svg,jpeg,webp,tiff,ico,icns (ico/icns bundle multiple sizes into one file).
 - `--vector-size` (str) Sizes the vector formats (svg, pdf, eps) are written at, once per variant and colour space: 'artwork' (default: the logo's own size, 1 px = 1 pt, no size in the file name) and/or sizes like 512 or 100mm, which fit like --sizes do (see --size-by). --sizes only sets the raster sizes.
-- `--size-by` (str) What each size sets: longest (default: the logo fits a SIZE x SIZE box), height or width. E.g. --sizes 512,1080 --size-by height makes a wide logo exactly 512 and 1080 px high.
+- `--size-by` (choice) What each size sets: longest (default: the logo fits a SIZE x SIZE box), height or width. E.g. --sizes 512,1080 --size-by height makes a wide logo exactly 512 and 1080 px high.
 - `--profiles / -p` (str) Comma-separated: rgb,cmyk
 - `--dpi / --ppi` (float) Pixels/dots per inch used to convert mm/cm/in sizes to pixels (default from config, usually 300).
-- `--unit` (str) Default unit (px, mm, cm, or in) for sizes with no explicit suffix, e.g. --unit mm --sizes 50,80 means 50mm,80mm. Per-size suffixes still override this.
+- `--unit` (choice) Default unit (px, mm, cm, or in) for sizes with no explicit suffix, e.g. --unit mm --sizes 50,80 means 50mm,80mm. Per-size suffixes still override this.
 - `--background` (str) Background color (e.g. white, #ffffff) to flatten onto for formats without transparency. JPEG defaults to white if unset; other formats stay transparent.
 - `--quality` (int range) JPEG/WebP compression quality (0-100).
 - `--padding / --margin` (str) Uniform safe-space margin around the artwork for raster formats, e.g. 20, 20px, or 10%% of each size. No background color is forced — it stays transparent unless --background is also set. Vector formats (pdf/eps/svg) are unaffected. Overridden per side by --margin-top/-right/-bottom/-left.
@@ -401,7 +401,7 @@ Batch-export an SVG into multiple sizes, formats, and color profiles.
 - `--cmyk-map` (str, repeatable) Brand CMYK values, used as they are instead of computed: COLOUR=C/M/Y/K, e.g. '#DD0000=0/100/100/0'. Repeatable; one occurrence may hold several pairs. Matches the exact colour after --recolor and wins over --cmyk-mode (never rounded, greys not forced to K-only).
 - `--tokens` (str) Design tokens: a .css/.json file or folder, git+https://host/org/repo@REF#path=dir (pinned, cached), or figma:FILEKEY. Lets --recolor use token:NAME and enables the negative variant.
 - `--brand` (str) Which brand of the token source (when it has several).
-- `--theme` (str) Which theme's token values --recolor token:NAME uses: light (default) or dark.
+- `--theme` (choice) Which theme's token values --recolor token:NAME uses: light (default) or dark.
 - `--variants` (str) Several variants in one run, each in its own folder: default, negative (token-driven, needs --tokens), invert, mono-black, mono-white, grayscale, mono:COLOUR, knockout (shapes punched out of the background shape), cutout (background shape removed). Combine steps with + and name the folder with =, e.g. 'default,negativ_dark=knockout+mono:#1D1D1B,cut_out=cutout+mono-white'.
 - `--negative-map` (str, repeatable) For the negative variant: LOGOCOLOUR=token:NAME makes that logo colour take the token's DARK value, e.g. '#1d1d1b=token:--headline-text-color'. Repeatable. Use it when several tokens share a colour but differ in dark mode.
 - `--negative-tolerance` (float range, default `5.0`) How close (CIEDE2000) a logo colour must be to a token's light value for the negative variant to use that token.
