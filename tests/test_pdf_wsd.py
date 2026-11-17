@@ -63,3 +63,27 @@ def test_a_gs_failure_is_not_called_missing_gs(three, tmp_path, monkeypatch):
     monkeypatch.setattr(ops, "_gs_run", boom)
     with pytest.raises(FileNotFoundError, match="vanished"):
         ops.render(three, tmp_path / "o", False, ToolPaths(), pages="1")
+
+
+# ------------------------------------------------------------------ 2. owner-password-only PDFs open
+def _encrypt(src, dst, user=""):
+    w = PdfWriter(clone_from=str(src))
+    w.encrypt(user_password=user, owner_password="owner-secret", algorithm="RC4-128")
+    w.write(str(dst))
+    return dst
+
+
+def test_an_owner_password_only_pdf_opens(three, tmp_path):
+    locked = _encrypt(three, tmp_path / "locked.pdf")
+    res, doc = run_pdf("info", locked)
+    assert res.exit_code == 0, res.output
+    assert doc["items"][0]["pages"] == 3 and doc["items"][0]["encrypted"] == "owner password only"
+    res, doc = run_pdf("extract", locked, "--pages", "2")
+    assert res.exit_code == 0, res.output
+    assert len(PdfReader(doc["items"][0]["output"]).pages) == 1
+
+
+def test_a_pdf_that_needs_a_password_to_open_is_still_refused(three, tmp_path):
+    locked = _encrypt(three, tmp_path / "locked.pdf", user="open-me")
+    res, doc = run_pdf("info", locked)
+    assert res.exit_code == 1 and "password" in doc["items"][0]["error"]
