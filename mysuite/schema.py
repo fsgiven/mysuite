@@ -81,7 +81,8 @@ WRITES_WITH: dict[str, list[str]] = {
 EXAMPLES: dict[str, list[str]] = {
     "compress": ["mysuite compress photo.jpg --codec mozjpeg --quality 80 --json",
                  "mysuite compress pics/ --codec webp --dry-run --json"],
-    "contrast": ['mysuite contrast "#dd0000" white --json', 'mysuite contrast --logo logo.svg --on "#ffffff" --json'],
+    "contrast": ['mysuite contrast "#dd0000" white --json', 'mysuite contrast --logo logo.svg --on "#ffffff" --json',
+                 'mysuite contrast token:--text-color-brand token:--bg-color --tokens tokens/ --theme dark --json'],
     "convert": ["mysuite convert pic.png --to webp,jpeg --json"],
     "cutout": ["mysuite cutout photo.jpg --json"],
     "diff": ["mysuite diff a.png b.png --json", "mysuite diff old.svg new.svg --out changes.png --json"],
