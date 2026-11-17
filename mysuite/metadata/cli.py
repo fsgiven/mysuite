@@ -320,7 +320,8 @@ def apply(
 @app.command(
     "declare",
     help="Write a machine-readable 'no AI use' declaration (PLUS DataMining + XMP Rights) into a copy (name_declared.ext). "
-    "It is a legal/consent signal that cooperating crawlers and tools read - it does not technically block anything.",
+    "It is a legal/consent signal that cooperating crawlers and tools read - it does not technically block anything. "
+    "Nothing else is removed: a GPS location stays (a warning says so); `metadata protect` strips it in the same go.",
 )
 @jsonout.with_json("metadata-declare")
 def declare(

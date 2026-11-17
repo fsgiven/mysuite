@@ -277,4 +277,14 @@ def declare_file(
         run([tools.exiftool, "-q", "-overwrite_original", "-m", *args, str(tmp_path)])
 
     atomic_write_via(output_path, write, preserve_extension=True)
-    return MetadataOutcome(input_path, output_path, "written")
+    notes = [GPS_KEPT] if has_gps(output_path, tools) else []
+    return MetadataOutcome(input_path, output_path, "written", notes=notes)
+
+
+GPS_KEPT = ("the GPS location is still in this file (declare only adds the notice); "
+            "use `metadata protect` or `metadata strip --keep-credit` to remove it")
+
+
+def has_gps(path: Path, tools: ToolPaths) -> bool:
+    out = run([tools.exiftool, "-q", "-q", "-s3", "-GPSLatitude", "-GPSLongitude", "-GPSPosition", str(path)]).stdout
+    return bool(out.strip())
