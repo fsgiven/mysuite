@@ -39,7 +39,7 @@ def test_default_is_still_the_longest_side(tmp_path):
 
 @need
 def test_height_sets_the_height_in_png_svg_and_pdf(tmp_path):
-    out = _export(tmp_path, "--size-by", "height", "--dpi", "72")
+    out = _export(tmp_path, "--size-by", "height", "--vector-size", "100,512,1080")
     for s in (100, 512, 1080):
         w, h = Image.open(out / "png" / "rgb" / f"bug_{s}.png").size
         assert h == s and abs(w - s * 876 / 512) <= 1, (s, w, h)
@@ -58,7 +58,7 @@ def test_width_sets_the_width(tmp_path):
 
 @need
 def test_height_at_native_size_keeps_the_original_svg(tmp_path):
-    out = _export(tmp_path, "--size-by", "height")
+    out = _export(tmp_path, "--size-by", "height", "--vector-size", "512")
     assert (out / "svg" / "rgb" / "bug_512.svg").read_text() == (tmp_path / "bug.svg").read_text()
 
 

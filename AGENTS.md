@@ -30,8 +30,9 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | --- | --- |
 | to know what a file is (size, colour mode, transparency, palette, GPS, blurry?) | `mysuite inspect FILE --json` |
 | to see it | `mysuite inspect FILE --thumb out.png` or `--sheet sheet.png` (several files) |
-| a logo as PNG/PDF/EPS/SVG/JPEG/WebP/TIFF/ICO/ICNS at several sizes | `mysuite export logo.svg --formats png,pdf --sizes 64,512 --out DIR --json` |
-| sizes as HEIGHT (or width) for a wide/tall logo, e.g. "512, 1080, 3000 px high" | `mysuite export logo.svg --sizes 512,1080,3000 --size-by height` (default `longest`: fits a SIZE×SIZE box); add `--dpi 72` for PDFs at 1 px = 1 pt |
+| a logo as PNG/PDF/EPS/SVG/JPEG/WebP/TIFF/ICO/ICNS at several sizes | `mysuite export logo.svg --formats png,pdf --sizes 64,512 --out DIR --json` (`--sizes` are the raster sizes; SVG/PDF/EPS come once per variant × colour space at the artwork's own size, 1 px = 1 pt; `--vector-size 512,100mm` for other sizes) |
+| sizes as HEIGHT (or width) for a wide/tall logo, e.g. "512, 1080, 3000 px high" | `mysuite export logo.svg --sizes 512,1080,3000 --size-by height` (default `longest`: fits a SIZE×SIZE box) |
+| the house file names, e.g. `RGB/PNG/20250514_BILD_Logo_positive_512_RGB.png` | `… --variants positive=default --naming '20250514_BILD_Logo_{variant}_{size}_{COLORSPACE}{ext}' --path '{COLORSPACE}/{FORMAT}/{naming}' --no-name-folder` (a token in CAPITALS is capitalised; an empty token, like `{size}` of a vector, takes its `_` with it; `{width}`/`{height}` are the real pixels) |
 | print-ready CMYK | `… --profiles cmyk [--cmyk-mode clean] [--cmyk-profile ICC]` (pdf/eps/tiff only) |
 | a brand logo set from one positive logo on a background shape (negative = letters punched out, cut-out = letters only) | `mysuite export logo.svg --variants 'default,negativ_bright=knockout+mono-white,negativ_dark=knockout+mono:#1D1D1B,cut_out_bright=cutout+mono-white,cut_out_dark=cutout+mono:#1D1D1B'` (`knockout`/`cutout` find the background shape by rendering; a note says when a mask had to be used) |
 | CMYK must match the brand book (e.g. red 0/100/100/0) | `… --profiles cmyk --cmyk-map '#DD0000=0/100/100/0' --cmyk-map '#1D1D1B=75/65/65/80'` (or `cmyk_map` in a profile's `[export]`); pinned colours report `"fixed": true` |

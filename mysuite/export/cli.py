@@ -35,6 +35,8 @@ from mysuite.tokens.model import TokenError
 from mysuite.tokens.context import build_context
 from mysuite.export.renderer import Renderer
 from mysuite.export.units import (
+    ARTWORK,
+    ARTWORK_LABEL,
     SIZE_BY,
     VALID_UNITS,
     InvalidPaddingError,
@@ -102,6 +104,12 @@ def export(
         None, "--formats", "-f",
         help="Comma-separated: png,pdf,eps,svg,jpeg,webp,tiff,ico,icns "
         "(ico/icns bundle multiple sizes into one file).",
+    ),
+    vector_size: Optional[str] = typer.Option(
+        None, "--vector-size",
+        help="Sizes the vector formats (svg, pdf, eps) are written at, once per variant and colour space: 'artwork' "
+        "(default: the logo's own size, 1 px = 1 pt, no size in the file name) and/or sizes like 512 or 100mm, which "
+        "fit like --sizes do (see --size-by). --sizes only sets the raster sizes.",
     ),
     size_by: Optional[str] = typer.Option(
         None, "--size-by",
@@ -287,6 +295,17 @@ def export(
         log_error(f"--size-by must be one of {', '.join(SIZE_BY)}, not {resolved_size_by!r}")
         raise typer.Exit(1)
     resolved_sizes = [dataclasses.replace(s, fit=resolved_size_by) for s in resolved_sizes]
+    resolved_vector_sizes: list[Size] = []
+    for raw in (parse_csv(vector_size) if vector_size is not None else [str(v) for v in settings.vector_sizes]) or ["artwork"]:
+        if raw.strip().lower() == ARTWORK_LABEL:
+            resolved_vector_sizes.append(ARTWORK)
+            continue
+        try:
+            resolved_vector_sizes.append(dataclasses.replace(
+                parse_size(raw, dpi=resolved_dpi, default_unit=resolved_unit), fit=resolved_size_by))
+        except InvalidSizeError as exc:
+            log_error(f"--vector-size: {exc} (or 'artwork' for the logo's own size)")
+            raise typer.Exit(1) from exc
     resolved_formats = parse_csv(formats) or settings.formats
     resolved_profiles = parse_csv(profiles) or settings.profiles
     resolved_out = out or Path(settings.out_dir)
@@ -491,6 +510,7 @@ def export(
                     name_folder=resolved_name_folder,
                     artwork=art,
                     margin_for=margin_for,
+                    vector_sizes=resolved_vector_sizes,
                 )
             except MysuitePlannerError as exc:
                 log_error(f"{escape(str(input_svg))}: {escape(str(exc))}")

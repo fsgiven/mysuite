@@ -4,16 +4,20 @@ import os
 from pathlib import Path
 from typing import Callable
 
-from mysuite.export.artwork import raster_dims
+from mysuite.export.artwork import raster_dims, vector_dims
 from mysuite.export.models import BundleJob, ExportJob, ExportPlan, SkipReason
 from mysuite.export.naming import DEFAULT_BUNDLE_NAMING_TEMPLATE, NamingError, render_bundle_path, render_path
-from mysuite.export.units import Margin, Size
+from mysuite.export.units import ARTWORK, Margin, Size
 
 # PNG/WebP/ICO/ICNS have no CMYK color mode, SVG color is defined in RGB/sRGB by
 # spec, and CMYK JPEG has well-known viewer-compatibility issues — so CMYK is
 # only meaningful for the print formats PDF/EPS and, since it's a true CMYK
 # raster format, TIFF.
 CMYK_CAPABLE_FORMATS = {"pdf", "eps", "tiff"}
+
+# Resolution-independent: written once per variant x colour space at each --vector-size (default: the artwork's
+# own size, 1 px = 1 pt), never once per pixel size.
+VECTOR_FORMATS = {"svg", "pdf", "eps"}
 
 # ico/icns pack multiple sizes into ONE output file, unlike every other format
 # which writes one file per size.
@@ -65,30 +69,36 @@ def build_plan(
     name_folder: bool = True,
     artwork: tuple[float, float] | None = None,
     margin_for: Callable[[int], Margin] | None = None,
+    vector_sizes: list[Size] | None = None,
 ) -> ExportPlan:
-    """artwork = the source's own (width, height), for {width}/{height}; margin_for(pixels) = the raster margin."""
+    """artwork = the source's own (width, height) in pt, for {width}/{height}; margin_for(pixels) = the raster margin;
+    vector_sizes = the sizes svg/pdf/eps are written at (default: the artwork's own size, once)."""
     try:
         return _build_plan(
             name=name, out_dir=out_dir, sizes=sizes, formats=formats, profiles=profiles,
             naming_template=naming_template, path_template=path_template,
             bundle_naming_template=bundle_naming_template, variant=variant, strict=strict,
             name_folder=name_folder, artwork=artwork, margin_for=margin_for,
+            vector_sizes=vector_sizes or [ARTWORK],
         )
     except NamingError as exc:
         raise MysuitePlannerError(str(exc)) from exc
 
 
-def _dims(artwork, size: Size, margin_for) -> tuple[int | None, int | None]:
+def _dims(artwork, size: Size, margin_for, fmt: str) -> tuple[int | None, int | None]:
     if artwork is None:
         return None, None
+    if fmt in VECTOR_FORMATS:
+        w, h = vector_dims(artwork, size)
+        return round(w), round(h)
     return raster_dims(artwork, size, margin_for(size.pixels) if margin_for else None)
 
 
 def _build_plan(
     *, name, out_dir, sizes, formats, profiles, naming_template, path_template, bundle_naming_template,
-    variant, strict, name_folder, artwork, margin_for,
+    variant, strict, name_folder, artwork, margin_for, vector_sizes,
 ) -> ExportPlan:
-    sizes, formats, profiles = (list(dict.fromkeys(x)) for x in (sizes, formats, profiles))   # 32,32 is one size
+    sizes, formats, profiles, vector_sizes = (list(dict.fromkeys(x)) for x in (sizes, formats, profiles, vector_sizes))
     jobs: list[ExportJob] = []
     bundle_jobs: list[BundleJob] = []
     skips: list[SkipReason] = []
@@ -132,8 +142,8 @@ def _build_plan(
                 )
                 continue
 
-            for size in sizes:
-                width, height = _dims(artwork, size, margin_for)
+            for size in (vector_sizes if fmt in VECTOR_FORMATS else sizes):
+                width, height = _dims(artwork, size, margin_for, fmt)
                 output_path = _confined(render_path(
                     path_template,
                     naming_template,
