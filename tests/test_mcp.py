@@ -309,3 +309,49 @@ async def test_pipeline_dry_run_never_writes_through_mcp(work):
     assert sorted(p.name for p in work.iterdir()) == before, "a dry run wrote files"
     assert plan["ok"] is True and plan["items"][0]["status"] == "skipped"
     assert any("not run" in w for w in plan["warnings"])
+
+
+# ---------------------------------------------------------------------------- WS-E: pdf dry_run, slim mode
+def _pdf(path):
+    from PIL import Image
+    Image.new("RGB", (100, 140), "white").save(path, format="PDF")
+    return path
+
+
+@pytest.mark.asyncio
+async def test_pdf_dry_run_never_writes(work):
+    _pdf(work / "doc.pdf")
+    async with server(work) as c:
+        tools = {t.name: t for t in (await c.list_tools()).tools}
+        assert "dry_run" in tools["mysuite_pdf"].input_schema["properties"]
+        before = sorted(p.name for p in work.iterdir())
+        plan = await call(c, "mysuite_pdf", action="rotate", inputs=[str(work / "doc.pdf")], options={"degrees": 90}, dry_run=True)
+        assert sorted(p.name for p in work.iterdir()) == before, "a dry run wrote files"
+        assert plan["ok"] and plan["exit_code"] == 0 and plan["dry_run"] is True
+        assert plan["items"][0]["status"] in ("planned", "skipped")
+        if plan["items"][0]["status"] == "skipped":            # pdf rotate has no --dry-run of its own (yet)
+            assert "--dry-run" in plan["warnings"][0]
+        info = await call(c, "mysuite_pdf", action="info", inputs=[str(work / "doc.pdf")], dry_run=True)
+        assert info["ok"] and info["items"][0].get("pages") == 1   # read-only: it really runs
+
+
+def test_every_tool_has_a_short_slim_description():
+    from mysuite import mcpserver
+    names = set(mcpserver.SLIM)
+    assert all(len(d) <= 90 for d in mcpserver.SLIM.values()), [n for n, d in mcpserver.SLIM.items() if len(d) > 90]
+    assert len(mcpserver.SLIM_INSTRUCTIONS) < len(mcpserver.INSTRUCTIONS) / 2
+    assert "mysuite_export" in names
+
+
+@pytest.mark.asyncio
+async def test_slim_mode_lists_the_same_tools_with_short_descriptions(work):
+    args = ["-m", "mysuite", "mcp", "--allow", str(work)]
+    async with Client(StdioServerParameters(command=sys.executable, args=args, env={**os.environ, "PYTHONPATH": str(ROOT)})) as c:
+        full = {t.name: t for t in (await c.list_tools()).tools}
+    async with Client(StdioServerParameters(command=sys.executable, args=[*args, "--slim"], env={**os.environ, "PYTHONPATH": str(ROOT)})) as c:
+        slim = {t.name: t for t in (await c.list_tools()).tools}
+        doc = await call(c, "mysuite_contrast", foreground="#000000", background="#ffffff")
+    assert set(slim) == set(full)
+    assert all(len(t.description) <= 90 for t in slim.values())
+    assert sum(len(t.description) for t in slim.values()) < sum(len(t.description) for t in full.values()) / 3
+    assert doc["ok"] and doc["items"][0]["ratio"] == 21.0

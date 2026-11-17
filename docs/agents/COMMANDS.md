@@ -541,11 +541,13 @@ Run the MCP server (stdio) so MCP clients can use mysuite. Needs `pip install 'm
 *read only · no `--dry-run`*
 
 - `--allow` (path, repeatable) Folder the server may read/write (repeatable). Default: the current folder.
+- `--slim` (boolean) One short line per tool description, for small local models with little context (mysuite_schema has the detail).
 
 Examples:
 
 ```bash
 mysuite mcp --allow ~/Pictures/work
+mysuite mcp --allow ~/Pictures/work --slim
 ```
 
 ## `mysuite metadata apply`

@@ -99,7 +99,7 @@ EXAMPLES: dict[str, list[str]] = {
     "kit make": ["mysuite kit make logo.svg --kit favicon --out kits --json"],
     "mark detect": ["mysuite mark detect suspect.jpg --key SECRET --json"],
     "mark embed": ["mysuite mark embed photo.png --key SECRET --json"],
-    "mcp": ["mysuite mcp --allow ~/Pictures/work"],
+    "mcp": ["mysuite mcp --allow ~/Pictures/work", "mysuite mcp --allow ~/Pictures/work --slim"],
     "metadata apply": ["mysuite metadata apply photo.jpg --policy strip,credit --author Acme --json"],
     "metadata credit": ['mysuite metadata credit photo.jpg --author "Name" --copyright "© 2026 Name" --json'],
     "metadata declare": ["mysuite metadata declare photo.jpg --owner Acme --json"],

@@ -169,13 +169,14 @@ def schema(
 @app.command("mcp", help="Run the MCP server (stdio) so MCP clients can use mysuite. Needs `pip install 'mysuite[mcp]'`. Sandboxed to --allow folders (default: the current folder).")
 def mcp_command(
     allow: Optional[List[Path]] = typer.Option(None, "--allow", help="Folder the server may read/write (repeatable). Default: the current folder."),
+    slim: bool = typer.Option(False, "--slim", help="One short line per tool description, for small local models with little context (mysuite_schema has the detail)."),
 ) -> None:
     try:
         from mysuite import mcpserver
     except ImportError as exc:
         typer.echo("the MCP server needs the optional dependency: pip install 'mysuite[mcp]'", err=True)
         raise typer.Exit(4) from exc
-    mcpserver.serve(list(allow or []))
+    mcpserver.serve(list(allow or []), slim=slim)
 
 
 def main() -> None:
