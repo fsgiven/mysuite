@@ -150,7 +150,7 @@ Re-encode image(s) via a best-in-class codec (mozjpeg/webp/avif/oxipng/pngquant/
 - argument `inputs` (path, repeatable) One or more files, and/or directories, to compress (non-recursive unless --recursive). Not needed with --list-presets.
 - `--preset` (str) Named settings bundle (codec + its parameters) to start from — run --list-presets to see them. Any other flag you also pass overrides that field of the preset; --codec becomes optional when --preset is given.
 - `--list-presets` (boolean) List available compress presets and exit.
-- `--codec` (str) Target codec: mozjpeg, webp, avif, oxipng, pngquant, gifsicle. Required unless --preset supplies one.
+- `--codec` (choice) Target codec: mozjpeg, webp, avif, oxipng, pngquant, gifsicle. Required unless --preset supplies one.
 - `--quality` (int range) Codec quality, 0-100 (mozjpeg/webp/avif only — ignored by oxipng/gifsicle, use --quality-range for pngquant).
 - `--max-kb` (int range) Save for web: the file must be at most this many KB (1 KB = 1000 bytes). The highest quality that fits is searched for (mozjpeg/webp/avif); --quality, if given, is the highest it may use.
 - `--max-size` (int range) Save for web: shrink so the longest side is at most this many pixels (never enlarges).
@@ -159,7 +159,7 @@ Re-encode image(s) via a best-in-class codec (mozjpeg/webp/avif/oxipng/pngquant/
 - `--sharpen-sigma` (float) Unsharp mask sigma / blur amount (default 1.0).
 - `--sharpen-threshold` (float) Unsharp mask threshold — minimum brightness change to sharpen (default 0.0).
 - `--progressive / --baseline` (boolean) [mozjpeg] Progressive vs. baseline JPEG encoding (default progressive).
-- `--subsample` (str) [mozjpeg] Chroma subsampling: 4:4:4 or 4:2:0 (default 4:2:0).
+- `--subsample` (choice) [mozjpeg] Chroma subsampling: 4:4:4 or 4:2:0 (default 4:2:0).
 - `--lossless / --lossy` (boolean) [webp] Lossless encoding instead of lossy (default lossy).
 - `--method` (int range) [webp] Compression effort, 0-6, slower = smaller (default 6).
 - `--alpha-quality` (int range) [webp] Alpha channel quality, 0-100 (default 100).
@@ -352,9 +352,9 @@ Enhance photo(s), writing <name>_enhanced.<ext> beside each source.
 - `--contrast` (float range) 1.0 = unchanged.
 - `--gamma` (float range) 1.0 = unchanged, <1 brightens.
 - `--restore-scratches / --no-restore-scratches` (boolean) Fill thin straight scratches/creases from their surroundings.
-- `--format` (str) png, jpg or webp.
+- `--format` (choice) png, jpg or webp.
 - `--quality` (int range) jpg/webp quality.
-- `--backend` (str, default `auto`) auto, classical or realesrgan.
+- `--backend` (choice, default `auto`) auto, classical or realesrgan.
 - `--record-history` (boolean) Log each job (paths, sizes, timing) to a local database (read it with `mysuite enhance history`). Off by default: a log of what you processed is a trace.
 - `--recursive / -r` (boolean) Recurse into subdirectories.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
@@ -1238,8 +1238,8 @@ Experimental: re-shade a picture as if lit from another direction (classical, no
 *writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Photos/images to relight (raster formats).
-- `--preset` (str) Lighting preset: key-left, key-right, top, side, dramatic, golden-hour, cool-fill. Other flags override it.
-- `--direction` (str) Where the light comes from: top, top-right, right, bottom-right, bottom, bottom-left, left, top-left. Default top-left.
+- `--preset` (choice) Lighting preset: key-left, key-right, top, side, dramatic, golden-hour, cool-fill. Other flags override it.
+- `--direction` (choice) Where the light comes from: top, top-right, right, bottom-right, bottom, bottom-left, left, top-left. Default top-left.
 - `--angle` (float) Compass degrees the light comes FROM (0 top, 90 right, 180 bottom, 270 left); beats --direction.
 - `--height` (float) Light elevation in degrees, 1-90 (90 = straight on, low = raking). Default 40.
 - `--intensity` (float) How strongly the light shapes the picture, 0-3. Default 0.9.
@@ -1248,7 +1248,7 @@ Experimental: re-shade a picture as if lit from another direction (classical, no
 - `--depth` (float) How pronounced the pseudo-3D is, 0-5. Default 1.
 - `--specular` (float) Sheen, 0 = matte. Default 0.
 - `--color` (str) Tint of the light, e.g. '#ffb36b' (warm) or '#9ec5ff' (cool).
-- `--format` (str, default `png`) Output format: png, jpg, webp (jpg flattens transparency on white).
+- `--format` (choice, default `png`) Output format: png, jpg, webp (jpg flattens transparency on white).
 - `--quality` (int range, default `90`) JPEG/WebP quality, 1-100.
 - `--recursive / -r` (boolean) Recurse into subdirectories.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
@@ -1586,9 +1586,9 @@ Stamp a logo onto image(s) as a visible, scalable watermark.
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories, to watermark (non-recursive unless --recursive).
 - `--logo / -l` (path) Image (or SVG) to stamp onto each input as the watermark.
-- `--position / -p` (str, default `bottom-right`) One of: top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right; or top, bottom, left, right, middle.
+- `--position / -p` (choice, default `bottom-right`) One of: top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right; or top, bottom, left, right, middle.
 - `--scale` (float, default `15.0`) Logo size as a percentage of the photo's width (or height, with --size-by height).
-- `--size-by` (str, default `width`) What --scale is measured against: the photo's width (default) or its height (for a logo that should be the same height on landscape and portrait photos).
+- `--size-by` (choice, default `width`) What --scale is measured against: the photo's width (default) or its height (for a logo that should be the same height on landscape and portrait photos).
 - `--quality` (int range) JPEG/WebP quality, 1-100. Default: a JPEG keeps the source's own quality (4:2:0 subsampling).
 - `--opacity` (int range, default `80`) Watermark blend opacity, 0-100.
 - `--margin` (float, default `3.0`) Breathing room from the edge, as a percentage of the base image's width.

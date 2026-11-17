@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
@@ -21,6 +22,18 @@ from mysuite.enhance.enhance import EnhanceError, EnhanceSettings, enhance_file
 from mysuite.enhance.upscalers import backend_status
 from mysuite.utils import jsonout
 from mysuite.utils.console import WARNING, console, log_error, log_step
+
+
+def _choice(name: str, values) -> type[Enum]:
+    """A str Enum: Typer turns it into a Choice, so the schema lists the values and a typo is a usage error."""
+    return Enum(name, [(v, v) for v in values], type=str)
+
+
+def _v(value):
+    return value.value if isinstance(value, Enum) else value
+
+_Format = _choice("Format", ("png", "jpg", "jpeg", "webp"))
+_Backend = _choice("Backend", ("auto", "classical", "realesrgan"))
 
 app = typer.Typer(
     help="Upscale and restore photos locally (classical backend always available; "
@@ -55,9 +68,9 @@ def run(
         None, "--restore-scratches/--no-restore-scratches",
         help="Fill thin straight scratches/creases from their surroundings.",
     ),
-    output_format: Optional[str] = typer.Option(None, "--format", help="png, jpg or webp."),
+    output_format: Optional[_Format] = typer.Option(None, "--format", help="png, jpg or webp."),
     output_quality: Optional[int] = typer.Option(None, "--quality", min=1, max=100, help="jpg/webp quality."),
-    backend: str = typer.Option("auto", "--backend", help="auto, classical or realesrgan."),
+    backend: _Backend = typer.Option("auto", "--backend", help="auto, classical or realesrgan."),
     record_history: bool = typer.Option(
         False, "--record-history",
         help="Log each job (paths, sizes, timing) to a local database (read it with `mysuite enhance history`). "
@@ -70,6 +83,7 @@ def run(
     config_path: Optional[Path] = typer.Option(None, "--config", "-c", help="Explicit path to mysuite.toml."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Print only the summary."),
 ) -> None:
+    backend, output_format = _v(backend), _v(output_format)
     if backend not in ("auto", "classical", "realesrgan"):
         log_error(f"unknown backend: {backend!r} — expected auto, classical or realesrgan")
         raise typer.Exit(1)
