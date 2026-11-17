@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+from enum import Enum
 from typing import Optional
 
 import typer
@@ -11,6 +12,10 @@ from rich.table import Table
 from mysuite import components
 from mysuite.utils import jsonout
 from mysuite.utils.console import console, log_error, log_step
+
+
+# The component names as choices, so `mysuite schema` (and a model using it) can't invent one.
+ComponentName = Enum("ComponentName", {n: n for n in components.COMPONENTS}, type=str)
 
 
 def _human(n: int) -> str:
@@ -23,7 +28,7 @@ def _human(n: int) -> str:
 
 @jsonout.with_json("install")
 def install(
-    name: Optional[str] = typer.Argument(None, help="Component to install (see the list). Leave out to list them."),
+    name: Optional[ComponentName] = typer.Argument(None, case_sensitive=False, help="Component to install (see the list). Leave out to list them."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Go ahead without asking (required when there is no terminal, and with --json)."),
     remove: bool = typer.Option(False, "--remove", help="Delete the component again."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be fetched/built and where, change nothing."),
@@ -42,6 +47,7 @@ def install(
         console.print(table)
         console.print(f"[dim]install with: mysuite install NAME   ·   files live in {escape(str(components.root()))}[/dim]")
         return
+    name = ComponentName(name).value
     try:
         c = components.get(name)
     except components.ComponentError as exc:
