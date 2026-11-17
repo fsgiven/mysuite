@@ -529,18 +529,19 @@ mysuite mark detect suspect.jpg --key SECRET --json
 
 ## `mysuite mark embed`
 
-Add your invisible mark. Output: <name>_marked.png beside the original.
+Add your invisible mark to a copy, <name>_marked.<ext> beside the original, in the same format (JPEG in, JPEG out) with its metadata (author, copyright, no-AI declaration) copied over.
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Images / folders.
 - `--key` (str) Your secret key (or MYSUITE_MARK_KEY). Same key = same mark.
 - `--id` (str) Optional label mixed into the mark, e.g. a campaign or recipient: a different id is a different mark.
-- `--strength` (str, default `standard`) subtle (~44 dB), standard (~40 dB), strong (~37 dB): stronger survives more, shows more.
-- `--format` (str, default `png`) png (best), tiff or jpeg.
-- `--quality` (int, default `95`) JPEG quality.
+- `--strength` (choice, default `standard`, one of `subtle`, `standard`, `strong`) subtle (~44 dB), standard (~40 dB), strong (~37 dB): stronger survives more, shows more.
+- `--format` (choice, one of `png`, `jpeg`, `jpg`, `tiff`, `webp`) Default: the input's own format. PNG keeps the mark strongest.
+- `--quality` (int, default `95`) JPEG/WebP quality.
 - `--recursive / -r` (boolean)
 - `--overwrite / --no-overwrite` (boolean)
+- `--dry-run` (boolean) Show the files that would be written, write nothing.
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
 Examples:
@@ -567,14 +568,16 @@ mysuite mcp --allow ~/Pictures/work --slim
 
 ## `mysuite metadata apply`
 
-Apply a metadata policy in one go - the active profile's, or --policy: any of strip, randomize, credit, in order (e.g. strip,credit removes everything, then embeds your credit). Each step works on the previous step's output.
+Apply a metadata policy in one go into ONE copy - the active profile's, or --policy: steps from strip, strip-private (keeps the credit), credit, declare, mark, or protect (= strip-private, credit, declare), in order. strip,credit writes name_stripped_credited.ext and nothing else.
 
 *writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Image files and/or folders.
-- `--policy` (str) Comma-separated steps: strip, randomize, credit (default: the profile's metadata.policy).
+- `--policy` (str) Comma-separated steps, e.g. strip,credit or protect (default: the profile's metadata.policy).
 - `--author / -a` (str) For the credit step (default: the profile's metadata.author).
 - `--copyright` (str) For the credit step (default: the profile's metadata.copyright).
+- `--key` (str) Secret key for a mark step (better: MYSUITE_MARK_KEY).
+- `--advanced` (boolean) Allow the randomize step.
 - `--recursive / -r` (boolean)
 - `--overwrite / --no-overwrite` (boolean)
 - `--dry-run` (boolean) Preview the final file names, write nothing.
@@ -590,15 +593,19 @@ mysuite metadata apply photo.jpg --policy strip,credit --author Acme --json
 
 ## `mysuite metadata credit`
 
-Embed a signed C2PA provenance manifest (author/copyright) for correct crediting.
+Write your credit into a copy (name_credited.ext): author (IPTC By-line, dc:creator, Artist), copyright notice, credit line, source and usage terms as IPTC Core via exiftool, which picture desks and DAMs read. When c2patool is installed a C2PA record with the same author/copyright is added last, signed with c2patool's TEST certificate (verifiers show it as untrusted); without c2patool the result says C2PA was not added.
 
 *writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories (non-recursive unless --recursive).
 - `--author / -a` (str) Author/creator name to embed (or the active profile's metadata.author).
 - `--copyright` (str) Copyright notice to embed, e.g. '© 2026 Jane Doe'.
-- `--no-ai` (boolean) Also record in the manifest that AI training, generative training, inference and data mining are NOT allowed (C2PA training-mining assertion).
-- `--generator` (str, default `mysuite`) Software/tool named as the claim generator (not independently visible in c2patool's own read-back report on all versions — author/copyright are the fields that reliably read back).
+- `--credit-line` (str) Credit line as it should be printed, e.g. 'Jane Doe / Acme News'.
+- `--source` (str) Source: the agency or archive that supplies the picture.
+- `--usage-terms` (str) Rights usage terms, e.g. 'Editorial use only'.
+- `--no-ai` (boolean) Also declare that AI training, generative training and data mining are NOT allowed (XMP PLUS DataMining, and the C2PA training-mining assertion when c2patool is installed).
+- `--c2pa / --no-c2pa` (boolean, default `True`) Add a C2PA record when c2patool is installed (default) or never.
+- `--generator` (str, default `mysuite`) Software named as the C2PA claim generator (c2patool's read-back report may show its own name instead).
 - `--recursive / -r` (boolean) Recurse into subdirectories.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing output files.
 - `--dry-run` (boolean) Preview input -> output pairs, write nothing.
@@ -614,12 +621,12 @@ mysuite metadata credit photo.jpg --author "Name" --copyright "© 2026 Name" --j
 
 ## `mysuite metadata declare`
 
-Write a machine-readable 'no AI use' declaration (PLUS DataMining + XMP Rights) into a copy (name_declared.ext). It is a legal/consent signal that cooperating crawlers and tools read - it does not technically block anything.
+Write a machine-readable 'no AI use' declaration (PLUS DataMining + XMP Rights) into a copy (name_declared.ext). It is a legal/consent signal that cooperating crawlers and tools read - it does not technically block anything. Nothing else is removed: a GPS location stays (a warning says so); `metadata protect` strips it in the same go.
 
 *writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Image files and/or folders.
-- `--policy` (str, default `prohibited`) prohibited, prohibited-ai-training, prohibited-genai-training: what is not allowed.
+- `--policy` (choice, default `prohibited`, one of `prohibited`, `prohibited-ai-training`, `prohibited-genai-training`) What is not allowed.
 - `--owner` (str) Copyright owner name to record.
 - `--terms-url` (str) Link to your AI-use terms.
 - `--recursive / -r` (boolean)
@@ -635,13 +642,39 @@ Examples:
 mysuite metadata declare photo.jpg --owner Acme --json
 ```
 
+## `mysuite metadata protect`
+
+Protect & credit in one go, into ONE copy (name_protected.ext): remove private data (GPS, camera, serial numbers, software; your existing credit and the colour profile stay), write your credit (IPTC Core), declare 'no AI training / data mining', and with --mark add your invisible ownership mark. A C2PA record is added last when c2patool is installed (test certificate). No intermediate files are left behind.
+
+*writes files · has `--dry-run` · `--json`*
+
+- argument `inputs` (path, required, repeatable) Image files and/or folders.
+- `--author / -a` (str) Author/creator (or the profile's metadata.author).
+- `--copyright` (str) Copyright notice, e.g. '© 2026 Jane Doe' (or the profile's).
+- `--credit-line` (str) Credit line as it should be printed.
+- `--source` (str) Source: the agency or archive.
+- `--usage-terms` (str) Rights usage terms, e.g. 'Editorial use only'.
+- `--policy` (choice, default `prohibited`, one of `prohibited`, `prohibited-ai-training`, `prohibited-genai-training`) What the no-AI declaration forbids.
+- `--terms-url` (str) Link to your AI-use terms (or the profile's).
+- `--mark` (boolean) Also add the invisible ownership mark (needs --key or MYSUITE_MARK_KEY).
+- `--key` (str) Secret key for --mark (better: the MYSUITE_MARK_KEY environment variable).
+- `--id` (str) Optional label mixed into the mark.
+- `--c2pa / --no-c2pa` (boolean, default `True`) Add a C2PA record when c2patool is installed (default) or never.
+- `--recursive / -r` (boolean)
+- `--overwrite / --no-overwrite` (boolean)
+- `--dry-run` (boolean) Preview the file names, write nothing.
+- `--config / -c` (path) Explicit path to mysuite.toml.
+- `--quiet / -q` (boolean)
+- `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
+
 ## `mysuite metadata randomize`
 
-Strip all metadata, then write one internally consistent decoy camera identity (make/model/lens/firmware + plausible exposure and a recent capture time; never GPS).
+ADVANCED, hidden: strip all metadata, then write one internally consistent decoy camera identity (make/model/lens/firmware + plausible exposure and a recent capture time; never GPS). A made-up camera and date is false provenance for published pictures, so it runs only with --advanced.
 
 *writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories (non-recursive unless --recursive).
+- `--advanced` (boolean) Required: you know the result carries a made-up camera and date.
 - `--recursive / -r` (boolean) Recurse into subdirectories.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing output files.
 - `--dry-run` (boolean) List input -> output pairs, write nothing.
@@ -657,11 +690,13 @@ mysuite metadata randomize photo.jpg --dry-run --json
 
 ## `mysuite metadata strip`
 
-Strip all EXIF/IPTC/XMP/ICC metadata, writing a new file beside the source.
+Remove hidden data (GPS location, camera make/model and serial numbers, lens, software, dates, comments, author and copyright) into a copy, name_stripped.ext. Keeps the colour profile (ICC, so colours look the same; --drop-icc removes it) and the rotation flag. --keep-credit keeps author, copyright and credit line. PDFs: title, author, dates and XMP go (as pdf strip). In a folder, files mysuite wrote earlier (_stripped, _marked …) are skipped.
 
 *writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) One or more image files, and/or directories (non-recursive unless --recursive).
+- `--keep-credit` (boolean) Keep author, copyright, credit line and source (EXIF, IPTC, XMP); still remove GPS, camera, serial numbers, software and comments.
+- `--drop-icc` (boolean) Also remove the colour profile (colours may then look different).
 - `--recursive / -r` (boolean) Recurse into subdirectories.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing output files.
 - `--dry-run` (boolean) Preview input -> output pairs, write nothing.
@@ -697,14 +732,16 @@ mysuite ocr shot.png --json
 
 ## `mysuite pdf compress`
 
-Make a PDF smaller (Ghostscript): screen < ebook < printer < prepress. A result that is not smaller is not written (status not_smaller).
+Make a PDF smaller (Ghostscript): --level screen < ebook < printer < prepress, or --max-size 10MB to get the best quality that fits. A result that is not smaller is not written (status not_smaller).
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
-- `--level` (str, default `ebook`) screen (smallest), ebook, printer, prepress (best quality).
+- `--level` (choice, one of `screen`, `ebook`, `printer`, `prepress`) screen (smallest), ebook (default), printer, prepress (best quality).
+- `--max-size` (str) Largest allowed file, e.g. 10MB or 500KB: picks the best level that fits.
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -718,12 +755,13 @@ mysuite pdf compress doc.pdf --level ebook --json
 
 Keep only some pages: --pages '1,3-5,8-' (also last, odd, even).
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--pages` (str) Pages to keep, e.g. '1,3-5,8-', last, odd, even.
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -737,14 +775,15 @@ mysuite pdf extract doc.pdf --pages 1,3-5 --json
 
 Make a PDF from images (one page each), optionally fitted on a paper size.
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
-- argument `files` (file, required, repeatable) Image files, in page order.
+- argument `files` (file, required, repeatable) Images (PNG, JPEG, … or SVG, which stays vectors), in page order.
 - `--size` (str) Paper size (a4, letter, 210x297mm …); default: each page is its image's size.
 - `--dpi` (int, default `300`) Resolution used for the pages.
 - `--margin` (float) Margin in mm when --size is used.
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -758,11 +797,12 @@ mysuite pdf from-images a.jpg b.jpg --size a4 --json
 
 Extract the embedded pictures of a PDF as files.
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--out / -o` (path) Output folder.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -791,11 +831,12 @@ mysuite pdf info doc.pdf --json
 
 Join PDFs into one, in the order given.
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -809,10 +850,10 @@ mysuite pdf merge a.pdf b.pdf --json
 
 Add page numbers. Format may use {n} and {total}, e.g. 'Page {n} of {total}'.
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
-- `--position` (str, default `bottom-center`) bottom-center, bottom-left, bottom-right, top-center, top-left, top-right, center
+- `--position` (choice, default `bottom-center`, one of `bottom-center`, `bottom-left`, `bottom-right`, `top-center`, `top-left`, `top-right`, `center`) Where the number goes.
 - `--format` (str, default `{n}`) Label, e.g. 'Page {n} of {total}'.
 - `--start` (int, default `1`) Number of the first page.
 - `--size` (float, default `10.0`) Font size in points (4-72).
@@ -820,6 +861,7 @@ Add page numbers. Format may use {n} and {total}, e.g. 'Page {n} of {total}'.
 - `--pages` (str, default `all`) Which pages get a number.
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -833,14 +875,15 @@ mysuite pdf number doc.pdf --format "Page {n} of {total}" --json
 
 Turn pages into PNG/JPEG images at a chosen resolution (Ghostscript).
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--dpi` (int, default `150`) Resolution, 10-1200.
-- `--format` (str, default `png`) png or jpeg.
+- `--format` (choice, default `png`, one of `png`, `jpeg`, `jpg`) png, jpeg (or jpg).
 - `--pages` (str, default `all`) Which pages.
 - `--out / -o` (path) Output folder.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -854,12 +897,13 @@ mysuite pdf render doc.pdf --dpi 150 --json
 
 Fit every page onto a standard size (a4, letter, 210x297mm …), centred, content scaled to fit.
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--size` (str) a0-a6, b5, letter, legal, tabloid, or 210x297mm / 8.5x11in / 595x842 (points).
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -873,13 +917,14 @@ mysuite pdf resize doc.pdf --size a4 --json
 
 Rotate pages clockwise by 90/180/270 degrees.
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--degrees` (int, default `90`) Clockwise: 90, 180 or 270 (or -90).
 - `--pages` (str, default `all`) Which pages (default all).
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -893,13 +938,14 @@ mysuite pdf rotate doc.pdf --degrees 90 --pages 1 --json
 
 Cut a PDF into pieces: --every N pages, or --ranges '1-3,4-6'.
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--every` (int) Pages per piece.
 - `--ranges` (str) Comma-separated page ranges, one file each.
 - `--out / -o` (path) Output folder (default: beside the source).
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -913,12 +959,12 @@ mysuite pdf split doc.pdf --every 2 --json
 
 Stamp text and/or a logo on pages (e.g. DRAFT, CONFIDENTIAL), with opacity and angle.
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--text` (str) Text to stamp, e.g. DRAFT.
-- `--logo` (file) PNG/JPEG logo to stamp (raster).
-- `--position` (str, default `center`) bottom-center, bottom-left, bottom-right, top-center, top-left, top-right, center
+- `--logo` (file) Logo to stamp: SVG (stays sharp vectors) or PNG/JPEG.
+- `--position` (choice, default `center`, one of `bottom-center`, `bottom-left`, `bottom-right`, `top-center`, `top-left`, `top-right`, `center`) Where the stamp goes; corners keep a 24 pt margin.
 - `--opacity` (float, default `0.25`) 0-1.
 - `--angle` (float) Degrees counter-clockwise (e.g. 45 for a diagonal stamp).
 - `--size` (float, default `48.0`) Text size in points.
@@ -927,6 +973,7 @@ Stamp text and/or a logo on pages (e.g. DRAFT, CONFIDENTIAL), with opacity and a
 - `--pages` (str, default `all`) Which pages.
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -938,13 +985,14 @@ mysuite pdf stamp doc.pdf --text DRAFT --json
 
 ## `mysuite pdf strip`
 
-Remove title, author, producer, dates and the XMP packet.
+Remove hidden data (title, author, subject, keywords, producer, dates, the XMP packet and comment authors) into a copy, name_stripped.pdf; the pages stay as they are. Same engine as `metadata strip` on a PDF.
 
-*writes files · no `--dry-run` · `--json`*
+*writes files · has `--dry-run` · `--json`*
 
 - argument `files` (file, required, repeatable) PDF file(s).
 - `--out / -o` (path) Output file (or folder). Default: beside the source with a suffix.
 - `--overwrite / --no-overwrite` (boolean) Overwrite existing outputs.
+- `--dry-run` (boolean) Show what would be written, write nothing.
 - `--quiet / -q` (boolean)
 - `--json` (boolean) Print one machine-readable JSON document on stdout (human text goes to stderr). Exit codes: 0 ok, 1 some item failed, 2 bad usage, 3 refused by policy, 4 missing tool.
 
@@ -1327,15 +1375,15 @@ mysuite sheet photos/ --out sheet.png --columns 5 --json
 
 ## `mysuite shield`
 
-EXPERIMENTAL: make images resist AI image editing (PhotoGuard-style). Needs `mysuite install shield`.
+EXPERIMENTAL: disturb Stable Diffusion 1.x/2.x-style image-to-image editing of your picture (PhotoGuard-style). It does NOT stop ChatGPT, Gemini, Midjourney or other closed services (a shielded picture was regenerated cleanly by ChatGPT), nor AI training, scraping or copying; resizing or upscaling largely removes it. Needs `mysuite install shield` (~1.4 GB). See docs/SHIELD.md.
 
 *writes files · has `--dry-run` · `--json`*
 
 - argument `inputs` (path, required, repeatable) Images to protect (PNG/JPEG/WebP/TIFF).
-- `--strength` (str, default `standard`) light, standard, strong: stronger = more disruption, more visible pattern, slower.
+- `--strength` (choice, default `standard`, one of `light`, `standard`, `strong`) light, standard, strong: stronger = more disruption, more visible pattern, slower.
 - `--steps` (int) Optimisation steps (5-400); overrides the strength's default.
 - `--epsilon` (int) Largest allowed change per pixel, out of 255 (1-32); overrides the strength's default.
-- `--device` (str) cpu, mps or cuda (default: the best available).
+- `--device` (choice, one of `cpu`, `mps`, `cuda`) cpu, mps or cuda (default: the best available).
 - `--seed` (int) Random start (same seed = same result).
 - `--recursive / -r` (boolean)
 - `--overwrite / --no-overwrite` (boolean)
