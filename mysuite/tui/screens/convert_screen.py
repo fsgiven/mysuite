@@ -1,15 +1,17 @@
 """Convert: any image/vector/PDF to another format, beside the original (or several formats at once).
 
-A form over `mysuite convert …`; see mysuite.tui.shell. Stable ids: `#input-files`, `#target-format`, `#quality`, `#dpi`.
+A form over `mysuite convert …`; see mysuite.tui.shell. Stable ids: `#input-files`, `#target-format`, `#quality`, `#dpi`,
+and `#save-for-web`, which opens Compress · Save for web with the same files (a size limit, sRGB, GPS removed).
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
+from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Checkbox, Collapsible, Input, Label
+from textual.widgets import Button, Checkbox, Collapsible, Input, Label
 
 from mysuite.convert._parsing import SOURCE_EXTENSIONS, TARGET_EXTENSIONS
 from mysuite.tui.shell import ChipGroup, FormError, ToolScreen, field
@@ -32,6 +34,10 @@ class ConvertScreen(ToolScreen):
             placeholder="photo.png, a folder, or a glob like ~/Pictures/*.heic",
         )
         yield Checkbox("Include subfolders", id="recursive")
+        with Horizontal(classes="pair"):
+            yield Label("For a website? Save for web picks the format, fits a file-size limit, makes it sRGB "
+                        "and removes GPS.", classes="hint grow")
+            yield Button("Save for web…", id="save-for-web", classes="mini")
 
         yield Label("Convert to", classes="section")
         yield field("Pick one or several (each gets its own file)", ChipGroup(TARGETS, id="target-format", columns=5))
@@ -43,6 +49,14 @@ class ConvertScreen(ToolScreen):
         yield field("Background for flattened transparency", Input(placeholder="white or #ffffff (jpeg and bmp default to white)", id="background"))
         with Collapsible(title="Safety", collapsed=True, id="adv-safety"):
             yield Checkbox("Replace files that already exist", id="overwrite")
+
+    @on(Button.Pressed, "#save-for-web")
+    def _open_save_for_web(self, event: Button.Pressed) -> None:
+        event.stop()
+        from mysuite.tui.screens.compress_screen import CompressScreen
+
+        self.app.push_screen(CompressScreen(files=self.query_one(FileTarget).value,
+                                            preset=CompressScreen.WEB_PRESET))
 
     def apply_defaults(self) -> None:
         self.query_one("#target-format", ChipGroup).select_only(["png"])

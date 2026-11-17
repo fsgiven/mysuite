@@ -43,6 +43,7 @@ view pictures, `--thumb`/`--sheet` (small PNGs).
 | a watermark | `mysuite watermark FILE --logo logo.svg --position bottom-right --json` |
 | a transparent background (subject cut-out, macOS) | `mysuite cutout FILE --json` |
 | smaller files | `mysuite compress FILE --codec mozjpeg\|webp\|avif\|oxipng\|pngquant\|gifsicle --json` |
+| a web-ready image under a size limit ("max 500 KB, 2048 px") | `mysuite compress FILE --preset save-for-web --json` or `--codec mozjpeg --max-kb 500 --max-size 2048` (always upright, sRGB, no GPS/serials, copyright kept; never bigger than the original: `status: "not_smaller"`; items carry `bytes_before`/`bytes_after`/`ratio`) |
 | to crop, trim borders, rotate, flip, resize, pad to a size/aspect, round corners | `mysuite transform FILE --crop-aspect 1:1 --resize 512 --round 50% --json` |
 | to change the lighting direction/tint of a cut-out, product or logo (experimental) | `mysuite relight FILE --preset golden-hour --json` or `--direction left --height 30` |
 | to use the company's defaults (tokens, brand, variants, sizes, CMYK, metadata policy, allowed folders) | `mysuite --profile acme export logo.svg --json` (see `mysuite profiles list --json`) |

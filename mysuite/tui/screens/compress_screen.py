@@ -1,8 +1,10 @@
-"""Compress: shrink images with the right codec (mozjpeg, webp, avif, oxipng, pngquant, gifsicle) — copies, originals untouched.
+"""Compress / Save for web: shrink images with the right codec (mozjpeg, webp, avif, oxipng, pngquant, gifsicle) — copies,
+originals untouched.
 
-A form over `mysuite compress …`; see mysuite.tui.shell. Stable ids: `#input-files`, `#preset`, `#codec`, `#quality`, and the
-per-codec fields in `#group-<codec>` (only the chosen codec's group is shown). The command always spells out the values
-(a preset only fills the form), so what you see is exactly what runs.
+A form over `mysuite compress …`; see mysuite.tui.shell. Stable ids: `#input-files`, `#preset`, `#codec`, `#quality`,
+the Save-for-web limits `#max-kb`, `#max-size`, `#background`, and the per-codec fields in `#group-<codec>` (only the chosen
+codec's group is shown). The command always spells out the values (a preset only fills the form), so what you see is
+exactly what runs. Convert's "Save for web…" button opens this screen with its files and the `save-for-web` preset.
 """
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Checkbox, Collapsible, Input, Label, Select
 
 from mysuite.compress._parsing import CODECS
+from mysuite.compress.compress import MAX_KB_CODECS
 from mysuite.config import load_config
 from mysuite.convert._parsing import SOURCE_EXTENSIONS
 from mysuite.tui.shell import FormError, ToolScreen, field
@@ -33,7 +36,8 @@ assert [c for _, c in _CODEC_LABELS] == list(CODECS)
 
 # field id -> (kind, default used when a preset does not mention it)
 _FIELD_DEFAULTS: dict[str, tuple[str, object]] = {
-    "quality": ("input", ""), "sharpen-amount": ("input", ""), "sharpen-radius": ("input", ""),
+    "quality": ("input", ""), "max-kb": ("input", ""), "max-size": ("input", ""), "background": ("input", ""),
+    "sharpen-amount": ("input", ""), "sharpen-radius": ("input", ""),
     "sharpen-sigma": ("input", ""), "sharpen-threshold": ("input", ""),
     "progressive": ("checkbox", True), "subsample": ("select", "4:2:0"),
     "lossless": ("checkbox", False), "method": ("input", ""), "alpha-quality": ("input", ""),
@@ -45,6 +49,7 @@ _FIELD_DEFAULTS: dict[str, tuple[str, object]] = {
 _NUMBERS: dict[str, list[tuple[str, str, str, bool, float, float | None]]] = {
     "all": [
         ("--quality", "quality", "Quality", True, 0, 100),
+        ("--max-size", "max-size", "Longest side", True, 1, None),
         ("--sharpen-amount", "sharpen-amount", "Sharpen amount", False, 0, None),
         ("--sharpen-radius", "sharpen-radius", "Sharpen radius", False, 0, None),
         ("--sharpen-sigma", "sharpen-sigma", "Sharpen sigma", False, 0, None),
@@ -58,11 +63,21 @@ _NUMBERS: dict[str, list[tuple[str, str, str, bool, float, float | None]]] = {
 }
 
 
+def _size(n: int) -> str:
+    return f"{n / 1_000_000:.1f} MB" if n >= 1_000_000 else f"{n / 1000:.0f} KB" if n >= 10_000 else f"{n / 1000:.1f} KB"
+
+
 class CompressScreen(ToolScreen):
     TOOL_KEY = "compress"
     CLI = ("compress",)
-    HEADING = "Compress"
+    HEADING = "Compress · Save for web"
     PERSIST = ("codec", *_FIELD_DEFAULTS, "overwrite", "recursive")
+    WEB_PRESET = "save-for-web"
+
+    def __init__(self, *, files: str | None = None, preset: str | None = None) -> None:
+        super().__init__()
+        self._initial_files = files
+        self._initial_preset = preset
 
     def compose_form(self) -> ComposeResult:
         yield Label("Images", classes="section")
@@ -77,8 +92,16 @@ class CompressScreen(ToolScreen):
             yield field("Preset (fills the form)", Select[str]([("(none — set everything manually)", "")], id="preset", allow_blank=False, value=""), classes="grow")
             yield field("Codec", Select[str](_CODEC_LABELS, id="codec", allow_blank=False, value="mozjpeg"), classes="grow")
         with Horizontal(classes="pair"):
-            yield field("Quality 0-100", Input(placeholder="codec default", id="quality"))
+            yield field("Quality 0-100 (the highest, with a size limit)", Input(placeholder="codec default", id="quality"))
             yield field("Sharpen amount", Input(placeholder="off", id="sharpen-amount"))
+
+        yield Label("Save for web", classes="section")
+        with Horizontal(classes="pair"):
+            yield field("Max file size, KB (JPEG, WebP, AVIF)", Input(placeholder="no limit", id="max-kb"))
+            yield field("Max longest side, px", Input(placeholder="keep size", id="max-size"))
+        yield field("Background for transparency", Input(placeholder="JPEG: white · others keep it", id="background"))
+        yield Label("Always: upright, sRGB embedded, GPS and serial numbers removed, copyright kept; "
+                    "never bigger than the original.", classes="hint")
 
         with Vertical(id="group-mozjpeg"):
             with Horizontal(classes="pair"):
@@ -119,6 +142,16 @@ class CompressScreen(ToolScreen):
 
     def on_mount(self) -> None:
         self._update_codec()
+        if self._initial_files is not None or self._initial_preset is not None:
+            self.call_after_refresh(self._apply_initial)
+
+    def _apply_initial(self) -> None:
+        """Values handed over by another screen (Convert's "Save for web…") win over remembered ones."""
+        if self._initial_preset and self._initial_preset in self._presets:
+            self.query_one("#preset", Select).value = self._initial_preset
+            self._apply_preset(self._initial_preset)
+        if self._initial_files is not None:
+            self.query_one(FileTarget).value = self._initial_files
 
     # ------------------------------------------------------------------ preset & codec
     def on_select_changed(self, event: Select.Changed) -> None:
@@ -181,6 +214,15 @@ class CompressScreen(ToolScreen):
             raise FormError(f"not usable: {bad}" if res.missing or res.unsupported else f"no images in {bad}", "input-files")
         codec = self._codec()
         out = ["--codec", codec]
+        max_kb = self._number("max-kb", "Max file size", whole=True, low=1, high=None)
+        if max_kb:
+            if codec not in MAX_KB_CODECS:
+                raise FormError("a max file size needs a codec with a quality setting: JPEG, WebP or AVIF "
+                                "(mozjpeg, cwebp, avifenc)", "max-kb")
+            out += ["--max-kb", max_kb]
+        background = self.query_one("#background", Input).value.strip()
+        if background:
+            out += ["--background", background]
         for flag, wid, label, whole, low, high in [*_NUMBERS["all"], *_NUMBERS.get(codec, [])]:
             value = self._number(wid, label, whole=whole, low=low, high=high)
             if value:
@@ -211,6 +253,21 @@ class CompressScreen(ToolScreen):
             if item.get("output"):
                 return Path(item["output"]).parent
         return None
+
+    def summary_text(self, report: dict[str, Any], code: int, dry: bool) -> str:
+        text = super().summary_text(report, code, dry)
+        if dry:
+            return text
+        items = report.get("items", [])
+        done = [i for i in items if i.get("status") == "written" and i.get("bytes_before")]
+        bigger = sum(1 for i in items if i.get("status") == "not_smaller")
+        if done:
+            before = sum(i["bytes_before"] for i in done)
+            after = sum(i["bytes_after"] for i in done)
+            text += f"  ·  {_size(before)} → {_size(after)} ({(1 - after / before) * 100:.0f}% smaller)"
+        if bigger:
+            text += f"  ·  {bigger} not smaller than the original, left as is"
+        return text
 
     def plan_text(self, report: dict[str, Any]) -> str:
         items = [i for i in report.get("items", []) if i.get("output")]

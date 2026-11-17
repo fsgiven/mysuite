@@ -8,6 +8,11 @@ from __future__ import annotations
 # the same name (in [compress_presets.NAME] in mysuite.toml) overrides the
 # built-in one.
 BUILT_IN_COMPRESS_PRESETS: dict[str, dict] = {
+    # "Save for web": a JPEG of at most 500 KB and 2048 px, sRGB, no GPS/serials, copyright kept.
+    "save-for-web": {
+        "codec": "mozjpeg", "quality": 85, "progressive": True, "subsample": "4:2:0",
+        "max_kb": 500, "max_size": 2048,
+    },
     "web-photo-balanced": {
         "codec": "mozjpeg", "quality": 82, "progressive": True, "subsample": "4:2:0",
     },
