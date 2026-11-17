@@ -60,8 +60,9 @@ def run(
     backend: str = typer.Option("auto", "--backend", help="auto, classical or realesrgan."),
     record_history: bool = typer.Option(
         False, "--record-history",
-        help="Log each job (paths, sizes, timing) to a local database for `enhance history`. "
+        help="Log each job (paths, sizes, timing) to a local database (read it with `mysuite enhance history`). "
         "Off by default: a log of what you processed is a trace.",
+        hidden=True,
     ),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Recurse into subdirectories."),
     overwrite: bool = typer.Option(False, "--overwrite/--no-overwrite", help="Overwrite existing outputs."),
@@ -172,7 +173,8 @@ def presets(
     )
 
 
-@app.command("history", help="Show jobs recorded with --record-history.")
+# Hidden (WS-C1, decision: kept for whoever turned it on, but not offered): it is a trace of what you processed.
+@app.command("history", help="Show jobs recorded with --record-history.", hidden=True)
 def show_history(
     limit: int = typer.Option(50, "--limit", min=1),
     clear: bool = typer.Option(False, "--clear", help="Delete the history database."),
