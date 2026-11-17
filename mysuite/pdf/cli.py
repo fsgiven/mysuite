@@ -159,7 +159,7 @@ def strip(files: List[Path] = PDFS, out: Optional[Path] = OUT, overwrite: bool =
 
 @app.command("number", help="Add page numbers. Format may use {n} and {total}, e.g. 'Page {n} of {total}'.")
 @jsonout.with_json("pdf-number")
-def number(files: List[Path] = PDFS, position: str = typer.Option("bottom-center", "--position", help=f"{', '.join(ops.POSITIONS)}"),
+def number(files: List[Path] = PDFS, position: Literal["bottom-center", "bottom-left", "bottom-right", "top-center", "top-left", "top-right", "center"] = typer.Option("bottom-center", "--position", help="Where the number goes."),
            format: str = typer.Option("{n}", "--format", help="Label, e.g. 'Page {n} of {total}'."),
            start: int = typer.Option(1, "--start", help="Number of the first page."),
            size: float = typer.Option(10.0, "--size", help="Font size in points (4-72)."),
@@ -175,7 +175,7 @@ def number(files: List[Path] = PDFS, position: str = typer.Option("bottom-center
 @jsonout.with_json("pdf-stamp")
 def stamp(files: List[Path] = PDFS, text: Optional[str] = typer.Option(None, "--text", help="Text to stamp, e.g. DRAFT."),
           logo: Optional[Path] = typer.Option(None, "--logo", exists=True, dir_okay=False, help="Logo to stamp: SVG (stays sharp vectors) or PNG/JPEG."),
-          position: str = typer.Option("center", "--position", help=f"{', '.join(ops.POSITIONS)}"),
+          position: Literal["bottom-center", "bottom-left", "bottom-right", "top-center", "top-left", "top-right", "center"] = typer.Option("center", "--position", help="Where the stamp goes; corners keep a 24 pt margin."),
           opacity: float = typer.Option(0.25, "--opacity", help="0-1."),
           angle: float = typer.Option(0.0, "--angle", help="Degrees counter-clockwise (e.g. 45 for a diagonal stamp)."),
           size: float = typer.Option(48.0, "--size", help="Text size in points."),

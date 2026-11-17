@@ -53,7 +53,8 @@ def test_declare_writes_the_plus_vocabulary_and_rights(jpg, tmp_path, policy, co
 
 @need
 def test_declare_validation_dry_run_and_overwrite(jpg, tmp_path):
-    assert run("metadata", "declare", jpg, "--policy", "everything")[0].exit_code == 1
+    bad = runner.invoke(app, ["metadata", "declare", str(jpg), "--policy", "everything", "--json"])
+    assert bad.exit_code == 2                                                # a fixed choice: bad usage
     res, doc = run("metadata", "declare", jpg, "--dry-run")
     assert doc["items"][0]["status"] == "planned" and not (tmp_path / "p_declared.jpg").exists()
     run("metadata", "declare", jpg)

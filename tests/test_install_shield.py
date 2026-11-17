@@ -184,11 +184,11 @@ def test_shield_dry_run_works_without_the_component_and_estimates_time(img, home
     assert res.exit_code == 0 and item["status"] == "planned" and item["estimated_seconds"] == 100 and item["width"] == 64
 
 
-@pytest.mark.parametrize("args", [["--strength", "max"], ["--steps", "2"], ["--epsilon", "99"], ["--device", "tpu"]])
-def test_shield_validation(img, home, args, monkeypatch):
+@pytest.mark.parametrize("args,code", [(["--strength", "max"], 2), (["--steps", "2"], 1), (["--epsilon", "99"], 1), (["--device", "tpu"], 2)])
+def test_shield_validation(img, home, args, code, monkeypatch):
     monkeypatch.setattr(C.get("shield"), "is_installed", lambda: True)
-    res, doc = run("shield", img, *args)
-    assert res.exit_code == 1 and not (img.parent / "a_shielded.png").exists()
+    res = runner.invoke(app, ["shield", str(img), *args, "--json"])
+    assert res.exit_code == code and not (img.parent / "a_shielded.png").exists()   # 2: not one of the fixed choices
 
 
 def test_estimate_scales_with_tiles():
