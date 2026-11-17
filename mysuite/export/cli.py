@@ -52,6 +52,37 @@ from mysuite.vector import imports as imp
 from mysuite.utils.console import console, log_error, log_note, log_skip, log_step
 
 
+def _lightness(rgb: tuple[int, int, int]) -> float:
+    """CIE L* (0 black .. 100 white) of an sRGB colour."""
+    def lin(c: int) -> float:
+        v = c / 255
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+    y = 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2])
+    return 116 * y ** (1 / 3) - 16 if y > 216 / 24389 else y * 24389 / 27
+
+
+NEAR_BLACK_L = 25.0
+
+
+def cmyk_hints(conversions, *, chosen_profile: str | None, profile_name: str) -> list[str]:
+    """What a print designer should know about the CMYK numbers: near-blacks that became a computed four-colour mix
+    (the brand book almost always has its own value), and a fallback to the generic profile."""
+    conversions = list(conversions)
+    hints = []
+    for conv in sorted(conversions, key=lambda c: c.rgb):
+        if conv.fixed or conv.neutral or _lightness(conv.rgb) >= NEAR_BLACK_L or sum(conv.cmyk[:3]) < 1:
+            continue
+        hexa = "#{:02x}{:02x}{:02x}".format(*conv.rgb)
+        inks = "/".join(f"{v:g}" for v in conv.cmyk)
+        hints.append(f"{hexa} is near-black and became the computed mix {inks}; if the brand book gives its CMYK, "
+                     f"pass it with --cmyk-map '{hexa}=C/M/Y/K' (e.g. 0/0/0/100 or the house rich black)")
+    if conversions and not chosen_profile:
+        hints.append(f"CMYK used the built-in profile ({profile_name or 'Ghostscript default'}, US SWOP-like); for "
+                     "European print pass --cmyk-profile with your FOGRA39 / PSO Coated .icc")
+    return hints
+
+
 def _parse_sizes(value: Optional[str], *, dpi: float, default_unit: str) -> Optional[list[Size]]:
     try:
         return parse_sizes(value, dpi=dpi, default_unit=default_unit)
@@ -191,10 +222,10 @@ def export(
         "'transparent' (or 'none') to remove that colour, e.g. --recolor '#dd0000=transparent'. Applied to "
         "the SVG source before rendering.",
     ),
-    recolor_tolerance: float = typer.Option(
-        DEFAULT_TOLERANCE, "--recolor-tolerance", min=0.0,
+    recolor_tolerance: Optional[float] = typer.Option(
+        None, "--recolor-tolerance", min=0.0,
         help="How close (CIEDE2000 colour difference) a colour must be to a --recolor FROM to count "
-        "as it; 0 = exact match only, 2 = just-noticeable difference (default). Catches "
+        f"as it; 0 = exact match only, 2 = just-noticeable difference (default {DEFAULT_TOLERANCE:g}, or the config's). Catches "
         "anti-aliased or slightly-off brand colours.",
     ),
     cmyk_mode: Optional[str] = typer.Option(
@@ -341,7 +372,7 @@ def export(
     except CmykError as exc:
         log_error(str(exc))
         raise typer.Exit(1) from exc
-    resolved_recolor_tolerance = settings.recolor_tolerance if recolor_tolerance == DEFAULT_TOLERANCE else recolor_tolerance
+    resolved_recolor_tolerance = settings.recolor_tolerance if recolor_tolerance is None else recolor_tolerance
 
     resolved_variant = settings.variant if variant is None else variant
 
@@ -522,7 +553,9 @@ def export(
         log_error(escape(str(exc)))
         raise typer.Exit(1) from exc
 
+    cmyk_seen: dict = {}                      # rgb -> Conversion, over every logo and variant
     shown_skips: set[tuple[str, str]] = set()
+    shown_notes: set[str] = set()
     shown_inputs: set[Path] = set()
     for input_svg, resolved_name, variant_name, plan in runs:
         if not quiet:
@@ -593,14 +626,8 @@ def export(
         finally:
             if is_temp:
                 render_svg.unlink(missing_ok=True)
-        if result.cmyk_conversions and not quiet:
-            console.print(
-                f"[dim]CMYK ({escape(resolved_cmyk.mode)}"
-                f"{':' + str(resolved_cmyk.step) if resolved_cmyk.mode == 'clean' else ''}, "
-                f"{escape(renderer._engine.description)}):[/dim]"
-            )
-            for conv in sorted(result.cmyk_conversions, key=lambda c: c.rgb):
-                console.print(f"[dim]  {escape(conv.label())}[/dim]")
+        for conv in result.cmyk_conversions:
+            cmyk_seen[conv.rgb] = conv
         if result.cmyk_conversions:
             jsonout.set_extra(cmyk={
                 "mode": resolved_cmyk.mode, "step": resolved_cmyk.step if resolved_cmyk.mode == "clean" else None,
@@ -612,7 +639,12 @@ def export(
                 ],
             })
         for note in result.cmyk_notes:
-            log_note(escape(note))
+            if note in shown_notes:              # the engine's notes add up over variants: say each once
+                continue
+            shown_notes.add(note)
+            jsonout.add_warning(note)
+            if not quiet:
+                log_note(escape(note))
         total_written += len(result.written)
         total_skipped_existing += len(result.skipped_existing)
 
@@ -621,6 +653,20 @@ def export(
                 f"[bold green]done[/bold green] — {len(result.written)} written, "
                 f"{len(result.skipped_existing)} already existed"
             )
+
+    if cmyk_seen and not quiet:                # one table for the whole run, not one per variant
+        console.print(
+            f"[dim]CMYK ({escape(resolved_cmyk.mode)}"
+            f"{':' + str(resolved_cmyk.step) if resolved_cmyk.mode == 'clean' else ''}, "
+            f"{escape(renderer._engine.description)}):[/dim]"
+        )
+        for conv in sorted(cmyk_seen.values(), key=lambda c: c.rgb):
+            console.print(f"[dim]  {escape(conv.label())}[/dim]")
+    for hint in cmyk_hints(cmyk_seen.values(), chosen_profile=resolved_cmyk.profile,
+                           profile_name=renderer._engine.description if renderer._engine else ""):
+        jsonout.add_warning(hint)
+        if not quiet:
+            log_note(escape(hint))
 
     if dry_run:
         if not quiet and batch:
