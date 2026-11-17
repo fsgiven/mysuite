@@ -120,11 +120,27 @@ def _attr(tag: str, name: str) -> str | None:
     return m.group(2) if m else None
 
 
+def _xml_problem(data: bytes) -> str | None:
+    """None when the document is well-formed XML, else expat's message ("mismatched tag: line 1, column 72").
+    Only checks the syntax: no DTDs or external entities are loaded."""
+    from xml.parsers import expat
+
+    parser = expat.ParserCreate()
+    parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+    try:
+        parser.Parse(data, True)
+    except expat.ExpatError as exc:
+        return str(exc)
+    return None
+
+
 def _inspect_svg(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8", errors="replace")
+    raw = path.read_bytes()
+    text = raw.decode("utf-8", errors="replace")
     m = _SVG_ROOT.search(text)
     if not m:
         raise InspectError("not an SVG document (no <svg> element)")
+    problem = _xml_problem(raw)
     root = m.group(0)
     viewbox = _attr(root, "viewBox")
     fonts = sorted({f.strip().strip("'\"") for v in re.findall(r'font-family\s*[:=]\s*["\']?([^;"\'>]+)', text) for f in v.split(",") if f.strip()})
@@ -137,24 +153,114 @@ def _inspect_svg(path: Path) -> dict[str, Any]:
         "embedded_images": len(re.findall(r"<image\b", text)),
         "has_filters": bool(re.search(r"<filter\b", text)),
         "external_references": bool(re.search(r'(?:xlink:)?href\s*=\s*["\'](?!#|data:)', text)),
+        "well_formed": problem is None,
+        **({"warnings": [f"not well-formed XML ({problem}): browsers and design tools may refuse it, and the "
+                         "facts above are a best guess"]} if problem else {}),
     }
+
+
+_PDF_OPS = {  # content-stream operators that set a colour, by colour space
+    "CMYK": re.compile(rb"(?:^|\s)(?:[\d.]+\s+){4}[kK](?=\s|$)"),
+    "RGB": re.compile(rb"(?:^|\s)(?:[\d.]+\s+){3}(?:rg|RG)(?=\s|$)"),
+    "gray": re.compile(rb"(?:^|\s)[\d.]+\s+[gG](?=\s|$)"),
+}
+_PDF_SPACES = {"/DeviceCMYK": "CMYK", "/DeviceRGB": "RGB", "/DeviceGray": "gray", "/CalRGB": "RGB", "/CalGray": "gray",
+               "/Lab": "Lab", "/Separation": "Separation", "/DeviceN": "DeviceN", "/Indexed": "Indexed"}
+PDF_PAGE_LIMIT = 50            # colour spaces are read from at most this many pages
+
+
+def _space_name(cs: Any, spots: set[str]) -> str | None:
+    """'CMYK', 'RGB', 'Separation' … for a colour-space object; spot colour names go into `spots`."""
+    try:
+        cs = cs.get_object() if hasattr(cs, "get_object") else cs
+        if isinstance(cs, list) and cs:
+            kind = str(cs[0])
+            if kind == "/ICCBased":
+                n = cs[1].get_object().get("/N", 3)
+                return {1: "gray", 3: "RGB", 4: "CMYK"}.get(int(n), "ICC")
+            if kind == "/Separation" and len(cs) > 1:
+                spots.add(str(cs[1]).lstrip("/").replace("#20", " "))
+            if kind == "/DeviceN" and len(cs) > 1:
+                spots.update(str(n).lstrip("/").replace("#20", " ") for n in cs[1] if str(n) not in ("/None", "/All"))
+            if kind == "/Indexed" and len(cs) > 1:
+                return _space_name(cs[1], spots)
+            return _PDF_SPACES.get(kind, kind.lstrip("/"))
+        return _PDF_SPACES.get(str(cs))
+    except Exception:  # noqa: BLE001 - a broken colour space is "unknown", not a crash
+        return None
+
+
+def _pdf_colour_spaces(path: Path) -> tuple[list[str], list[str]] | None:
+    """Colour spaces used by the pages (resources, images and the decompressed content), and spot colour names.
+    None when pypdf can't read the file."""
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(str(path))
+        if reader.is_encrypted:
+            return None
+        found: set[str] = set()
+        spots: set[str] = set()
+        for page in reader.pages[:PDF_PAGE_LIMIT]:
+            resources = page.get("/Resources")
+            resources = resources.get_object() if resources is not None else {}
+            for cs in (resources.get("/ColorSpace") or {}).values() if hasattr(resources.get("/ColorSpace") or {}, "values") else []:
+                name = _space_name(cs, spots)
+                if name:
+                    found.add(name)
+            xobjects = resources.get("/XObject") or {}
+            for xo in (xobjects.get_object().values() if hasattr(xobjects, "get_object") else []):
+                xo = xo.get_object()
+                if xo.get("/Subtype") == "/Image" and "/ColorSpace" in xo:
+                    name = _space_name(xo["/ColorSpace"], spots)
+                    if name:
+                        found.add(name)
+            contents = page.get_contents()
+            data = contents.get_data() if contents is not None else b""
+            for name, pattern in _PDF_OPS.items():
+                if pattern.search(data):
+                    found.add(name)
+        return sorted(found), sorted(spots)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _encrypted(path: Path) -> bool:
+    try:
+        from pypdf import PdfReader
+
+        return bool(PdfReader(str(path)).is_encrypted)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _inspect_pdf(path: Path, tools: ToolPaths, kind: str) -> dict[str, Any]:
+    if kind == "pdf" and _encrypted(path):
+        raise InspectError("password-protected PDF: mysuite does not open these")
     out = run([tools.magick, "identify", "-format", "%w %h\n", str(path)]).stdout.split("\n")
     pages = [tuple(int(v) for v in line.split()) for line in out if line.strip()]
     raw = path.read_bytes()
-    spaces = []
-    if b"DeviceCMYK" in raw or re.search(rb"[\d.]+ [\d.]+ [\d.]+ [\d.]+ k\b", raw) or b"setcmykcolor" in raw:
-        spaces.append("CMYK")
-    if b"DeviceRGB" in raw or b"setrgbcolor" in raw or b" rg" in raw:
-        spaces.append("RGB")
-    return {
+    spaces: list[str] = []
+    spots: list[str] = []
+    parsed = _pdf_colour_spaces(path) if kind == "pdf" else None
+    if parsed is not None:
+        spaces, spots = parsed
+    if not spaces:  # EPS (PostScript text), or a PDF pypdf can't read: look at the bytes
+        if b"DeviceCMYK" in raw or re.search(rb"[\d.]+ [\d.]+ [\d.]+ [\d.]+ k\b", raw) or b"setcmykcolor" in raw:
+            spaces.append("CMYK")
+        if b"DeviceRGB" in raw or b"setrgbcolor" in raw or b" rg" in raw:
+            spaces.append("RGB")
+    info: dict[str, Any] = {
         "format": kind.upper(), "pages": len(pages),
         "page_size_points": list(pages[0]) if pages else None,
-        "colorspaces": spaces or ["unknown (content is compressed)"],
+        "colorspaces": spaces or ["unknown"],
         "output_intent": b"/OutputIntent" in raw,
     }
+    if spots:
+        info["spot_colours"] = spots
+    if len(pages) > PDF_PAGE_LIMIT and parsed is not None:
+        info["note"] = f"colour spaces read from the first {PDF_PAGE_LIMIT} of {len(pages)} pages"
+    return info
 
 
 def inspect_file(path: Path, tools: ToolPaths) -> dict[str, Any]:

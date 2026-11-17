@@ -24,6 +24,7 @@
 - `skipped` - not done: a pipeline step after a failure, a dry-run step that can't preview, or a kit file that doesn't apply
 - `failed` - this item failed; see `error`
 - `ok` - a read-only result (inspect, contrast, diff, ocr, a pipeline step that ran)
+- `warning` - inspect: the file was read, but something is wrong with it; see the item's `warnings`
 - `done` - enhance: the picture was processed and written
 - `group` - dupes: one group of identical or look-alike files
 - `not_smaller` - pdf compress: the result would not be smaller, so nothing was written (no `output`)
@@ -86,6 +87,7 @@
               "skipped",
               "failed",
               "ok",
+              "warning",
               "done",
               "group",
               "not_smaller",
