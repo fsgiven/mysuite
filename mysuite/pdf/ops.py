@@ -366,6 +366,46 @@ def _overlay_pdf(width: float, height: float, body: str, tools: ToolPaths) -> by
         return dst.read_bytes()
 
 
+# Helvetica-Bold advance widths in 1/1000 em (the PDF core font metrics); unknown characters count as 0.72 em.
+_HELV_BOLD = dict(zip(
+    " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+    [278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556,
+     556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778,
+     667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611,
+     611, 278, 278, 556, 278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584]))
+
+
+def _text_width(text: str, size: float) -> float:
+    """Width of a bold Helvetica/Arial line in points (Arial shares Helvetica's metrics). A few percent extra covers
+    the substitute font rsvg-convert may pick."""
+    return sum(_HELV_BOLD.get(ch, 720) for ch in text) / 1000 * size * 1.06
+
+
+def _place(boxes: list[tuple[float, float, float, float]], angle: float, gx: float, gy: float, w: float, h: float,
+           margin: float) -> tuple[float, float]:
+    """Where to put a group's origin so its ROTATED bounding box sits in the chosen corner/edge, `margin` points from it.
+    Corner stamps used to be centred on a point 40 pt from the corner, so half of 'CONFIDENTIAL' fell off the page."""
+    import math
+
+    a = math.radians(-angle)
+    cos, sin = math.cos(a), math.sin(a)
+    xs, ys = [], []
+    for left, top, right, bottom in boxes:
+        for x, y in ((left, top), (right, top), (left, bottom), (right, bottom)):
+            xs.append(x * cos - y * sin)
+            ys.append(x * sin + y * cos)
+    lo_x, hi_x, lo_y, hi_y = min(xs), max(xs), min(ys), max(ys)
+
+    def axis(g: float, lo: float, hi: float, size: float) -> float:
+        if g == 0.0:
+            return margin - lo
+        if g == 1.0:
+            return size - margin - hi
+        return size / 2 - (lo + hi) / 2
+
+    return axis(gx, lo_x, hi_x, w), axis(gy, lo_y, hi_y, h)
+
+
 def _esc(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
@@ -450,21 +490,25 @@ def stamp(path: Path, out: Path | None, overwrite: bool, tools: ToolPaths, *, te
     count = len(open_pdf(path).pages)
     chosen = set(parse_pages(pages, count))
     gx, gy = POSITIONS[position]
+    text_w = _text_width(text, size) if text else 0.0
 
     def body(i: int, total: int, w: float, h: float) -> str | None:
         if i not in chosen:
             return None
-        cx = 40 + gx * (w - 80)
-        cy = 40 + gy * (h - 80)
         parts = []
+        boxes: list[tuple[float, float, float, float]] = []          # (left, top, right, bottom) before rotation
+        lw = w * scale / 100 if logo_uri else 0.0
+        lh = lw * logo_ratio
         if logo_uri:
-            lw = w * scale / 100
-            parts.append(f'<image x="{-lw / 2}" y="{-lw * logo_ratio / 2}" width="{lw}" height="{lw * logo_ratio}" '
-                         f'xlink:href="{logo_uri}" href="{logo_uri}"/>')
+            parts.append(f'<image x="{-lw / 2}" y="{-lh / 2}" width="{lw}" height="{lh}" '
+                         f'xlink:href="{logo_uri}" href="{logo_uri}" preserveAspectRatio="xMidYMid meet"/>')
+            boxes.append((-lw / 2, -lh / 2, lw / 2, lh / 2))
         if text:
-            dy = (lw_h := (w * scale / 100 * logo_ratio / 2 + size) if logo_uri else 0)
+            dy = lh / 2 + size if logo_uri else size * 0.35                 # baseline; caps centred when there is no logo
             parts.append(f'<text x="0" y="{dy}" font-family="Helvetica, Arial, sans-serif" font-weight="bold" '
                          f'font-size="{size}" fill="{_esc(color)}" text-anchor="middle">{_esc(text)}</text>')
+            boxes.append((-text_w / 2, dy - size * 0.75, text_w / 2, dy + size * 0.22))
+        cx, cy = _place(boxes, angle, gx, gy, w, h, margin=24.0)
         return f'<g opacity="{opacity}" transform="translate({cx} {cy}) rotate({-angle})">{"".join(parts)}</g>'
 
     return _apply_overlay(path, "_stamped", out, overwrite, tools, body)
