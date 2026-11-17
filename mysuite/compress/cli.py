@@ -194,6 +194,12 @@ def compress(
     except InvalidInputError as exc:
         log_error(str(exc))
         raise typer.Exit(1) from exc
+    # A folder run skips earlier results (photo_compressed.jpg); a file named explicitly is always taken.
+    named = {p.resolve() for p in inputs if p.is_file()}
+    input_files = [f for f in input_files if f.resolve() in named or not f.stem.endswith("_compressed")]
+    if not input_files:
+        log_error("nothing to compress: the folder only holds earlier _compressed results")
+        raise typer.Exit(1)
 
     try:
         active_profile = profiles_mod.resolve(config)
