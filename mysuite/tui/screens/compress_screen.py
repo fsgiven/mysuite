@@ -13,7 +13,7 @@ from typing import Any
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Checkbox, Collapsible, Input, Label, Select
+from textual.widgets import Checkbox, Collapsible, Input, Label, Select, Static
 
 from mysuite.compress._parsing import CODECS
 from mysuite.compress.compress import MAX_KB_CODECS
@@ -100,8 +100,8 @@ class CompressScreen(ToolScreen):
             yield field("Max file size, KB (JPEG, WebP, AVIF)", Input(placeholder="no limit", id="max-kb"))
             yield field("Max longest side, px", Input(placeholder="keep size", id="max-size"))
         yield field("Background for transparency", Input(placeholder="JPEG: white · others keep it", id="background"))
-        yield Label("Always: upright, sRGB embedded, GPS and serial numbers removed, copyright kept; "
-                    "never bigger than the original.", classes="hint")
+        yield Static("Always: upright, sRGB embedded, GPS and serial numbers removed, copyright kept; "
+                     "never bigger than the original.", classes="hint")
 
         with Vertical(id="group-mozjpeg"):
             with Horizontal(classes="pair"):

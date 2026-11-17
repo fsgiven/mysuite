@@ -11,7 +11,7 @@ from typing import Any
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Button, Checkbox, Collapsible, Input, Label
+from textual.widgets import Button, Checkbox, Collapsible, Input, Label, Static
 
 from mysuite.convert._parsing import SOURCE_EXTENSIONS, TARGET_EXTENSIONS
 from mysuite.tui.shell import ChipGroup, FormError, ToolScreen, field
@@ -34,10 +34,9 @@ class ConvertScreen(ToolScreen):
             placeholder="photo.png, a folder, or a glob like ~/Pictures/*.heic",
         )
         yield Checkbox("Include subfolders", id="recursive")
-        with Horizontal(classes="pair"):
-            yield Label("For a website? Save for web picks the format, fits a file-size limit, makes it sRGB "
-                        "and removes GPS.", classes="hint grow")
-            yield Button("Save for web…", id="save-for-web", classes="mini")
+        yield Static("For a website? Save for web fits a file-size limit, makes it sRGB and removes GPS.",
+                     classes="hint")
+        yield Button("Save for web…", id="save-for-web", classes="mini")
 
         yield Label("Convert to", classes="section")
         yield field("Pick one or several (each gets its own file)", ChipGroup(TARGETS, id="target-format", columns=5))
