@@ -10,13 +10,14 @@ from pathlib import Path
 from mysuite.color import pdfink
 from mysuite.color.cmyk import CmykEngine, CmykSettings
 from mysuite.config import ToolPaths
+from mysuite.export import artwork
 from mysuite.export.models import BundleJob, ExportJob, ExportPlan
 from mysuite.export.planner import ICNS_STANDARD_PIXEL_SIZES
 from mysuite.export.units import Margin, Size, resolve_margin
 from mysuite.utils.subprocess_utils import atomic_write_via as _atomic_write_via
-from mysuite.utils.subprocess_utils import run
-
-_SIZE_ATTR_RE = re.compile(r'\b(width|height)\s*=\s*"(\d+(?:\.\d+)?)(?:px)?"')
+from mysuite.utils.subprocess_utils import MysuiteToolError, run
+from mysuite.vector.svgopt import OptimiseError, optimise
+from mysuite.vector.verify import renders_same
 
 # Standard Apple .iconset filenames for each of the fixed icns sizes. Some pixel
 # sizes map to more than one filename (e.g. 32px is both icon_16x16@2x.png and
@@ -38,36 +39,6 @@ class ExecutionResult:
     skipped_existing: list[Path] = field(default_factory=list)
     cmyk_conversions: list = field(default_factory=list)  # color.cmyk.Conversion, one per distinct flat colour
     cmyk_notes: list[str] = field(default_factory=list)
-
-
-def native_svg_size(svg_path: Path) -> int | None:
-    """Best-effort detection of a square SVG's native pixel size, for the
-    resize-vs-copy shortcut. Returns None if it can't be determined cleanly."""
-    try:
-        text = svg_path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return None
-    head = text[:2000]
-    found: dict[str, float] = {}
-    for match in _SIZE_ATTR_RE.finditer(head):
-        found[match.group(1)] = float(match.group(2))
-    if "width" in found and "height" in found and found["width"] == found["height"]:
-        return int(found["width"])
-    return None
-
-
-def native_svg_side(svg_path: Path, side: str) -> int | None:
-    """The SVG's own whole-pixel width or height (from its root width/height attributes), else None."""
-    try:
-        head = svg_path.read_text(encoding="utf-8", errors="replace")[:4096]
-    except OSError:
-        return None
-    root = re.search(r"<svg\b[^>]*>", head, re.S)
-    if not root:
-        return None
-    found = dict(_SIZE_ATTR_RE.findall(root.group(0)))
-    value = found.get(side)
-    return int(float(value)) if value and float(value).is_integer() else None
 
 
 def _rsvg_render_png(input_svg: Path, output_path: Path, size: Size, dpi: float, tools: ToolPaths) -> None:
@@ -327,23 +298,62 @@ def _convert_pdf_to_eps(input_pdf: Path, output_path: Path, tools: ToolPaths) ->
     _atomic_write_via(output_path, write)
 
 
-def _render_svg(input_svg: Path, output_path: Path, size: Size, dpi: float, tools: ToolPaths) -> None:
-    native = native_svg_size(input_svg) if size.fit == "longest" else native_svg_side(input_svg, size.fit)
-    if size.is_artwork or native == size.pixels:
-        def write(tmp_path: Path) -> None:
-            shutil.copyfile(input_svg, tmp_path)
-    else:
-        def write(tmp_path: Path) -> None:
-            run([
-                tools.rsvg_convert,
-                "--format=svg",
-                *_box_args(*size.box()),
-                f"--dpi-x={dpi}",
-                f"--dpi-y={dpi}",
-                "--keep-aspect-ratio",
-                f"--output={tmp_path}",
-                str(input_svg),
-            ])
+def _fmt(value: float) -> str:
+    return f"{value:.4f}".rstrip("0").rstrip(".")
+
+
+def resize_svg(text: str, size: Size) -> str:
+    """Give the SVG another width/height (the drawing scales through its viewBox; nothing is re-rendered)."""
+    tag = artwork.root_tag(text)
+    own = artwork.artwork_size_text(text)
+    if tag is None or own is None:
+        raise ValueError("can't tell this SVG's size (no width/height or viewBox), so it can't be resized")
+    width_pt, height_pt = artwork.vector_dims(own, size)
+    unit = re.match(r"^\d+(?:\.\d+)?(mm|cm|in)$", size.label.strip().lower())
+    per_pt = {"mm": 25.4 / 72, "cm": 2.54 / 72, "in": 1 / 72}[unit.group(1)] if unit else 1.0
+    suffix = unit.group(1) if unit else ""
+    new_tag = re.sub(r'\s(width|height)\s*=\s*(["\']).*?\2', "", tag, flags=re.S)
+    attrs = f' width="{_fmt(width_pt * per_pt)}{suffix}" height="{_fmt(height_pt * per_pt)}{suffix}"'
+    if artwork.viewbox(tag) is None:
+        # user units are CSS px (96 per inch), so a mm/in artboard without a viewBox gets its CSS-px extent
+        to_user = 1.0 if re.search(r'\swidth\s*=\s*(["\'])\s*[\d.]+\s*(px)?\s*\1', tag) else 96 / 72
+        attrs += f' viewBox="0 0 {_fmt(own[0] * to_user)} {_fmt(own[1] * to_user)}"'
+    new_tag = re.sub(r"^<svg\b", "<svg" + attrs, new_tag)
+    return text.replace(tag, new_tag, 1)
+
+
+_COLOUR_PROPS = r"(?:fill|stroke|stop-color|flood-color|lighting-color|color)"
+_SHORT_HEX_ATTR = re.compile(rf'(\s{_COLOUR_PROPS}\s*=\s*["\'])#([0-9a-fA-F]{{3}})(?=["\'])')
+_SHORT_HEX_CSS = re.compile(rf"({_COLOUR_PROPS}\s*:\s*)#([0-9a-fA-F]{{3}})(?![0-9a-fA-F])")
+
+
+def long_hex(text: str) -> str:
+    """#d00 -> #dd0000: brand colours stay written the way the brand book writes them (the optimiser shortens them)."""
+    def grow(m: re.Match) -> str:
+        return m.group(1) + "#" + "".join(c * 2 for c in m.group(2))
+
+    return _SHORT_HEX_CSS.sub(grow, _SHORT_HEX_ATTR.sub(grow, text))
+
+
+def _render_svg(input_svg: Path, output_path: Path, size: Size, tools: ToolPaths, notes: list[str]) -> None:
+    """The (recoloured / variant) source itself, tidied by the optimiser - ids, groups, shapes and hex colours stay as
+    drawn. Only when the tidy copy would look different is the untouched source written instead."""
+    text = input_svg.read_text(encoding="utf-8")
+    try:
+        tidy = long_hex(optimise(text, precision=3, keep_ids=True).text)
+        same, _, _ = renders_same(text, tidy, tools)
+    except (OptimiseError, MysuiteToolError):
+        tidy, same = text, False
+    if not same:
+        tidy = text
+        note = "svg: the optimiser would have changed how it looks, so the source was written as it is"
+        if note not in notes:
+            notes.append(note)
+    if not size.is_artwork:
+        tidy = resize_svg(tidy, size)
+
+    def write(tmp_path: Path) -> None:
+        tmp_path.write_text(tidy, encoding="utf-8")
 
     _atomic_write_via(output_path, write)
 
@@ -594,7 +604,7 @@ class Renderer:
                     pdf_master = get_pdf_master(job.colorspace)
                     _convert_pdf_to_eps(pdf_master, job.output_path, self.tools)
                 elif job.format == "svg":
-                    _render_svg(input_svg, job.output_path, size, self.dpi, self.tools)
+                    _render_svg(input_svg, job.output_path, size, self.tools, result.cmyk_notes)
                 else:
                     raise ValueError(f"unsupported format: {job.format}")
 
