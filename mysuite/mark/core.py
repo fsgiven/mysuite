@@ -129,7 +129,25 @@ def _sixteen_bit(im: Image.Image) -> bool:
         return False
 
 
-def copy_metadata(src: Path, dst: Path, exiftool: str | None) -> bool:
+def _cmyk_to_srgb(image: Image.Image, icc: bytes | None) -> tuple[Image.Image, bytes]:
+    """CMYK pixels to sRGB, through the embedded CMYK profile when there is one, and the sRGB profile to go with them
+    (a CMYK profile on RGB pixels would be wrong)."""
+    import io
+
+    from PIL import ImageCms
+
+    srgb = ImageCms.createProfile("sRGB")
+    if icc:
+        try:
+            src = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+            out = ImageCms.profileToProfile(image, src, srgb, outputMode="RGB")
+            return out, ImageCms.ImageCmsProfile(srgb).tobytes()
+        except (ImageCms.PyCMSError, OSError, ValueError):
+            pass
+    return image.convert("RGB"), ImageCms.ImageCmsProfile(srgb).tobytes()
+
+
+def copy_metadata(src: Path, dst: Path, exiftool: str | None, *, icc: bool = True) -> bool:
     """Every tag from the original (EXIF, IPTC, XMP: author, copyright, the no-AI declaration …) onto the marked copy,
     with Orientation reset to 1 because the pixels were turned upright. False when exiftool is not installed."""
     import shutil
@@ -139,8 +157,8 @@ def copy_metadata(src: Path, dst: Path, exiftool: str | None) -> bool:
     tool = shutil.which(exiftool or "exiftool")
     if not tool:
         return False
-    run([tool, "-q", "-q", "-m", "-overwrite_original", "-tagsfromfile", str(src), "-all:all", "-unsafe", "-icc_profile",
-         "-Orientation#=1", str(dst)])
+    run([tool, "-q", "-q", "-m", "-overwrite_original", "-tagsfromfile", str(src), "-all:all", "-unsafe",
+         *(["-icc_profile"] if icc else ["--icc_profile:all"]), "-Orientation#=1", str(dst)])
     return True
 
 
@@ -162,6 +180,7 @@ def embed_file(path: Path, *, key: str, ident: str | None = None, strength: str 
         return EmbedResult(out, "planned")
     tile = make_tile(key, ident)
     notes: list[str] = []
+    converted = False
     try:
         with Image.open(path) as im:
             if im.width * im.height > MAX_PIXELS:
@@ -172,7 +191,12 @@ def embed_file(path: Path, *, key: str, ident: str | None = None, strength: str 
                 notes.append("16-bit source: the marked copy is 8-bit per channel")
             from mysuite.utils.imageio import normalize
 
-            image = normalize(im).convert("RGBA")              # upright, 16-bit scaled (not clipped) to 8-bit
+            upright = normalize(im)                            # upright, 16-bit scaled (not clipped) to 8-bit
+            if upright.mode == "CMYK":
+                upright, icc = _cmyk_to_srgb(upright, icc)
+                converted = True
+                notes.append("CMYK source: the marked copy is RGB (sRGB); keep the CMYK original for print")
+            image = upright.convert("RGBA")
     except MarkError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -209,7 +233,7 @@ def embed_file(path: Path, *, key: str, ident: str | None = None, strength: str 
 
     def write(tmp: Path) -> None:
         result.save(tmp, format=FORMATS[fmt], **kwargs)
-        if exiftool is not None and not copy_metadata(path, tmp, exiftool):
+        if exiftool is not None and not copy_metadata(path, tmp, exiftool, icc=not converted):
             notes.append("metadata not copied: exiftool is not installed (the colour profile is kept)")
 
     atomic_write_via(out, write, preserve_extension=True)
